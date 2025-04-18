@@ -27,13 +27,11 @@ def generate_toy_data(n_samples=500, seq_len=10, seed=0):
     series = rng.randn(n_samples, seq_len).astype(np.float32)
     descs = []
     for ts in series:
-        median = np.median(ts)
+        mean = np.mean(ts)
         e0 = ts[0]
         e5 = ts[5] if seq_len > 5 else ts[-1]
         descs.append(
-            f"The median of the time series is {median:.2f}. "
-            f"Element at index 0 is {e0:.2f}. "
-            f"Element at index 5 is {e5:.2f}."
+            f"The mean of the time series is {mean:.2f}."
         )
     return series, descs
 
@@ -41,7 +39,7 @@ def generate_toy_data(n_samples=500, seq_len=10, seed=0):
 # 2) Dataset & Collation
 # -------------------------------------------------------------------
 class TS2TextDataset(Dataset):
-    def __init__(self, series, descs, tokenizer, prompt="Describe the time series:"):
+    def __init__(self, series, descs, tokenizer, prompt="Given the time series that you have just seen, please output the mean."):
         self.series = series
         self.descs = descs
         self.tok = tokenizer
@@ -144,8 +142,10 @@ def train_epoch(ch, resnet, proj, llama, loader, opt, device):
         ids, labels = ids.to(device), labels.to(device)
         with torch.no_grad():
             emb_cpu = ch.embed(ts_cpu)[0]
+            
         emb = emb_cpu.permute(0,2,1).to(device)
         r = proj(resnet(emb).permute(0,2,1))
+
         B, orig_len = ids.size()
         desc_len = orig_len - prompt_len
         series_len = r.size(1)
@@ -197,7 +197,7 @@ def generate_examples(ch, resnet, proj, llama, tok, series, prompt, device, n=3)
     p_emb = llama.get_input_embeddings()(prompt_ids.to(device))
     for i in range(min(n, len(series))):
         # print the input time series
-        print(f"Input series {i}: {series[i]}")
+        print(f"Input series {i}: {series[i]} the mean is {np.mean(series[i])}")
         ts = torch.from_numpy(series[i]).unsqueeze(0)
         emb_cpu = ch.embed(ts)[0]
         emb = emb_cpu.permute(0,2,1).to(device)
@@ -228,7 +228,7 @@ if __name__ == "__main__":
     hidden  = llama.config.hidden_size
     proj    = nn.Linear(res_ch, hidden).to(device)
     opt     = optim.Adam(proj.parameters(), lr=1e-3)
-    epochs = 3
+    epochs = 100
     prompt = train_ds.prompt
     for ep in range(1, epochs+1):
         print(f"\nEpoch {ep}/{epochs}")
