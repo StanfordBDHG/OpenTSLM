@@ -9,3 +9,4 @@ scikit-learn
 torchinfo
 transformers
 chronos-forecasting
+huggingface-hub
