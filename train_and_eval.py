@@ -13,6 +13,12 @@ from tqdm import tqdm
 
 BATCH_SIZE = 8
 
+PROMPT = """Output the value at position 0 of the following timeseries. Output only the single number.
+Example: [2,5,4,3,2,4,5,6] => 2
+
+Timeseries:
+"""
+
 # -------------------------------------------------------------------
 # 0) Device Configuration (with MPS support on macOS)
 # -------------------------------------------------------------------
@@ -52,13 +58,7 @@ def generate_toy_data():
 # 2) Dataset & Collation
 # -------------------------------------------------------------------
 class TS2TextDataset(Dataset):
-    def __init__(
-        self,
-        series,
-        descs,
-        tokenizer,
-        prompt="Given the time series that you have just seen, please output the value at position 0.",
-    ):
+    def __init__(self, series, descs, tokenizer, prompt=PROMPT):
         self.series = series
         self.descs = descs
         self.tok = tokenizer
@@ -266,10 +266,7 @@ if __name__ == "__main__":
     proj = nn.Linear(res_ch, hidden).to(device)
     opt = optim.Adam(proj.parameters(), lr=1e-3)
     epochs = 100
-    # prompt = train_ds.prompt
-    prompt = (
-        "Given the time series that you have just seen, please output the value at position 0.",
-    )
+    prompt = train_ds.prompt
     for ep in range(1, epochs + 1):
         print(f"\nEpoch {ep}/{epochs}")
         tr_loss = train_epoch(chronos, resnet, proj, llama, train_loader, opt, device)

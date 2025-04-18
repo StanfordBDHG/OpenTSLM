@@ -28,7 +28,7 @@ def generate_test_data(included_indices=[]):
     print("Generating trainings data around random means")
     xFileWrite = []
     yFileWrite = []
-    for _ in range(2**12):
+    for _ in range(2**11):
         datapoints = generate_days(
             random.randint(7500, 15000), random.randint(1500, 3500)
         )
@@ -39,7 +39,7 @@ def generate_test_data(included_indices=[]):
         for idx, datapoint in enumerate(datapoints):
             if idx not in included_indices:
                 continue
-            yFileWrite.append(f"Value at position {idx} is {datapoint}")
+            yFileWrite.append(f"{datapoint}")
 
         # yFileWrite.append([f"The mean is {round(np.mean(datapoints))}"])
 
