@@ -163,6 +163,37 @@ class ConvTransposeDecoder1D(nn.Module):
         return out.squeeze(1)  # [B, seq_len]
 
 
+class ConvTransposeMLPDecoder1D(nn.Module):
+    """
+    ConvTranspose analogue of your MLP:
+      B×in_dim  → B×hidden_dim  → B×seq_len
+    """
+
+    def __init__(self, in_dim, seq_len, hidden_dim=128):
+        super().__init__()
+        self.seq_len = seq_len
+        self.net = nn.Sequential(
+            # 1) channel‑wise linear: [B,in_dim]→[B,hidden_dim] but as conv
+            nn.Conv1d(in_channels=in_dim, out_channels=hidden_dim, kernel_size=1),
+            nn.ReLU(),
+            # 2) “upsample” from length‑1 → length‑seq_len in one shot
+            nn.ConvTranspose1d(
+                in_channels=hidden_dim,
+                out_channels=1,
+                kernel_size=seq_len,
+                stride=1,
+                padding=0,
+                output_padding=0,
+            ),
+        )
+
+    def forward(self, x):
+        # x: [B, in_dim]
+        x = x.unsqueeze(-1)  # [B,in_dim,1]
+        out = self.net(x)  # [B,1,seq_len]
+        return out.squeeze(1)  # [B,seq_len]
+
+
 class HierarchicalConvDecoder1D(nn.Module):
     def __init__(
         self, encoder_channels, seq_len, base_filters=32, kernel_size=3, num_layers=6
@@ -197,6 +228,49 @@ class HierarchicalConvDecoder1D(nn.Module):
         # x: [B, encoder_channels, T']  (T' ≈ seq_len / 2^num_layers)
         out = self.net(x)  # [B, 1, ≥ seq_len]
         # center‑crop if needed
+        if out.size(2) != self.seq_len:
+            diff = out.size(2) - self.seq_len
+            start = diff // 2
+            out = out[:, :, start : start + self.seq_len]
+        return out.squeeze(1)  # [B, seq_len]
+
+
+class HalvingConvTransposeDecoder1D(nn.Module):
+    """
+    A ConvTranspose1d decoder that
+    - Takes encoder_channels → halves each layer → ends at 1
+    - Doubles the time‐axis each layer → reaches seq_len (± cropping)
+    """
+
+    def __init__(self, encoder_channels, seq_len, kernel_size=3, num_layers=6):
+        super().__init__()
+        layers = []
+        in_ch = encoder_channels
+
+        for i in range(num_layers):
+            # each layer: halve channels, double time
+            out_ch = max(in_ch // 2, 1)
+            layers.append(
+                nn.ConvTranspose1d(
+                    in_channels=in_ch,
+                    out_channels=out_ch,
+                    kernel_size=kernel_size,
+                    stride=2,
+                    padding=kernel_size // 2,
+                    output_padding=1,
+                )
+            )
+            if i < num_layers - 1:
+                layers.append(nn.ReLU())
+            in_ch = out_ch
+
+        self.net = nn.Sequential(*layers)
+        self.seq_len = seq_len
+
+    def forward(self, x):
+        # x: [B, encoder_channels, T']
+        out = self.net(x)  # [B, 1, ≥ seq_len]
+        # center‐crop any overshoot
         if out.size(2) != self.seq_len:
             diff = out.size(2) - self.seq_len
             start = diff // 2
@@ -241,8 +315,7 @@ def train_autoencoder_epoch(resnet, decoder, loader, opt, device):
     for ts in tqdm(loader, desc="AE Train", leave=False):
         ts = ts.to(device).unsqueeze(1).float()  # [B,1,seq_len]
         res_out = resnet(ts)  # [B, C, T']
-        emb = res_out.mean(dim=2)  # [B, C]
-        recon = decoder(emb)  # [B, seq_len]
+        recon = decoder(res_out)  # [B, seq_len]
         loss = criterion(recon, ts.squeeze(1))  # [B, seq_len]
         opt.zero_grad()
         loss.backward()
@@ -260,8 +333,7 @@ def eval_autoencoder_epoch(resnet, decoder, loader, device):
         for ts in tqdm(loader, desc="AE  Eval", leave=False):
             ts = ts.to(device).unsqueeze(1).float()
             res_out = resnet(ts)
-            emb = res_out.mean(dim=2)
-            recon = decoder(emb)
+            recon = decoder(res_out)
             loss = criterion(recon, ts.squeeze(1))
             total_loss += loss.item()
     return total_loss / len(loader)
@@ -442,10 +514,41 @@ def generate_examples(resnet, proj, llama, tok, series, device, n=3):
 if __name__ == "__main__":
     # 5.1) Build encoder + decoder for autoencoder
     resnet = build_resnet(device)
-    res_ch = resnet.basicblock_list[-1].out_channels
+    # res_ch = resnet.basicblock_list[-1].out_channels
+    with torch.no_grad():
+        dummy = torch.zeros(1, 1, seq_len, device=device)
+        test_out = resnet(dummy)  # [1, 128, 64]
+        encoder_channels = test_out.shape[1]  # <-- THIS must be 128, not shape[2]
+    print(
+        f"ResNet actually outputs {encoder_channels} channels (T'={test_out.shape[2]})"
+    )
+
     # decoder = Decoder(in_dim=res_ch, seq_len=seq_len).to(device)
-    decoder = ConvTransposeDecoder1D(in_dim=res_ch, seq_len=seq_len, hidden_dim=128).to(
-        device
+    # decoder = ConvTransposeDecoder1D(in_dim=res_ch, seq_len=seq_len, hidden_dim=128).to(
+    #     device
+    # )
+    # encoder_ch = test_out.shape[1]  # e.g. 128
+    # decoder = HierarchicalConvDecoder1D(
+    #     encoder_channels=res_ch,
+    #     seq_len=seq_len,
+    #     base_filters=32,
+    #     kernel_size=3,
+    #     num_layers=6,
+    # ).to(device)
+    decoder = HalvingConvTransposeDecoder1D(
+        encoder_channels=encoder_channels,  # e.g. 128
+        seq_len=seq_len,  # your original time‑series length, e.g. 100+
+        # base_filters=32,  # must match the “base_filters” you used in the ResNet
+        kernel_size=3,  # same conv kernel you used in the encoder
+        num_layers=6,  # same as n_block in your ResNet
+    ).to(device)
+
+    first_layer = decoder.net[0]
+    print(
+        "Decoder first layer expects:",
+        first_layer.in_channels,
+        "→",
+        first_layer.out_channels,
     )
 
     ae_train_loader = DataLoader(
@@ -481,7 +584,7 @@ if __name__ == "__main__":
         p.requires_grad = False
     resnet.eval()
 
-    proj = nn.Linear(res_ch, llama.config.hidden_size).to(device)
+    proj = nn.Linear(encoder_channels, llama.config.hidden_size).to(device)
     lm_opt = optim.Adam(proj.parameters(), lr=LR_PROJ)
 
     # prepare LLM datasets
@@ -507,23 +610,13 @@ if __name__ == "__main__":
         print(
             f"[LLM] Epoch {ep}/{LLM_EPOCHS}  train_loss={tr_loss:.4f}  val_loss={va_loss:.4f}"
         )
-    llama = build_llama(model_id, device)
-    resnet = build_resnet(device)
-    res_ch = resnet.basicblock_list[-1].out_channels
-    hidden = llama.config.hidden_size
-    proj = nn.Linear(res_ch, hidden).to(device)
-    opt = optim.Adam(proj.parameters(), lr=1e-3)
-    epochs = 100
-    for ep in range(1, epochs + 1):
-        print(f"\nEpoch {ep}/{epochs}")
-        tr_loss = train_epoch(resnet, proj, llama, train_loader, opt, device)
-        val_loss = eval_epoch(resnet, proj, llama, val_loader, device)
-        print(f"Epoch {ep} - train_loss: {tr_loss:.4f}, val_loss: {val_loss:.4f}")
+
+        # 5.3) (Optional) generate_examples(...)
         generate_examples(
             resnet,
             proj,
             llama,
             tok,
-            val_s,
+            lm_val_series,
             device,
         )
