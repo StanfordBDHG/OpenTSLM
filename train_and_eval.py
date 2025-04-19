@@ -8,16 +8,11 @@ from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer, LlamaForCausalLM
 from chronos import ChronosPipeline
 from resnet import ResNet1Dv2  # your 1D ResNet adapter
+from transformers import DataCollatorWithPadding
 from tqdm import tqdm
 
 
-BATCH_SIZE = 8
-
-PROMPT = """Output the value at position 0 of the following timeseries. Output only the single number.
-Example: [2,5,4,3,2,4,5,6] => 2
-
-Timeseries:
-"""
+BATCH_SIZE = 128
 
 # -------------------------------------------------------------------
 # 0) Device Configuration (with MPS support on macOS)
@@ -58,25 +53,21 @@ def generate_toy_data():
 # 2) Dataset & Collation
 # -------------------------------------------------------------------
 class TS2TextDataset(Dataset):
-    def __init__(self, series, descs, tokenizer, prompt=PROMPT):
+    def __init__(self, series, descs, tokenizer):
         self.series = series
         self.descs = descs
         self.tok = tokenizer
-        self.prompt = prompt
-        self.prompt_ids = tokenizer(prompt, add_special_tokens=False).input_ids
-        self.prompt_len = len(self.prompt_ids)
 
     def __len__(self):
         return len(self.series)
 
     def __getitem__(self, idx):
         ts = torch.from_numpy(self.series[idx])
-        text = self.prompt + " " + self.descs[idx]
+        text = self.descs[idx]
         enc = self.tok(text, return_tensors="pt", padding=False)
         ids = enc.input_ids.squeeze(0)
         mask = enc.attention_mask.squeeze(0)
         labels = ids.clone()
-        labels[: self.prompt_len] = -100
         return ts, ids, mask, labels
 
 
@@ -98,18 +89,9 @@ def collate_fn(batch, pad_id):
 # -------------------------------------------------------------------
 # 3) Model Builders
 # -------------------------------------------------------------------
-def build_chronos():
-    chronos = ChronosPipeline.from_pretrained(
-        "amazon/chronos-t5-base", torch_dtype=torch.float32
-    )
-    for p in chronos.model.parameters():
-        p.requires_grad = False
-    return chronos
-
-
-def build_resnet(device):
+def build_resnet(device, in_channels=1):
     return ResNet1Dv2(
-        in_channels=768,
+        in_channels=in_channels,
         base_filters=32,
         kernel_size=3,
         stride=2,
@@ -149,85 +131,123 @@ def build_llama(model_id, device):
 # -------------------------------------------------------------------
 # 4) Training, Evaluation, and Generation
 # -------------------------------------------------------------------
-def train_epoch(ch, resnet, proj, llama, loader, opt, device):
+def train_epoch(resnet, proj, llama, loader, opt, device):
+    llama.eval()
+
+    # 1) Enable training on ResNet + projection head
     resnet.train()
+    proj.train()
+
     total_loss = 0.0
-    prompt_len = loader.dataset.prompt_len
-    for ts, ids, mask, labels in tqdm(loader, desc="Training", leave=False):
-        ts_cpu = ts.cpu()
+
+    for ts, ids, mask_ids, labels in tqdm(loader, desc="Training", leave=False):
+        ts = ts.to(device).float().unsqueeze(1)  # [B, 1, T]
+
         ids, labels = ids.to(device), labels.to(device)
-        with torch.no_grad():
-            emb_cpu = ch.embed(ts_cpu)[0]
+        mask_ids = mask_ids.to(device)  # [B, orig_len]
 
-        emb = emb_cpu.permute(0, 2, 1).to(device)
-        r = proj(resnet(emb).permute(0, 2, 1))
+        # 1) Series → ResNet → projection
+        res_out = resnet(ts)  # [B, C, T']
+        r = proj(res_out.permute(0, 2, 1))  # [B, T', d_model]
 
+        # 3) Build labels & masks
         B, orig_len = ids.size()
-        desc_len = orig_len - prompt_len
+        desc_len = orig_len
         series_len = r.size(1)
-        full_len = prompt_len + series_len + desc_len
+        full_len = series_len + desc_len
+
         labels_full = torch.full((B, full_len), -100, device=device)
-        labels_full[:, prompt_len + series_len :] = labels[:, prompt_len:]
-        attn_mask = torch.ones((B, full_len), device=device)
-        p_emb = llama.get_input_embeddings()(ids[:, :prompt_len])
-        d_emb = llama.get_input_embeddings()(ids[:, prompt_len:])
-        inputs_embeds = torch.cat([p_emb, r, d_emb], dim=1)
+        labels_full[:, series_len:] = labels
+
+        series_mask = torch.ones(
+            (B, series_len), device=device, dtype=mask_ids.dtype
+        )  # [B, series_len]
+        attn_mask = torch.cat([series_mask, mask_ids], dim=1)
+
+        # 4) Embed the prompt and description tokens
+        d_emb = llama.get_input_embeddings()(ids)  # [B, desc_len,   d_model]
+
+        # 5) Concatenate in order: prompt → series embedding → description
+        inputs_embeds = torch.cat([r, d_emb], dim=1)  # [B, full_len, d_model]
+
+        # 6) Forward pass (LLM frozen, but we want gradients back to proj+ResNet)
         out = llama(
-            inputs_embeds=inputs_embeds, attention_mask=attn_mask, labels=labels_full
+            inputs_embeds=inputs_embeds,
+            attention_mask=attn_mask,
+            labels=labels_full,
         )
         loss = out.loss
+
+        # 7) Backprop only into ResNet+proj
         opt.zero_grad()
         loss.backward()
         opt.step()
+
         total_loss += loss.item()
+
     return total_loss / len(loader)
 
 
-def eval_epoch(ch, resnet, proj, llama, loader, device):
+def eval_epoch(resnet, proj, llama, loader, device):
+    # Freeze everything
+    llama.eval()
     resnet.eval()
+    proj.eval()
+
     total_loss = 0.0
-    prompt_len = loader.dataset.prompt_len
-    with torch.no_grad():
-        for ts, ids, mask, labels in tqdm(loader, desc="Evaluating", leave=False):
-            ts_cpu = ts.cpu()
-            ids, labels = ids.to(device), labels.to(device)
-            emb_cpu = ch.embed(ts_cpu)[0]
-            emb = emb_cpu.permute(0, 2, 1).to(device)
-            r = proj(resnet(emb).permute(0, 2, 1))
+
+    for ts, ids, mask_ids, labels in tqdm(loader, desc="Evaluating", leave=False):
+        ts = ts.to(device).float().unsqueeze(1)
+        ids, labels = ids.to(device), labels.to(device)
+        mask_ids = mask_ids.to(device)
+
+        with torch.no_grad():
+            # 1) Series embedding
+            res_out = resnet(ts)
+            r = proj(res_out.permute(0, 2, 1))
+
+            # 2) Labels & masks
             B, orig_len = ids.size()
-            desc_len = orig_len - prompt_len
+            desc_len = orig_len
             series_len = r.size(1)
-            full_len = prompt_len + series_len + desc_len
+            full_len = series_len + desc_len
+
             labels_full = torch.full((B, full_len), -100, device=device)
-            labels_full[:, prompt_len + series_len :] = labels[:, prompt_len:]
-            attn_mask = torch.ones((B, full_len), device=device)
-            p_emb = llama.get_input_embeddings()(ids[:, :prompt_len])
-            d_emb = llama.get_input_embeddings()(ids[:, prompt_len:])
-            inputs_embeds = torch.cat([p_emb, r, d_emb], dim=1)
+            labels_full[:, series_len:] = labels
+
+            # prompt_mask = mask_ids[:, :pre_timeseries_len]  # token‐pad mask for prompt
+            series_mask = torch.ones(
+                (B, series_len), device=device, dtype=mask_ids.dtype
+            )
+            attn_mask = torch.cat([series_mask, mask_ids], dim=1)
+
+            # 3) Embed text and concat
+            d_emb = llama.get_input_embeddings()(ids)
+            inputs_embeds = torch.cat([r, d_emb], dim=1)
+
+            # 4) Forward and accumulate loss
             out = llama(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attn_mask,
                 labels=labels_full,
             )
             total_loss += out.loss.item()
+
     return total_loss / len(loader)
 
 
-def generate_examples(ch, resnet, proj, llama, tok, series, prompt, device, n=3):
+def generate_examples(resnet, proj, llama, tok, series, device, n=3):
     print("\n--- Generations ---")
-    prompt_ids = tok(prompt, return_tensors="pt").input_ids
-    p_emb = llama.get_input_embeddings()(prompt_ids.to(device))
     for i in range(min(n, len(series))):
         # print the input time series
         print(f"Input series {i}: {series[i]} the mean is {np.mean(series[i])}")
-        ts = torch.from_numpy(series[i]).unsqueeze(0)
-        emb_cpu = ch.embed(ts)[0]
-        emb = emb_cpu.permute(0, 2, 1).to(device)
-        r = proj(resnet(emb).permute(0, 2, 1))
-        inp_embeds = torch.cat([p_emb, r], dim=1)
+        ts = torch.from_numpy(series[i]).unsqueeze(0).to(device).float().unsqueeze(1)
+        res_out = resnet(ts)
+        r = proj(res_out.permute(0, 2, 1))
         gen_ids = llama.generate_from_embeddings(
-            inputs_embeds=inp_embeds, max_length=50, eos_token_id=tok.eos_token_id
+            inputs_embeds=r, max_length=50, eos_token_id=tok.eos_token_id
         )
+
         text = tok.decode(gen_ids[0], skip_special_tokens=True)
         print(f"Generated text: {text}\n")
 
@@ -238,8 +258,8 @@ def generate_examples(ch, resnet, proj, llama, tok, series, prompt, device, n=3)
 if __name__ == "__main__":
     model_id = "meta-llama/Llama-3.2-1B"
     series, descs = generate_toy_data()
-    val_perc = 5
-    first_val_index = len(series) * (100 - 5) // 100
+    val_perc = 10
+    first_val_index = len(series) * (100 - val_perc) // 100
     train_s, val_s = series[:first_val_index], series[first_val_index:]
     train_d, val_d = descs[:first_val_index], descs[first_val_index:]
     tok = AutoTokenizer.from_pretrained(model_id, padding_side="right")
@@ -258,7 +278,6 @@ if __name__ == "__main__":
         shuffle=False,
         collate_fn=lambda b: collate_fn(b, tok.pad_token_id),
     )
-    chronos = build_chronos()
     llama = build_llama(model_id, device)
     resnet = build_resnet(device)
     res_ch = resnet.basicblock_list[-1].out_channels
@@ -266,10 +285,16 @@ if __name__ == "__main__":
     proj = nn.Linear(res_ch, hidden).to(device)
     opt = optim.Adam(proj.parameters(), lr=1e-3)
     epochs = 100
-    prompt = train_ds.prompt
     for ep in range(1, epochs + 1):
         print(f"\nEpoch {ep}/{epochs}")
-        tr_loss = train_epoch(chronos, resnet, proj, llama, train_loader, opt, device)
-        val_loss = eval_epoch(chronos, resnet, proj, llama, val_loader, device)
+        tr_loss = train_epoch(resnet, proj, llama, train_loader, opt, device)
+        val_loss = eval_epoch(resnet, proj, llama, val_loader, device)
         print(f"Epoch {ep} - train_loss: {tr_loss:.4f}, val_loss: {val_loss:.4f}")
-        generate_examples(chronos, resnet, proj, llama, tok, val_s, prompt, device)
+        generate_examples(
+            resnet,
+            proj,
+            llama,
+            tok,
+            val_s,
+            device,
+        )
