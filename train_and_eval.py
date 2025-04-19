@@ -131,6 +131,79 @@ class Decoder(nn.Module):
         return self.net(x)  # [B, seq_len]
 
 
+class ConvTransposeDecoder1D(nn.Module):
+    """
+    ConvTranspose1d version of your MLP decoder:
+      in_dim   → hidden_dim → seq_len
+    but using convs so it can learn local structure if you ever expand it.
+    """
+
+    def __init__(self, in_dim, seq_len, hidden_dim=128):
+        super().__init__()
+        self.seq_len = seq_len
+        self.net = nn.Sequential(
+            # 1) lift from [B, in_dim] → [B, hidden_dim, 1]
+            nn.Conv1d(in_dim, hidden_dim, kernel_size=1),
+            nn.ReLU(),
+            # 2) upsample from length 1 → length seq_len
+            nn.ConvTranspose1d(
+                hidden_dim,  # in channels
+                1,  # out channels (we want a single‐channel series)
+                kernel_size=seq_len,
+                stride=1,
+                padding=0,
+                output_padding=0,
+            ),
+        )
+
+    def forward(self, x):
+        # x: [B, in_dim]
+        x = x.unsqueeze(-1)  # [B, in_dim, 1]
+        out = self.net(x)  # [B, 1, seq_len]
+        return out.squeeze(1)  # [B, seq_len]
+
+
+class HierarchicalConvDecoder1D(nn.Module):
+    def __init__(
+        self, encoder_channels, seq_len, base_filters=32, kernel_size=3, num_layers=6
+    ):
+        super().__init__()
+        layers = []
+        in_ch = encoder_channels
+        # Each layer upsamples by 2 and halves channels (until final → 1)
+        for i in range(num_layers):
+            out_ch = (
+                base_filters * (2 ** (num_layers - i - 1)) if i < num_layers - 1 else 1
+            )
+            layers.append(
+                nn.ConvTranspose1d(
+                    in_ch,
+                    out_ch,
+                    kernel_size=kernel_size,
+                    stride=2,
+                    padding=kernel_size // 2,
+                    output_padding=1,
+                )
+            )
+            if i < num_layers - 1:
+                layers.append(nn.BatchNorm1d(out_ch))
+                layers.append(nn.ReLU())
+            in_ch = out_ch
+
+        self.net = nn.Sequential(*layers)
+        self.seq_len = seq_len
+
+    def forward(self, x):
+        # x: [B, encoder_channels, T']  (T' ≈ seq_len / 2^num_layers)
+        out = self.net(x)  # [B, 1, ≥ seq_len]
+        # center‑crop if needed
+        if out.size(2) != self.seq_len:
+            diff = out.size(2) - self.seq_len
+            start = diff // 2
+            out = out[:, :, start : start + self.seq_len]
+        return out.squeeze(1)  # [B, seq_len]
+
+
 class CustomLlama(LlamaForCausalLM):
     def generate_from_embeddings(self, inputs_embeds, max_length, eos_token_id):
         self.eval()
@@ -370,7 +443,10 @@ if __name__ == "__main__":
     # 5.1) Build encoder + decoder for autoencoder
     resnet = build_resnet(device)
     res_ch = resnet.basicblock_list[-1].out_channels
-    decoder = Decoder(in_dim=res_ch, seq_len=seq_len).to(device)
+    # decoder = Decoder(in_dim=res_ch, seq_len=seq_len).to(device)
+    decoder = ConvTransposeDecoder1D(in_dim=res_ch, seq_len=seq_len, hidden_dim=128).to(
+        device
+    )
 
     ae_train_loader = DataLoader(
         TSOnlyDataset(ae_train_series), batch_size=BATCH_SIZE, shuffle=True
