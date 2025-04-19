@@ -240,7 +240,7 @@ def generate_examples(resnet, proj, llama, tok, series, device, n=3):
     print("\n--- Generations ---")
     for i in range(min(n, len(series))):
         # print the input time series
-        print(f"Input series {i}: {series[i]} the mean is {np.mean(series[i])}")
+        print(f"Input series {i}: {series[i]} item at position 0 is {series[i][0]}")
         ts = torch.from_numpy(series[i]).unsqueeze(0).to(device).float().unsqueeze(1)
         res_out = resnet(ts)
         r = proj(res_out.permute(0, 2, 1))
@@ -250,6 +250,55 @@ def generate_examples(resnet, proj, llama, tok, series, device, n=3):
 
         text = tok.decode(gen_ids[0], skip_special_tokens=True)
         print(f"Generated text: {text}\n")
+
+    # 1) A general description of the data, before the embedding
+    pre_prompt = (
+        "Below is an embedding of a multivariate time series.  "
+        "This series contains measurements recorded over time—do not echo the embedding itself, "
+        "but use it to understand and describe the underlying data."
+    )
+
+    # 2) A decoder‑prefix after the embedding to kick off generation
+    post_prompt = (
+        "Question: Based on the embedding, describe in plain English what patterns or values you observe.  "
+        "Be concise and focus on the main features of the series.\n"
+        "Description:"
+    )
+
+    # Tokenize and embed the two halves once
+    enc_pre = tok(pre_prompt, return_tensors="pt", add_special_tokens=False)
+    enc_post = tok(post_prompt, return_tensors="pt", add_special_tokens=False)
+
+    ids_pre = enc_pre.input_ids.to(device)  # [1, pre_len]
+    ids_post = enc_post.input_ids.to(device)  # [1, post_len]
+
+    p_emb = llama.get_input_embeddings()(ids_pre)  # [1, pre_len, D]
+    post_emb = llama.get_input_embeddings()(ids_post)  # [1, post_len, D]
+
+    for i in range(min(n, len(series))):
+        # Print the raw series for reference
+        print(f"Input series {i}: {series[i]}")
+
+        # Compute the series embedding
+        ts = torch.from_numpy(series[i]).unsqueeze(0).to(device).float().unsqueeze(1)
+        res_out = resnet(ts)
+        r = proj(res_out.permute(0, 2, 1))  # [1, series_len, D]
+
+        # Concatenate: pre_prompt → series embedding → post_prompt
+        inputs_embeds = torch.cat([p_emb, r, post_emb], dim=1)
+
+        # Generate up to 50 tokens beyond the post_prompt
+        gen_ids = llama.generate_from_embeddings(
+            inputs_embeds=inputs_embeds,
+            max_length=inputs_embeds.size(1) + 50,
+            eos_token_id=tok.eos_token_id,
+        )
+
+        # Decode and strip off everything up through "Description:"
+        text = tok.decode(gen_ids[0], skip_special_tokens=True)
+        description = text.split("Description:")[-1].strip()
+
+        print(f"Generated description: {description}\n")
 
 
 # -------------------------------------------------------------------
