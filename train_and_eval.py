@@ -10,11 +10,12 @@ from tqdm import tqdm
 from dataset_generation.normal_dist_around_mean_generation import generate_test_data
 from resnet import ResNet1Dv2  # your 1D ResNet adapter
 
-BATCH_SIZE = 128
-AUTO_EPOCHS = 10
-LLM_EPOCHS = 90
+BATCH_SIZE = 16
+AUTO_EPOCHS = 20
+LLM_EPOCHS = 10
 LR_AE = 1e-3
 LR_PROJ = 1e-4
+PREFIX_LENGTH = 50
 
 
 # -------------------------------------------------------------------
@@ -313,6 +314,7 @@ def train_autoencoder_epoch(resnet, decoder, loader, opt, device):
     criterion = nn.MSELoss()
     total_loss = 0.0
     for ts in tqdm(loader, desc="AE Train", leave=False):
+        ts = torch.clamp(ts, min=0.0, max=25000.0) / 25000.0
         ts = ts.to(device).unsqueeze(1).float()  # [B,1,seq_len]
         res_out = resnet(ts)  # [B, C, T']
         recon = decoder(res_out)  # [B, seq_len]
@@ -329,23 +331,29 @@ def eval_autoencoder_epoch(resnet, decoder, loader, device):
     decoder.eval()
     criterion = nn.MSELoss()
     total_loss = 0.0
+    count = 0
     with torch.no_grad():
         for ts in tqdm(loader, desc="AE  Eval", leave=False):
+            ts = torch.clamp(ts, min=0.0, max=25000.0) / 25000.0
             ts = ts.to(device).unsqueeze(1).float()
             res_out = resnet(ts)
             recon = decoder(res_out)
             loss = criterion(recon, ts.squeeze(1))
             total_loss += loss.item()
+            if count < 3:
+                print("output:", recon * 25000)
+                print("original:", ts.squeeze(1) * 25000)
+            count += 1
     return total_loss / len(loader)
 
 
 # -------------------------------------------------------------------
 # 4b) LLM‑Alignment Training (fixed concatenation)
 # -------------------------------------------------------------------
-def train_epoch(resnet, proj, llama, loader, opt, device):
+def train_epoch(resnet, proj, llama, loader, opt, scheduler, device):
     llama.eval()  # frozen
-    resnet.eval()  # frozen
-    proj.train()  # only proj
+    resnet.train()  # train
+    proj.train()  # train
 
     total_loss = 0.0
 
@@ -357,28 +365,29 @@ def train_epoch(resnet, proj, llama, loader, opt, device):
         # Global‐pool or however you want to reduce to one vector
         pooled = res_out.mean(dim=2)  # [B, C]
         r = proj(pooled)  # [B, hidden_size]
-        r_seq = r.unsqueeze(1)  # [B, 1, hidden_size]
+        r_seq = r.unsqueeze(1).repeat(1, PREFIX_LENGTH, 1)  # [B, K, D]
 
         # 2) Embed the text tokens
-        ids = ids.to(device)  # [B, desc_len]
-        mask_ids = mask_ids.to(device)  # [B, desc_len]
-        labels = labels.to(device)  # [B, desc_len]
-        d_emb = llama.get_input_embeddings()(ids)  # [B, desc_len, hidden_size]
-
-        # 3) Concatenate **along seq‐dim** (dim=1)
-        inputs_embeds = torch.cat([r_seq, d_emb], dim=1)  # [B, 1+desc_len, hidden_size]
-
-        # 4) Build attention mask (also along seq‐dim)
+        # ids = ids.to(device)  # [B, desc_len]
+        # mask_ids = mask_ids.to(device)  # [B, desc_len]
+        # labels = labels.to(device)  # [B, desc_len]
+        d_emb = llama.get_input_embeddings()(
+            ids.to(device)
+        )  # [B, desc_len, hidden_size]
+        inputs_embeds = torch.cat([r_seq, d_emb], dim=1)  # [B, K+desc_len, D]
         series_mask = torch.ones(
-            (ids.size(0), 1), device=device, dtype=mask_ids.dtype
-        )  # [B,1]
-        attn_mask = torch.cat([series_mask, mask_ids], dim=1)  # [B, 1+desc_len]
+            (ids.size(0), PREFIX_LENGTH), device=device, dtype=mask_ids.dtype
+        )
+        attn_mask = torch.cat(
+            [series_mask, mask_ids.to(device)], dim=1
+        )  # [B, K+desc_len]
 
         # 5) Shift labels over by one (if you want to predict the description tokens
         #    *after* the r_seq token, you may need to pad labels with -100 in front)
-        labels_full = torch.cat(
-            [torch.full((ids.size(0), 1), -100, device=device), labels], dim=1
+        pad = torch.full(
+            (ids.size(0), PREFIX_LENGTH), -100, device=device, dtype=labels.dtype
         )
+        labels_full = torch.cat([pad, labels.to(device)], dim=1)  # [B, K+desc_len]
 
         # 6) Forward through the frozen LLM
         out = llama(
@@ -392,6 +401,8 @@ def train_epoch(resnet, proj, llama, loader, opt, device):
         opt.zero_grad()
         loss.backward()
         opt.step()
+
+        scheduler.step()
 
         total_loss += loss.item()
 
@@ -412,25 +423,25 @@ def eval_epoch(resnet, proj, llama, loader, device):
             res_out = resnet(ts)
             pooled = res_out.mean(dim=2)
             r = proj(pooled)  # [B, hidden_size]
-            r_seq = r.unsqueeze(1)  # [B,1,hidden_size]
+            r_seq = r.unsqueeze(1).repeat(1, PREFIX_LENGTH, 1)  # [B, K, D]
 
-            # 2) Embed text
-            ids = ids.to(device)
-            mask_ids = mask_ids.to(device)
-            labels = labels.to(device)
-            d_emb = llama.get_input_embeddings()(ids)  # [B, desc_len, hidden_size]
-
-            # 3) Concat on seq‐dim
-            inputs_embeds = torch.cat([r_seq, d_emb], dim=1)
+            d_emb = llama.get_input_embeddings()(
+                ids.to(device)
+            )  # [B, desc_len, hidden_size]
+            inputs_embeds = torch.cat([r_seq, d_emb], dim=1)  # [B, K+desc_len, D]
             series_mask = torch.ones(
-                (ids.size(0), 1), device=device, dtype=mask_ids.dtype
+                (ids.size(0), PREFIX_LENGTH), device=device, dtype=mask_ids.dtype
             )
-            attn_mask = torch.cat([series_mask, mask_ids], dim=1)
+            attn_mask = torch.cat(
+                [series_mask, mask_ids.to(device)], dim=1
+            )  # [B, K+desc_len]
+
+            pad = torch.full(
+                (ids.size(0), PREFIX_LENGTH), -100, device=device, dtype=labels.dtype
+            )
 
             # 4) Build labels_full
-            labels_full = torch.cat(
-                [torch.full((ids.size(0), 1), -100, device=device), labels], dim=1
-            )
+            labels_full = torch.cat([pad, labels.to(device)], dim=1)  # [B, K+desc_len]
 
             # 5) Forward & accumulate loss
             out = llama(
@@ -444,68 +455,49 @@ def eval_epoch(resnet, proj, llama, loader, device):
 
 
 def generate_examples(resnet, proj, llama, tok, series, device, n=3):
-    print("\n--- Generations ---")
-    for i in range(min(n, len(series))):
-        # print the input time series
-        print(f"Input series {i}: {series[i]} item at position 0 is {series[i][0]}")
-        ts = torch.from_numpy(series[i]).unsqueeze(0).to(device).float().unsqueeze(1)
-        res_out = resnet(ts)
-        r = proj(res_out.permute(0, 2, 1))
-        gen_ids = llama.generate_from_embeddings(
-            inputs_embeds=r, max_length=50, eos_token_id=tok.eos_token_id
-        )
-
-        text = tok.decode(gen_ids[0], skip_special_tokens=True)
-        print(f"Generated text: {text}\n")
-
-    # 1) A general description of the data, before the embedding
-    pre_prompt = (
-        "Below is an embedding of a multivariate time series.  "
-        "This series contains measurements recorded over time—do not echo the embedding itself, "
-        "but use it to understand and describe the underlying data."
+    # 1) Build your explicit prompts with EMBED markers
+    post_prompt = "\n".join(
+        [
+            "The timeseries is:",
+        ]
     )
 
-    # 2) A decoder‑prefix after the embedding to kick off generation
-    post_prompt = (
-        "Question: Based on the embedding, describe in plain English what patterns or values you observe.  "
-        "Be concise and focus on the main features of the series.\n"
-        "Description:"
-    )
-
-    # Tokenize and embed the two halves once
-    enc_pre = tok(pre_prompt, return_tensors="pt", add_special_tokens=False)
     enc_post = tok(post_prompt, return_tensors="pt", add_special_tokens=False)
+    ids_post = enc_post.input_ids.to(device)  # [1, Q]
+    mask_post = enc_post.attention_mask.to(device)  # [1, Q]
 
-    ids_pre = enc_pre.input_ids.to(device)  # [1, pre_len]
-    ids_post = enc_post.input_ids.to(device)  # [1, post_len]
-
-    p_emb = llama.get_input_embeddings()(ids_pre)  # [1, pre_len, D]
-    post_emb = llama.get_input_embeddings()(ids_post)  # [1, post_len, D]
+    post_emb = llama.get_input_embeddings()(ids_post)  # [1, Q, D]
 
     for i in range(min(n, len(series))):
-        # Print the raw series for reference
-        print(f"Input series {i}: {series[i]}")
+        ts = torch.from_numpy(series[i]).unsqueeze(0).unsqueeze(1).to(device).float()
 
-        # Compute the series embedding
-        ts = torch.from_numpy(series[i]).unsqueeze(0).to(device).float().unsqueeze(1)
-        res_out = resnet(ts)
-        r = proj(res_out.permute(0, 2, 1))  # [1, series_len, D]
+        # 3) Encode & pool
+        with torch.no_grad():
+            res_out = resnet(ts)  # [1, C, T']
 
-        # Concatenate: pre_prompt → series embedding → post_prompt
-        inputs_embeds = torch.cat([p_emb, r, post_emb], dim=1)
+        r = proj(res_out.permute(0, 2, 1))  # [1, T', D]
+        r_seq = r  # treat each timestep as one token
 
-        # Generate up to 50 tokens beyond the post_prompt
-        gen_ids = llama.generate_from_embeddings(
+        # 4) Build the full inputs_embeds + mask
+        inputs_embeds = torch.cat([r_seq, post_emb], dim=1)  # [1, L_pre+K+L_post, D]
+        series_mask = torch.ones((1, PREFIX_LENGTH), device=device)
+        attention_mask = torch.cat([series_mask, mask_post], dim=1)
+
+        # 5) Generate with HuggingFace API
+        out_ids = llama.generate(
             inputs_embeds=inputs_embeds,
-            max_length=inputs_embeds.size(1) + 50,
+            attention_mask=attention_mask,
+            max_length=attention_mask.shape[1] + 50,
             eos_token_id=tok.eos_token_id,
+            pad_token_id=tok.pad_token_id,
         )
 
-        # Decode and strip off everything up through "Description:"
-        text = tok.decode(gen_ids[0], skip_special_tokens=True)
-        description = text.split("Description:")[-1].strip()
+        # 6) Decode & strip prompt
+        text = tok.decode(out_ids[0], skip_special_tokens=True)
+        desc = text
 
-        print(f"Generated description: {description}\n")
+        print(f"Input series {i}: {series[i]}")
+        print(f"{desc}\n")
 
 
 # -------------------------------------------------------------------
@@ -558,8 +550,13 @@ if __name__ == "__main__":
         TSOnlyDataset(ae_val_series), batch_size=BATCH_SIZE, shuffle=False
     )
 
-    ae_opt = optim.Adam(
-        list(resnet.parameters()) + list(decoder.parameters()), lr=LR_AE
+    # ae_opt = optim.Adam(
+    #     list(resnet.parameters()) + list(decoder.parameters()), lr=LR_AE
+    # )
+    ae_opt = optim.AdamW(
+        list(resnet.parameters()) + list(decoder.parameters()),
+        lr=LR_AE,
+        weight_decay=1e-4,  # try 1e‑5 → 1e‑3 range
     )
 
     # -----  Stage 1: autoencoder -----
@@ -572,20 +569,29 @@ if __name__ == "__main__":
             f"[AE] Epoch {ep}/{AUTO_EPOCHS}  train_loss={tr_loss:.4f}  val_loss={va_loss:.4f}"
         )
 
-    # 5.2) Build tokenizer, LLM, projection head for second stage
+    # 5.2) Build tokenizer, LLM, prjection head for second stage
     model_id = "meta-llama/Llama-3.2-1B"
     tok = AutoTokenizer.from_pretrained(model_id, padding_side="right")
     tok.pad_token = tok.eos_token
 
     llama = build_llama(model_id, device)
+    llama.config.pad_token_id = tok.pad_token_id
+    llama.config.eos_token = tok.eos_token
+
     for p in resnet.parameters():
         p.requires_grad = False
     for p in llama.parameters():
         p.requires_grad = False
     resnet.eval()
 
-    proj = nn.Linear(encoder_channels, llama.config.hidden_size).to(device)
-    lm_opt = optim.Adam(proj.parameters(), lr=LR_PROJ)
+    proj = nn.Sequential(
+        nn.Linear(encoder_channels, 512),
+        nn.ReLU(inplace=True),
+        nn.LayerNorm(512),
+        nn.Linear(512, llama.config.hidden_size),
+    ).to(device)
+
+    lm_opt = optim.AdamW(proj.parameters(), lr=LR_PROJ, weight_decay=1e-4)
 
     # prepare LLM datasets
     train_ds = TS2TextDataset(lm_train_series, lm_train_descs, tok)
@@ -603,9 +609,19 @@ if __name__ == "__main__":
         collate_fn=lambda b: collate_fn(b, tok.pad_token_id),
     )
 
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        lm_opt,
+        max_lr=LR_PROJ,
+        total_steps=LLM_EPOCHS * len(train_loader),
+        pct_start=0.1,
+        anneal_strategy="cos",
+    )
+
     # ----- Stage 2: LLM‑alignment -----
     for ep in range(1, LLM_EPOCHS + 1):
-        tr_loss = train_epoch(resnet, proj, llama, train_loader, lm_opt, device)
+        tr_loss = train_epoch(
+            resnet, proj, llama, train_loader, lm_opt, scheduler, device
+        )
         va_loss = eval_epoch(resnet, proj, llama, val_loader, device)
         print(
             f"[LLM] Epoch {ep}/{LLM_EPOCHS}  train_loss={tr_loss:.4f}  val_loss={va_loss:.4f}"

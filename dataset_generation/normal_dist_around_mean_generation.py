@@ -28,7 +28,7 @@ def generate_test_data(included_indices=[]):
     print("Generating trainings data around random means")
     xFileWrite = []
     yFileWrite = []
-    for _ in range(100_000):
+    for _ in range(10_000):
         datapoints = generate_days(
             random.randint(7500, 15000), random.randint(1500, 3500)
         )
@@ -36,13 +36,18 @@ def generate_test_data(included_indices=[]):
 
         xFileWrite += [datapoints] * len(included_indices)
         # xFileWrite += [datapoints] * (SIZE + 1)
-        for idx, datapoint in enumerate(datapoints):
-            if idx not in included_indices:
-                continue
-            yFileWrite.append(f"{datapoint}")
+        # for idx, datapoint in enumerate(datapoints):
+        #     if idx not in included_indices:
+        #         continue
+        #     yFileWrite.append(f"{datapoint}")
 
-        if "mean" in included_indices:
-            yFileWrite.append([f"The mean is {round(np.mean(datapoints))}"])
+        totalTs = []
+        for _, datapoint in enumerate(datapoints):
+            totalTs.append(f"{datapoint}")
+        yFileWrite.append(" ".join(totalTs))
+
+        # if "mean" in included_indices:
+        #     yFileWrite.append([f"The mean is {round(np.mean(datapoints))}"])
 
     npX = np.array(xFileWrite)
     npY = np.array(yFileWrite)
