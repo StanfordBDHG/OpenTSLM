@@ -28,6 +28,29 @@ class SineDataset(Dataset):
     def __getitem__(self, idx):
         return self.X[idx], self.y_vals[idx], self.y_str[idx]
 
+class RandomDataset(Dataset):
+    def __init__(self, num_samples=5000, seq_len=100):
+        self.seq_len = seq_len
+        self.X, self.y_vals, self.y_str = [], [], []
+
+        for _ in range(num_samples):
+            # Generate a random sequence of length `seq_len`
+            sequence = np.random.rand(seq_len).astype(np.float32)
+            mean_value = np.mean(sequence)
+            self.X.append(sequence)
+            self.y_vals.append(mean_value)
+            self.y_str.append(f"{mean_value:.4f}")
+
+        self.X = np.array(self.X)
+        self.y_vals = np.array(self.y_vals)
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.y_vals[idx], self.y_str[idx]
+
+
 class PrefixEncoder(nn.Module):
     def __init__(self, seq_len, prefix_len, hidden_size):
         super().__init__()
@@ -108,14 +131,14 @@ def main():
     BATCH      = 16
     LR         = 1e-3
     EPOCHS     = 20
-    PROMPT     = "The amplitude is:"
+    PROMPT     = "The mean is:"
 
     # --- compute prompt length ---
     prompt_tok = tokenizer(PROMPT, return_tensors="pt", add_special_tokens=False)
     PROMPT_LEN = prompt_tok.input_ids.size(1)
 
     # --- dataset & split ---
-    full_ds = SineDataset(num_samples=5000, seq_len=SEQ_LEN)
+    full_ds = RandomDataset(num_samples=5000, seq_len=SEQ_LEN)
     train_size = int(len(full_ds) * 0.8)
     val_size   = len(full_ds) - train_size
     train_ds, val_ds = random_split(full_ds, [train_size, val_size])
