@@ -21,8 +21,8 @@ batch_size    = 8
 patch_size    = 4
 num_epochs    = 20
 learning_rate = 8e-4
-warmup_frac   = 0.1     # fraction of steps used for linear warmup
-max_samples = 1000 
+warmup_frac   = 0.01     # fraction of steps used for linear warmup
+max_samples = 5000 
 
 # model + LoRA
 model = TimeSeriesLLM(device=device).to(device)
