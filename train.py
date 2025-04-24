@@ -17,11 +17,11 @@ else:
     device = 'cpu'
 
 # hyperparams
-batch_size    = 4
+batch_size    = 8
 patch_size    = 4
-num_epochs    = 5
+num_epochs    = 20
 learning_rate = 8e-4
-warmup_frac   = 0.01     # fraction of steps used for linear warmup
+warmup_frac   = 0.03     # fraction of steps used for linear warmup
 max_samples = None 
 
 # model + LoRA
