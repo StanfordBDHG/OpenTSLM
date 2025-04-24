@@ -17,39 +17,50 @@ else:
     device = 'cpu'
 
 # hyperparams
-batch_size    = 8
+batch_size    = 4
 patch_size    = 4
-num_epochs    = 20
+num_epochs    = 5
 learning_rate = 8e-4
 warmup_frac   = 0.01     # fraction of steps used for linear warmup
-max_samples = 5000 
+max_samples = None 
 
 # model + LoRA
 model = TimeSeriesLLM(device=device).to(device)
-lora_config = LoraConfig(
-    # Adapter rank
-    r=16,
-    # LoRA scaling α
-    lora_alpha=32,
-    # Which modules to inject adapters into
-    target_modules=[
-        'q_proj',     # query projection
-        'k_proj',     # key projection
-        'v_proj',     # value projection
-        'o_proj'      # output projection
-    ],
-    # Whether to add LoRA bias; 'none' means no extra bias terms
-    bias='none',
-    # Task type for a causal language model
-    task_type='CAUSAL_LM'
+# lora_config = LoraConfig(
+#     # Adapter rank
+#     r=16,
+#     # LoRA scaling α
+#     lora_alpha=32,
+#     # Which modules to inject adapters into
+#     target_modules=[
+#         'q_proj',     # query projection
+#         'k_proj',     # key projection
+#         'v_proj',     # value projection
+#         'o_proj'      # output projection
+#     ],
+#     # Whether to add LoRA bias; 'none' means no extra bias terms
+#     bias='none',
+#     # Task type for a causal language model
+#     task_type='CAUSAL_LM'
+# )
+# model.llm = get_peft_model(model.llm, lora_config)
+# optimizer = AdamW(model.parameters(), lr=learning_rate)
+model = TimeSeriesLLM(device=device).to(device)
+
+# freeze the LLM backbone entirely
+for param in model.llm.parameters():
+    param.requires_grad = False
+
+optimizer = AdamW(
+    # only update encoder + projector
+    list(model.encoder.parameters()) + list(model.projector.parameters()),
+    lr=learning_rate
 )
-model.llm = get_peft_model(model.llm, lora_config)
-optimizer = AdamW(model.parameters(), lr=learning_rate)
 
 # data loaders
 train_loader = get_loader('train',      batch_size, patch_size, max_samples=max_samples)
 val_loader   = get_loader('validation', batch_size=1, patch_size=patch_size)
-
+train_loader = val_loader
 # linear scheduler with warmup
 total_steps  = num_epochs * len(train_loader)
 warmup_steps = int(warmup_frac * total_steps)

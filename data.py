@@ -4,6 +4,9 @@ import torch
 from torch.utils.data import DataLoader
 import ast
 
+# This literal must match your tokenizer's eos_token (the default is "")
+EOS_TOKEN = ""
+
 def load_tsqa(split='train', max_samples=None, val_frac=0.1, seed=42):
     """
     Load ChengsenWang/TSQA and split off a validation subset.
@@ -33,13 +36,23 @@ def load_tsqa(split='train', max_samples=None, val_frac=0.1, seed=42):
 
     # 4) preprocessing
     def preprocess(ex):
+        # parse & normalize the series
         series = torch.tensor(ast.literal_eval(ex['Series']), dtype=torch.float32)
         m, s = series.mean(), series.std()
         series = (series - m) / (s + 1e-8)
+
+        # clean up question & answer strings
+        question = ex['Question'].strip()
+        answer = ex['Answer'].strip()
+
+        # ensure the model sees an explicit EOS token after its choice
+        if not answer.endswith(EOS_TOKEN):
+            answer = answer + EOS_TOKEN
+
         return {
             'ts': series,
-            'question': ex['Question'],
-            'answer': ex['Answer']
+            'question': question,
+            'answer': answer
         }
 
     ds = ds.map(preprocess)
@@ -48,7 +61,11 @@ def load_tsqa(split='train', max_samples=None, val_frac=0.1, seed=42):
 
 
 def collate_fn(batch, patch_size=4):
-    # ceil-pad to nearest multiple of patch_size
+    """
+    Collate a batch, padding each TS to a multiple of patch_size and
+    formatting prompts/answers for the model.
+    """
+    # 1) pad series up to ceil(L / patch_size) * patch_size
     max_len = max(ex['ts'].size(0) for ex in batch)
     max_len = ((max_len + patch_size - 1) // patch_size) * patch_size
 
@@ -61,6 +78,8 @@ def collate_fn(batch, patch_size=4):
         else:
             ts = ts[:max_len]
         ts_list.append(ts)
+
+        # build the prompt; the model will generate the answer + EOS
         qs.append(ex['question'] + "\nAnswer:")
         ans.append(ex['answer'])
 
