@@ -10,3 +10,4 @@ torchinfo
 transformers
 chronos-forecasting
 huggingface-hub
+datasets
