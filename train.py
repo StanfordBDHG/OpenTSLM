@@ -60,7 +60,6 @@ optimizer = AdamW(
 # data loaders
 train_loader = get_loader('train',      batch_size, patch_size, max_samples=max_samples)
 val_loader   = get_loader('validation', batch_size=1, patch_size=patch_size)
-train_loader = val_loader
 # linear scheduler with warmup
 total_steps  = num_epochs * len(train_loader)
 warmup_steps = int(warmup_frac * total_steps)
