@@ -4,6 +4,7 @@ from typing import Literal, Optional
 import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader
+from train import BATCH_SIZE, PATCH_SIZE
 
 # ---------------------------
 # Constants
@@ -14,6 +15,7 @@ from torch.utils.data import DataLoader
 # Core loader
 # ---------------------------
 
+
 def load_tsqa(
     split: Literal["train", "validation", "test"] = "train",
     *,
@@ -21,7 +23,7 @@ def load_tsqa(
     val_frac: float = 0.1,
     test_frac: float = 0.1,
     seed: int = 42,
-    EOS_TOKEN=""
+    EOS_TOKEN="",
 ):
     """Load the TSQA dataset with an explicit **train/validation/test** split.
 
@@ -42,7 +44,9 @@ def load_tsqa(
     train_val, test = ds_full.train_test_split(test_size=test_frac, seed=seed).values()
 
     # 3) From the remaining data take validation
-    train, val = train_val.train_test_split(test_size=val_frac / (1 - test_frac), seed=seed + 1).values()
+    train, val = train_val.train_test_split(
+        test_size=val_frac / (1 - test_frac), seed=seed + 1
+    ).values()
 
     # 4) Choose the requested split
     if split == "train":
@@ -66,7 +70,7 @@ def load_tsqa(
 
         # --- clean Q/A and ensure EOS token ---
         question = ex["Question"].strip()
-        answer   = ex["Answer"].strip()
+        answer = ex["Answer"].strip()
         if not answer.endswith(EOS_TOKEN):
             answer += EOS_TOKEN
 
@@ -81,7 +85,8 @@ def load_tsqa(
 # Collate + DataLoader helpers
 # ---------------------------
 
-def collate_fn(batch, *, patch_size: int = 4):
+
+def collate_fn(batch, *, patch_size: int = PATCH_SIZE):
     """Pad variable-length series so each sample length is a multiple of *patch_size*."""
     # pad length to the next multiple of patch_size among the batch
     max_len = max(ex["ts"].size(0) for ex in batch)
@@ -106,14 +111,14 @@ def collate_fn(batch, *, patch_size: int = 4):
 def get_loader(
     split: Literal["train", "validation", "test"] = "train",
     *,
-    batch_size: int = 8,
-    patch_size: int = 4,
+    batch_size: int = BATCH_SIZE,
+    patch_size: int = PATCH_SIZE,
     max_samples: Optional[int] = None,
     shuffle: Optional[bool] = None,  # default True for train, False otherwise
-    EOS_TOKEN=""
+    EOS_TOKEN="",
 ):
     """Convenience wrapper that returns a ``torch.utils.data.DataLoader`` for the requested split."""
-    ds = load_tsqa(split=split, max_samples=max_samples,EOS_TOKEN=EOS_TOKEN)
+    ds = load_tsqa(split=split, max_samples=max_samples, EOS_TOKEN=EOS_TOKEN)
 
     if shuffle is None:
         shuffle = split == "train"
