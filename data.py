@@ -1,101 +1,126 @@
-# data.py
-from datasets import load_dataset
-import torch
-from torch.utils.data import DataLoader
 import ast
+from typing import Literal, Optional
 
-# This literal must match your tokenizer's eos_token (the default is "")
-EOS_TOKEN = ""
+import torch
+from datasets import load_dataset
+from torch.utils.data import DataLoader
 
-def load_tsqa(split='train', max_samples=None, val_frac=0.1, seed=42):
-    """
-    Load ChengsenWang/TSQA and split off a validation subset.
+# ---------------------------
+# Constants
+# ---------------------------
+
+
+# ---------------------------
+# Core loader
+# ---------------------------
+
+def load_tsqa(
+    split: Literal["train", "validation", "test"] = "train",
+    *,
+    max_samples: Optional[int] = None,
+    val_frac: float = 0.1,
+    test_frac: float = 0.1,
+    seed: int = 42,
+    EOS_TOKEN=""
+):
+    """Load the TSQA dataset with an explicit **train/validation/test** split.
+
     Args:
-        split (str): 'train' or 'validation'
-        max_samples (int, optional): limit on total samples (applied after splitting)
-        val_frac (float): fraction of data to use for validation
-        seed (int): random seed for splitting
+        split: which split to return.
+        max_samples: optional cap on number of samples *after* splitting.
+        val_frac: fraction (0–1) of the original data used for **validation**.
+        test_frac: fraction (0–1) of the original data used for **test**.
+        seed: RNG seed to make splits deterministic.
     Returns:
-        Dataset: with columns ['ts','question','answer']
+        ``datasets.Dataset`` with columns ["ts", "question", "answer"].
     """
-    # 1) load the single 'train' split
-    ds = load_dataset("ChengsenWang/TSQA", split="train")
 
-    # 2) train/test split
-    splits = ds.train_test_split(test_size=val_frac, seed=seed)
-    if split == 'train':
-        ds = splits['train']
-    elif split in ('validation', 'val'):
-        ds = splits['test']
+    # 1) Load the single built‑in "train" split (≈ 7 k rows)
+    ds_full = load_dataset("ChengsenWang/TSQA", split="train")
+
+    # 2) First carve out the test split
+    train_val, test = ds_full.train_test_split(test_size=test_frac, seed=seed).values()
+
+    # 3) From the remaining data take validation
+    train, val = train_val.train_test_split(test_size=val_frac / (1 - test_frac), seed=seed + 1).values()
+
+    # 4) Choose the requested split
+    if split == "train":
+        ds = train
+    elif split in {"validation", "val"}:
+        ds = val
+    elif split == "test":
+        ds = test
     else:
-        raise ValueError(f"Unknown split '{split}'; choose 'train' or 'validation'")
+        raise ValueError("split must be 'train', 'validation', or 'test'")
 
-    # 3) optional sample limit
+    # 5) Optional size cap
     if max_samples is not None and max_samples < len(ds):
-        ds = ds.select(list(range(max_samples)))
+        ds = ds.select(range(max_samples))
 
-    # 4) preprocessing
-    def preprocess(ex):
-        # parse & normalize the series
-        series = torch.tensor(ast.literal_eval(ex['Series']), dtype=torch.float32)
-        m, s = series.mean(), series.std()
-        series = (series - m) / (s + 1e-8)
+    # 6) Pre-processing helper
+    def _preprocess(ex):
+        # --- normalise time‑series ---
+        series = torch.tensor(ast.literal_eval(ex["Series"]), dtype=torch.float32)
+        series = (series - series.mean()) / (series.std() + 1e-8)
 
-        # clean up question & answer strings
-        question = ex['Question'].strip()
-        answer = ex['Answer'].strip()
-
-        # ensure the model sees an explicit EOS token after its choice
+        # --- clean Q/A and ensure EOS token ---
+        question = ex["Question"].strip()
+        answer   = ex["Answer"].strip()
         if not answer.endswith(EOS_TOKEN):
-            answer = answer + EOS_TOKEN
+            answer += EOS_TOKEN
 
-        return {
-            'ts': series,
-            'question': question,
-            'answer': answer
-        }
+        return {"ts": series, "question": question, "answer": answer}
 
-    ds = ds.map(preprocess)
-    ds.set_format(type='torch', columns=['ts','question','answer'])
+    ds = ds.map(_preprocess)
+    ds.set_format(type="torch", columns=["ts", "question", "answer"])
     return ds
 
 
-def collate_fn(batch, patch_size=4):
-    """
-    Collate a batch, padding each TS to a multiple of patch_size and
-    formatting prompts/answers for the model.
-    """
-    # 1) pad series up to ceil(L / patch_size) * patch_size
-    max_len = max(ex['ts'].size(0) for ex in batch)
+# ---------------------------
+# Collate + DataLoader helpers
+# ---------------------------
+
+def collate_fn(batch, *, patch_size: int = 4):
+    """Pad variable-length series so each sample length is a multiple of *patch_size*."""
+    # pad length to the next multiple of patch_size among the batch
+    max_len = max(ex["ts"].size(0) for ex in batch)
     max_len = ((max_len + patch_size - 1) // patch_size) * patch_size
 
     ts_list, qs, ans = [], [], []
     for ex in batch:
-        ts = ex['ts']
+        ts = ex["ts"]
         if ts.size(0) < max_len:
             pad = max_len - ts.size(0)
-            ts = torch.nn.functional.pad(ts, (0, pad), 'constant', 0)
+            ts = torch.nn.functional.pad(ts, (0, pad), "constant", 0)
         else:
             ts = ts[:max_len]
         ts_list.append(ts)
 
-        # build the prompt; the model will generate the answer + EOS
-        qs.append(ex['question'] + "\nAnswer:")
-        ans.append(ex['answer'])
+        qs.append(ex["question"] + "\nAnswer:")
+        ans.append(ex["answer"])
 
-    ts_batch = torch.stack(ts_list)
-    return ts_batch, qs, ans
+    return torch.stack(ts_list), qs, ans
 
 
-def get_loader(split='train', batch_size=8, patch_size=4, max_samples=None):
-    """
-    Returns a DataLoader over TSQA.
-    split: 'train' or 'validation'
-    """
-    ds = load_tsqa(split=split, max_samples=max_samples)
+def get_loader(
+    split: Literal["train", "validation", "test"] = "train",
+    *,
+    batch_size: int = 8,
+    patch_size: int = 4,
+    max_samples: Optional[int] = None,
+    shuffle: Optional[bool] = None,  # default True for train, False otherwise
+    EOS_TOKEN=""
+):
+    """Convenience wrapper that returns a ``torch.utils.data.DataLoader`` for the requested split."""
+    ds = load_tsqa(split=split, max_samples=max_samples,EOS_TOKEN=EOS_TOKEN)
+
+    if shuffle is None:
+        shuffle = split == "train"
+
     return DataLoader(
         ds,
         batch_size=batch_size,
-        shuffle=(split=='train'),
-        collate_fn=lambda b: collate_fn(b, patch_size)
+        shuffle=shuffle,
+        collate_fn=lambda batch: collate_fn(batch, patch_size=patch_size),
     )
