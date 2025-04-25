@@ -200,3 +200,6 @@ class TimeSeriesLLM(nn.Module):
         )
         # outputs.loss is already average over non-ignored positions
         return outputs.loss
+
+    def get_eos_token(self):
+        return self.tokenizer.eos_token
