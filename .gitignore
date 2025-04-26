@@ -1,2 +1,6 @@
 venv
 __pycache__
+.DS_STORE
+**/.DS_STORE
+
+raw_data
