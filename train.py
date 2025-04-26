@@ -8,6 +8,7 @@ from transformers import get_linear_schedule_with_warmup
 
 from data import get_loader  # ← note: we use the data loader with test split
 from model.time_series_model import TimeSeriesLLM
+from model_config import * 
 
 # ---------------------------
 # Device setup
@@ -18,21 +19,6 @@ elif torch.backends.mps.is_available():
     device = "mps"
 else:
     device = "cpu"
-
-# ---------------------------
-# Hyper‑parameters
-# ---------------------------
-BATCH_SIZE = 8
-PATCH_SIZE = 4
-NUM_EPOCHS = 20  # allow many but we will early‑stop
-EARLY_STOP_PAT = 5  # stop if val loss hasn’t improved for this many epochs
-LR_ENCODER = 2e-4
-LR_PROJECTOR = 1e-4
-WEIGHT_DECAY = 1e-2
-GRAD_CLIP_NORM = 1.0
-WARMUP_FRAC = 0.03
-MAX_SAMPLES = None  # set to an int for quick experiments
-RESULTS_FILE = "test_predictions.jsonl"
 
 # ---------------------------
 # Model

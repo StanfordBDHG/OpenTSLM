@@ -4,10 +4,7 @@ import torch
 import torch.nn as nn
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-from train import PATCH_SIZE
-
-EMBED_DIM = 128
-
+from model_config import PATCH_SIZE, EMBED_DIM
 
 class TimeSeriesEncoder(nn.Module):
     def __init__(

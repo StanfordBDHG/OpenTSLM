@@ -4,7 +4,7 @@ from typing import Literal, Optional
 import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader
-from train import BATCH_SIZE, PATCH_SIZE
+from model_config import * 
 
 # ---------------------------
 # Constants
