@@ -1,117 +1,19 @@
-# model/time_series_model.py
-
 import torch
 import torch.nn as nn
+
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-from model_config import PATCH_SIZE, EMBED_DIM
 
-class TimeSeriesEncoder(nn.Module):
-    def __init__(
-        self,
-        embed_dim: int = EMBED_DIM,
-        num_heads: int = 8,
-        num_layers: int = 6,
-        patch_size: int = PATCH_SIZE,
-        ff_dim: int = 1024,
-        dropout: float = 0.3,
-        max_patches: int = 512,
-    ):
-        """
-        Args:
-            embed_dim: dimension of patch embeddings
-            num_heads: number of attention heads
-            num_layers: number of TransformerEncoder layers
-            patch_size: length of each patch
-            ff_dim: hidden size of the feed‐forward network inside each encoder layer
-            dropout: dropout probability
-            max_patches: maximum number of patches expected per sequence (for pos emb)
-        """
-        super().__init__()
-        self.patch_size = patch_size
-
-        # 1) Conv1d patch embedding: (B, 1, L) -> (B, embed_dim, L/patch_size)
-        self.patch_embed = nn.Conv1d(
-            in_channels=1,
-            out_channels=embed_dim,
-            kernel_size=patch_size,
-            stride=patch_size,
-            bias=False,
-        )
-
-        # 2) Learnable positional embeddings
-        self.pos_embed = nn.Parameter(torch.randn(1, max_patches, embed_dim))
-
-        # 3) Input norm + dropout
-        self.input_norm = nn.LayerNorm(embed_dim)
-        self.input_dropout = nn.Dropout(dropout)
-
-        # 4) Stack of TransformerEncoder layers with higher ff_dim
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=embed_dim,
-            nhead=num_heads,
-            dim_feedforward=ff_dim,
-            dropout=dropout,
-            batch_first=True,
-            activation="gelu",
-        )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-
-        # 5) (Optional) MLP head for pooling or downstream tasks
-        self.mlp_head = nn.Sequential(
-            nn.LayerNorm(embed_dim),
-            nn.Linear(embed_dim, embed_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x: FloatTensor of shape [B, L], a batch of raw time series.
-        Returns:
-            FloatTensor of shape [B, N, embed_dim], where N = L // patch_size.
-        """
-        B, L = x.shape
-        if L % self.patch_size != 0:
-            raise ValueError(
-                f"Sequence length {L} not divisible by patch_size {self.patch_size}"
-            )
-
-        # reshape to (B, 1, L)
-        x = x.unsqueeze(1)
-
-        # conv patch embedding -> (B, embed_dim, N)
-        x = self.patch_embed(x)
-
-        # transpose to (B, N, embed_dim)
-        x = x.transpose(1, 2)
-
-        # add positional embeddings (truncate or expand as needed)
-        N = x.size(1)
-        if N > self.pos_embed.size(1):
-            raise ValueError(
-                f"Too many patches {N}; max supported is {self.pos_embed.size(1)}"
-            )
-        pos = self.pos_embed[:, :N, :]
-        x = x + pos
-
-        # norm + dropout
-        x = self.input_norm(x)
-        x = self.input_dropout(x)
-
-        # apply Transformer encoder
-        x = self.encoder(x)
-
-        # optional MLP head
-        x = self.mlp_head(x)
-
-        return x
+from model_config import ENCODER_OUTPUT_DIM
 
 
 class TimeSeriesLLM(nn.Module):
     def __init__(
-        self, llm_id="meta-llama/Llama-3.2-1B", embed_dim=EMBED_DIM, device="cuda"
+        self,
+        encoder,
+        projector_class,
+        llm_id="meta-llama/Llama-3.2-1B",
+        device="cuda",
     ):
         super().__init__()
         self.device = device
@@ -128,8 +30,10 @@ class TimeSeriesLLM(nn.Module):
         self.llm.resize_token_embeddings(len(self.tokenizer))
 
         # 3) time-series encoder + projector
-        self.encoder = TimeSeriesEncoder(embed_dim=embed_dim).to(device)
-        self.projector = nn.Linear(embed_dim, self.llm.config.hidden_size).to(device)
+        self.encoder = encoder
+        self.projector = projector_class(
+            ENCODER_OUTPUT_DIM, self.llm.config.hidden_size, device=device
+        )
 
     def forward(
         self,
