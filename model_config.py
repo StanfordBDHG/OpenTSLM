@@ -1,4 +1,3 @@
-
 # ---------------------------
 # Hyper‑parameters
 # ---------------------------
@@ -13,4 +12,6 @@ GRAD_CLIP_NORM = 1.0
 WARMUP_FRAC = 0.03
 MAX_SAMPLES = None  # set to an int for quick experiments
 RESULTS_FILE = "test_predictions.jsonl"
-EMBED_DIM=128
+EMBED_DIM = 128
+ENCODER_OUTPUT_DIM = EMBED_DIM
+ENCODER_INPUT_DIM = EMBED_DIM
