@@ -7,8 +7,24 @@ from tqdm.auto import tqdm
 from transformers import get_linear_schedule_with_warmup
 
 from data import get_loader  # ← note: we use the data loader with test split
-from model.time_series_model import TimeSeriesLLM
-from model_config import * 
+
+from model.encoder.TransformerTimeSeriesEncoder import TransformerTimeSeriesEncoder
+from model.llm.TimeSeriesLLM import TimeSeriesLLM
+from model.projector.LinearProjector import LinearProjector
+from model_config import (
+    BATCH_SIZE,
+    EARLY_STOP_PAT,
+    GRAD_CLIP_NORM,
+    LR_ENCODER,
+    LR_PROJECTOR,
+    MAX_SAMPLES,
+    NUM_EPOCHS,
+    PATCH_SIZE,
+    EMBED_DIM,
+    RESULTS_FILE,
+    WARMUP_FRAC,
+    WEIGHT_DECAY,
+)
 
 # ---------------------------
 # Device setup
@@ -23,7 +39,11 @@ else:
 # ---------------------------
 # Model
 # ---------------------------
-model = TimeSeriesLLM(device=device).to(device)
+encoder = TransformerTimeSeriesEncoder().to(device)
+model = TimeSeriesLLM(
+    encoder=encoder, projector_class=LinearProjector, device=device
+).to(device)
+
 
 # — Freeze the LLM backbone so we only update encoder + projector
 for p in model.llm.parameters():
@@ -31,7 +51,7 @@ for p in model.llm.parameters():
 
 # Parameter groups with different learning rates
 enc_params = list(model.encoder.parameters())
-proj_params = list(model.projector.parameters())
+proj_params = list(model.projector.projector.parameters())
 optimizer = AdamW(
     [
         {"params": enc_params, "lr": LR_ENCODER, "weight_decay": WEIGHT_DECAY},
