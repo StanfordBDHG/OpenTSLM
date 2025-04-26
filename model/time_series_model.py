@@ -159,11 +159,13 @@ class TimeSeriesLLM(nn.Module):
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 max_new_tokens=max_new_tokens,
-                num_beams=4,
-                early_stopping=True,
-                no_repeat_ngram_size=2,
-                temperature=0.8,
-                top_p=0.9
+
+                # number of branches for beam search, 1 for top results
+                # num_beams=1,
+                # early_stopping=True,
+                # no_repeat_ngram_size=2,
+                temperature=0.1,
+                # top_p=0.9
             )
             return self.tokenizer.batch_decode(gen_ids, skip_special_tokens=True)
 
