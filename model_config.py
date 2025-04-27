@@ -14,4 +14,4 @@ MAX_SAMPLES = None  # set to an int for quick experiments
 RESULTS_FILE = "test_predictions.jsonl"
 EMBED_DIM = 128
 ENCODER_OUTPUT_DIM = EMBED_DIM
-ENCODER_INPUT_DIM = EMBED_DIM
+TRANSFORMER_INPUT_DIM = EMBED_DIM
