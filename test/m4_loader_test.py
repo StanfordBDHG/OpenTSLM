@@ -5,7 +5,8 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
-from datasets.m4 import get_m4_loader
+from time_series_datasets.m4 import get_m4_loader
+
 
 def test_loader():
     loader = get_m4_loader(frequency="Monthly", split="train", batch_size=2)
@@ -13,6 +14,7 @@ def test_loader():
         print(series_batch.shape)
         print(ids)
         break
+
 
 if __name__ == "__main__":
     test_loader()
