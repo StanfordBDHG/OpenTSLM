@@ -2,16 +2,16 @@ import torch
 import torch.nn as nn
 
 
-from model_config import ENCODER_INPUT_DIM, ENCODER_OUTPUT_DIM, PATCH_SIZE
+from model_config import TRANSFORMER_INPUT_DIM, ENCODER_OUTPUT_DIM, PATCH_SIZE
 from model.encoder.TimeSeriesEncoderBase import TimeSeriesEncoderBase
 
 
-class TransformerTimeSeriesEncoder(TimeSeriesEncoderBase):
+class TransformerCNNEncoder(TimeSeriesEncoderBase):
     def __init__(
         self,
-        input_dim: int = ENCODER_INPUT_DIM,
         output_dim: int = ENCODER_OUTPUT_DIM,
         dropout: float = 0.3,
+        transformer_input_dim: int = TRANSFORMER_INPUT_DIM,
         num_heads: int = 8,
         num_layers: int = 6,
         patch_size: int = PATCH_SIZE,
@@ -28,28 +28,30 @@ class TransformerTimeSeriesEncoder(TimeSeriesEncoderBase):
             dropout: dropout probability
             max_patches: maximum number of patches expected per sequence (for pos emb)
         """
-        super().__init__(input_dim, output_dim, dropout)
+        super().__init__(output_dim, dropout)
         self.patch_size = patch_size
 
         # 1) Conv1d patch embedding: (B, 1, L) -> (B, embed_dim, L/patch_size)
         self.patch_embed = nn.Conv1d(
             in_channels=1,
-            out_channels=self.input_dim,
+            out_channels=transformer_input_dim,
             kernel_size=patch_size,
             stride=patch_size,
             bias=False,
         )
 
         # 2) Learnable positional embeddings
-        self.pos_embed = nn.Parameter(torch.randn(1, max_patches, self.input_dim))
+        self.pos_embed = nn.Parameter(
+            torch.randn(1, max_patches, transformer_input_dim)
+        )
 
         # 3) Input norm + dropout
-        self.input_norm = nn.LayerNorm(self.input_dim)
+        self.input_norm = nn.LayerNorm(transformer_input_dim)
         self.input_dropout = nn.Dropout(self.dropout)
 
         # 4) Stack of TransformerEncoder layers with higher ff_dim
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=self.input_dim,
+            d_model=transformer_input_dim,
             nhead=num_heads,
             dim_feedforward=ff_dim,
             dropout=self.dropout,
@@ -57,14 +59,6 @@ class TransformerTimeSeriesEncoder(TimeSeriesEncoderBase):
             activation="gelu",
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
-
-        # 5) (Optional) MLP head for pooling or downstream tasks
-        self.mlp_head = nn.Sequential(
-            nn.LayerNorm(self.input_dim),
-            nn.Linear(self.input_dim, self.output_dim),
-            nn.GELU(),
-            nn.Dropout(self.dropout),
-        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -103,8 +97,5 @@ class TransformerTimeSeriesEncoder(TimeSeriesEncoderBase):
 
         # apply Transformer encoder
         x = self.encoder(x)
-
-        # optional MLP head
-        x = self.mlp_head(x)
 
         return x
