@@ -8,9 +8,9 @@ from transformers import get_linear_schedule_with_warmup
 
 from data import get_loader  # ← note: we use the data loader with test split
 
-from model.encoder.TransformerTimeSeriesEncoder import TransformerTimeSeriesEncoder
+from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from model.llm.TimeSeriesLLM import TimeSeriesLLM
-from model.projector.LinearProjector import LinearProjector
+from model.projector.MLPProjector import MLPProjector
 from model_config import (
     BATCH_SIZE,
     EARLY_STOP_PAT,
@@ -39,10 +39,10 @@ else:
 # ---------------------------
 # Model
 # ---------------------------
-encoder = TransformerTimeSeriesEncoder().to(device)
-model = TimeSeriesLLM(
-    encoder=encoder, projector_class=LinearProjector, device=device
-).to(device)
+encoder = TransformerCNNEncoder().to(device)
+model = TimeSeriesLLM(encoder=encoder, projector_class=MLPProjector, device=device).to(
+    device
+)
 
 
 # — Freeze the LLM backbone so we only update encoder + projector
