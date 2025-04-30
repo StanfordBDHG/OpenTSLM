@@ -12,3 +12,4 @@ chronos-forecasting
 huggingface-hub
 datasets
 peft
+requests
