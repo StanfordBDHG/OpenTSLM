@@ -10,26 +10,18 @@ import torch
 def collate_fn(batch, *, patch_size: int = PATCH_SIZE):
     """Pad variable-length series so each sample length is a multiple of *patch_size*."""
 
-    max_len = max(ex["ts"].size(0) for ex in batch)
-    max_len = ((max_len + patch_size - 1) // patch_size) * patch_size
-
-    ts_list, qs, ans = [], [], []
-    for ex in batch:
+    for idx, element in enumerate(batch):
         # print("ex", ex)
-        ts = ex["ts"]
-        if ts.size(0) < max_len:
-            pad = max_len - ts.size(0)
+        ts = element["time_series"]
+        padded_length = (ts.size(0) + patch_size - 1) // patch_size * patch_size
+        if ts.size(0) < padded_length:
+            pad = padded_length - ts.size(0)
             ts = torch.nn.functional.pad(ts, (0, pad), "constant", 0)
         else:
-            ts = ts[:max_len]
-        ts_list.append(ts)
+            ts = ts[:padded_length]
+        batch[idx]["time_series"] = ts
 
-        qs.append(ex["question"] + "\nAnswer:")
-        ans.append(ex["answer"])
-
-    # print(ts_list, qs, ans)
-
-    return torch.stack(ts_list), qs, ans
+    return batch
 
 
 def load_qa_dataset(
@@ -92,23 +84,36 @@ def load_qa_dataset(
     def _preprocess(ex):
         # --- normalise time‑series ---
         series = None
-        if isinstance(ex["Series"], str):
-            series = torch.tensor(ast.literal_eval(ex["Series"]), dtype=torch.float32)
-        else:
-            series = torch.tensor(ex["Series"], dtype=torch.float32)
 
-        series = (series - series.mean()) / (series.std() + 1e-8)
+        series = ex["TextTimeSeriesPromptTimeSeries"]
+        if isinstance(series, str):
+            series = ast.literal_eval(series)
+
+        series = torch.tensor(series, dtype=torch.float32)
+
+        means = series.mean(dim=1, keepdim=True)  # shape: (n_series, 1)
+        stds = series.std(dim=1, keepdim=True)  # shape: (n_series, 1)
+        series = (series - means) / (stds + 1e-8)  # broadcasts to (n_series, length)
 
         # --- clean Q/A and ensure EOS token ---
-        question = ex["Question"].strip()
+        pre_prompt = ex["PrePrompt"].strip()
+        post_prompt = ex["PostPrompt"].strip()
+        time_series_text = ex["TextTimeSeriesPromptTexts"]
         answer = ex["Answer"].strip()
+
         if not answer.endswith(EOS_TOKEN):
             answer += EOS_TOKEN
 
-        return {"ts": series, "question": question, "answer": answer}
+        return {
+            "time_series": series,
+            "time_series_text": time_series_text,
+            "pre_prompt": pre_prompt,
+            "post_prompt": post_prompt,
+            "answer": answer,
+        }
 
     ds = ds.map(_preprocess)
-    columns = ["ts", "question", "answer"]
+    columns = ["time_series", "time_series_text", "pre_prompt", "post_prompt", "answer"]
     ds.set_format(type="torch", columns=columns)
     ds = ds.remove_columns(list(set(ds.column_names) - set(columns)))
 
@@ -116,13 +121,16 @@ def load_qa_dataset(
 
 
 def torch_to_hf_generator(torch_ds):
-    for wrapped_time_series, question, value in torch_ds:
-        clean = {
-            "Series": list(wrapped_time_series[0]),
-            "Answer": str(value),
-            "Question": question,
+    for val in torch_ds:
+        yield {
+            "PrePrompt": val["pre_prompt"],
+            "TextTimeSeriesPromptTexts": val["text_time_series_prompt_texts"],
+            "TextTimeSeriesPromptTimeSeries": val[
+                "text_time_series_prompt_time_series"
+            ],
+            "PostPrompt": val["post_prompt"],
+            "Answer": val["answer"],
         }
-        yield clean
 
 
 def SingletonDataset(cls):
