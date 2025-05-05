@@ -6,6 +6,9 @@ import requests
 import io
 import zipfile
 
+import os
+from tqdm import tqdm
+
 name = "DataLoader"
 
 regression_datasets = [
@@ -44,10 +47,34 @@ def download_and_extract_monash_ucr(destination="monash_datasets"):
     url = (
         "https://zenodo.org/record/3902651/files/Monash_UEA_UCR_Regression_Archive.zip"
     )
-    print(f"Downloading Monash/UEA/UCR datasets from Zenodo to ‘{destination}’...")
-    response = requests.get(url)
-    with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
-        zip_ref.extractall(destination)
+    # make sure the destination folder exists
+    os.makedirs(destination, exist_ok=True)
+
+    # start the download, but stream it so we can show progress
+    print(f"Downloading Monash/UEA/UCR datasets from Zenodo to ‘{destination}’…")
+    response = requests.get(url, stream=True)
+    total_size = int(response.headers.get("content-length", 0))
+    chunk_size = 1024
+
+    buffer = io.BytesIO()
+    with tqdm(
+        total=total_size, unit="iB", unit_scale=True, desc="Downloading", ncols=80
+    ) as bar:
+        for chunk in response.iter_content(chunk_size=chunk_size):
+            if chunk:  # filter out keep-alive chunks
+                buffer.write(chunk)
+                bar.update(len(chunk))
+
+    # rewind to beginning of buffer
+    buffer.seek(0)
+
+    # now extract, showing progress per-file
+    with zipfile.ZipFile(buffer) as z:
+        members = z.infolist()
+        with tqdm(total=len(members), desc="Extracting", ncols=80) as bar:
+            for member in members:
+                z.extract(member, destination)
+                bar.update(1)
     print("Download and extraction complete.")
 
 

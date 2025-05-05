@@ -1,7 +1,9 @@
 # ---------------------------
 # Hyper‑parameters
 # ---------------------------
-BATCH_SIZE = 4
+
+BATCH_SIZE = 2
+
 PATCH_SIZE = 4
 NUM_EPOCHS = 20  # allow many but we will early‑stop
 EARLY_STOP_PAT = 5  # stop if val loss hasn’t improved for this many epochs
