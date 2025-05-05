@@ -4,6 +4,7 @@ import torch.nn as nn
 class MLPProjector(nn.Module):
     def __init__(self, input_dim, output_dim, device):
         super().__init__()
+
         self.projector = nn.Sequential(
             nn.LayerNorm(input_dim),
             nn.Linear(input_dim, output_dim),

@@ -14,9 +14,14 @@ from tqdm.auto import tqdm
 
 features = Features(
     {
-        "Series": Sequence(Value("float32")),
-        "Question": Value("string"),
+        "PrePrompt": Value("string"),
+        "TextTimeSeriesPromptTexts": Sequence(Value("string")),
+        "TextTimeSeriesPromptTimeSeries": Sequence(Sequence(Value("float32"))),
+        "PostPrompt": Value("string"),
         "Answer": Value("string"),
+        # "Series": Sequence(Value("float32")),
+        # "Question": Value("string"),
+        # "Answer": Value("string"),
     }
 )
 
