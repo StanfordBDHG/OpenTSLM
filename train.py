@@ -1,12 +1,18 @@
 import json
 import os
+from time_series_datasets.monash.MonashSPO2QADataset import MonashSPO2QADataset
+from time_series_datasets.util import collate_fn
 import torch
 from torch.optim import AdamW
 from torch.nn.utils import clip_grad_norm_
+from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from transformers import get_linear_schedule_with_warmup
 
-from data import get_loader  # ← note: we use the data loader with test split
+from datasets import concatenate_datasets, Dataset
+from time_series_datasets.tsqa import (
+    get_tsqa_dataset,
+)  # ← note: we use the data loader with test split
 
 from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from model.llm.TimeSeriesLLM import TimeSeriesLLM
@@ -20,7 +26,6 @@ from model_config import (
     MAX_SAMPLES,
     NUM_EPOCHS,
     PATCH_SIZE,
-    EMBED_DIM,
     RESULTS_FILE,
     WARMUP_FRAC,
     WEIGHT_DECAY,
@@ -60,26 +65,68 @@ optimizer = AdamW(
 )
 
 
+def merge_data_loaders(
+    datasets: Dataset, shuffle: bool, batch_size: int, patch_size: int
+) -> DataLoader:
+    merged_ds = concatenate_datasets(datasets)
+    return DataLoader(
+        merged_ds,
+        shuffle=shuffle,
+        batch_size=batch_size,
+        collate_fn=lambda batch: collate_fn(batch, patch_size=patch_size),
+    )
+
+
 # ---------------------------
 # Data loaders
 # ---------------------------
-train_loader = get_loader(
-    "train",
+train_loader = merge_data_loaders(
+    [
+        get_tsqa_dataset(
+            "train",
+            EOS_TOKEN=model.get_eos_token(),
+        ),
+        MonashSPO2QADataset().load(
+            "train",
+            EOS_TOKEN=model.get_eos_token(),
+        ),
+    ],
+    shuffle=True,
     batch_size=BATCH_SIZE,
     patch_size=PATCH_SIZE,
-    max_samples=MAX_SAMPLES,
-    EOS_TOKEN=model.get_eos_token(),
 )
-val_loader = get_loader(
-    "validation", batch_size=1, patch_size=PATCH_SIZE, EOS_TOKEN=model.get_eos_token()
-)
-test_loader = get_loader(
-    "test",
+
+val_loader = merge_data_loaders(
+    [
+        get_tsqa_dataset(
+            "val",
+            EOS_TOKEN=model.get_eos_token(),
+        ),
+        MonashSPO2QADataset().load(
+            "val",
+            EOS_TOKEN=model.get_eos_token(),
+        ),
+    ],
+    shuffle=False,
     batch_size=1,
     patch_size=PATCH_SIZE,
-    shuffle=False,
-    EOS_TOKEN=model.get_eos_token(),
 )
+test_loader = merge_data_loaders(
+    [
+        get_tsqa_dataset(
+            "test",
+            EOS_TOKEN=model.get_eos_token(),
+        ),
+        MonashSPO2QADataset().load(
+            "test",
+            EOS_TOKEN=model.get_eos_token(),
+        ),
+    ],
+    shuffle=False,
+    batch_size=1,
+    patch_size=PATCH_SIZE,
+)
+
 
 # Scheduler (linear warmup + decay)
 TOTAL_STEPS = NUM_EPOCHS * len(train_loader)
