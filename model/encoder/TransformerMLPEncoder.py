@@ -11,7 +11,7 @@ class TransformerMLPEncoder(TimeSeriesEncoderBase):
         self,
         input_dim: int = TRANSFORMER_INPUT_DIM,
         output_dim: int = ENCODER_OUTPUT_DIM,
-        dropout: float = 0.3,
+        dropout: float = 0.0,
         num_heads: int = 8,
         num_layers: int = 6,
         patch_size: int = PATCH_SIZE,

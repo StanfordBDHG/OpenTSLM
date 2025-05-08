@@ -1,7 +1,6 @@
 from typing import List
 from prompt.text_prompt import TextPrompt
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
-from .full_prompt import FullPrompt
 
 
 class PromptWithAnswer:
@@ -17,7 +16,6 @@ class PromptWithAnswer:
         post_prompt: TextPrompt,
         answer: str,
     ):
-        # assert isinstance(full_prompt, FullPrompt), "Prompt must be a FullPrompt."
         assert isinstance(answer, str), "Answer must be a string."
 
         self.pre_prompt = pre_prompt
@@ -32,9 +30,9 @@ class PromptWithAnswer:
 
     def to_dict(self):
         return {
-            "pre_prompt": self.pre_prompt,
-            "text_time_series_prompt_texts": self.text_time_series_prompt_texts,
-            "text_time_series_prompt_time_series": self.text_time_series_prompt_time_series,
-            "post_prompt": self.post_prompt,
             "answer": self.answer,
+            "post_prompt": self.post_prompt,
+            "pre_prompt": self.pre_prompt,
+            "time_series": self.text_time_series_prompt_time_series,
+            "time_series_text": self.text_time_series_prompt_texts,
         }

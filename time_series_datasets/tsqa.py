@@ -1,8 +1,7 @@
 from typing import Literal, Optional
 
-from time_series_datasets.util import collate_fn, load_qa_dataset
+from time_series_datasets.util import load_qa_dataset
 from datasets import load_dataset
-from torch.utils.data import DataLoader
 from model_config import *
 
 

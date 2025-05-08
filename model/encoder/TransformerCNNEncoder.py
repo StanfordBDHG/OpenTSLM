@@ -10,7 +10,7 @@ class TransformerCNNEncoder(TimeSeriesEncoderBase):
     def __init__(
         self,
         output_dim: int = ENCODER_OUTPUT_DIM,
-        dropout: float = 0.3,
+        dropout: float = 0.0,
         transformer_input_dim: int = TRANSFORMER_INPUT_DIM,
         num_heads: int = 8,
         num_layers: int = 6,

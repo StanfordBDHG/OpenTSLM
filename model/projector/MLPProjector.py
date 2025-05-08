@@ -9,7 +9,7 @@ class MLPProjector(nn.Module):
             nn.LayerNorm(input_dim),
             nn.Linear(input_dim, output_dim),
             nn.GELU(),
-            nn.Dropout(0.3),
+            nn.Dropout(0.0),
         ).to(device)
 
     def forward(self, x):

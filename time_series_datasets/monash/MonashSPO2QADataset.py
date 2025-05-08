@@ -1,100 +1,75 @@
-from typing import Literal, Optional
-from datasets import Dataset, Value, Sequence, Features
+from typing import List, Literal, Optional, Tuple
+from datasets import Dataset
+from prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from time_series_datasets.monash.MonashDataset import MonashDataset
 from time_series_datasets.QADataset import QADataset
 from time_series_datasets.util import (
-    SingletonDataset,
-    collate_fn,
-    load_qa_dataset,
-    torch_to_hf_generator,
+    extend_time_series_to_match_patch_size_and_aggregate,
 )
-from torch.utils.data import DataLoader
+import torch
+from torch.utils.data import DataLoader, random_split
 from tqdm.auto import tqdm
 
 
-features = Features(
-    {
-        "PrePrompt": Value("string"),
-        "TextTimeSeriesPromptTexts": Sequence(Value("string")),
-        "TextTimeSeriesPromptTimeSeries": Sequence(Sequence(Value("float32"))),
-        "PostPrompt": Value("string"),
-        "Answer": Value("string"),
-        # "Series": Sequence(Value("float32")),
-        # "Question": Value("string"),
-        # "Answer": Value("string"),
-    }
-)
-
-file_mapping = {"test": "TEST", "train": "TRAIN", "val": "TRAIN", "validation": "TRAIN"}
+TIME_SERIS_LABELS = ["The following is PPG data", "The following is ECG data"]
 
 
-@SingletonDataset
-class MonashSPO2QADataset:
-    last_file_suffix_loaded = None
-    hugging_face_dataset = None
+class MonashSPO2QADataset(QADataset):
+    def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
+        train = MonashDataset(
+            _data_dir="monash_datasets",
+            data_name="BIDMC32SpO2/BIDMC32SpO2_TRAIN",
+        )
+        test = MonashDataset(
+            _data_dir="monash_datasets",
+            data_name="BIDMC32SpO2/BIDMC32SpO2_TEST",
+        )
 
-    def load(self, split: Literal["train", "validation", "test"], EOS_TOKEN):
-        if (
-            self.hugging_face_dataset is None
-            or self.last_file_suffix_loaded is None
-            or file_mapping[split] != self.last_file_suffix_loaded
-        ):
-            file_suffix = file_mapping[split]
-            self.last_file_suffix_loaded = file_suffix
-            self.hugging_face_dataset = Dataset.from_generator(
-                torch_to_hf_generator,
-                gen_kwargs={
-                    "torch_ds": QADataset(
-                        MonashDataset(
-                            _data_dir="monash_datasets",
-                            data_name=f"BIDMC32SpO2/BIDMC32SpO2_{file_suffix}",
-                        ),
-                        "Given the following PPG data, what is the oxygen saturation of the blood?",
-                    )
-                },
-                features=features,
+        train_size = int(len(train) * 0.9)
+        val_size = len(train) - train_size
+
+        train, val = random_split(
+            train, [train_size, val_size], generator=torch.Generator().manual_seed(42)
+        )
+
+        return train, val, test
+
+    def _get_answer(self, row) -> str:
+        return str(round(row["answer"], 2))
+
+    def _get_pre_prompt(self, _row) -> str:
+        return "You are given PPG and ECG data. Your task is to predict the average blood oxygen saturation over the given the 32 second period."
+
+    def _get_post_prompt(self, _row) -> str:
+        return "Answer:"
+
+    def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
+        if len(row["time_series"][0]) != len(TIME_SERIS_LABELS):
+            raise RuntimeError(
+                "question labels and time series from the data must be of the same length"
             )
 
-        # Since we have different files for train and test we are setting
-        # val_frac only when we want the training dataset and train_frac to always 0
-        val_frac = 0.1 if split in ["train", "val", "validation"] else 0
-        test_frac = 0
+        # TODO normalize
 
-        self.qa_dataset = load_qa_dataset(
-            self.hugging_face_dataset,
-            split=split,
-            EOS_TOKEN=EOS_TOKEN,
-            max_samples=None,
-            val_frac=val_frac,
-            test_frac=test_frac,
-        )
-        return self.qa_dataset
-
-    def __len__(self) -> int:
-        return len(self.qa_dataset)
-
-    def __getitem__(self, idx):
-        return self.qa_dataset[idx]
+        return [
+            TextTimeSeriesPrompt(time_series_label, time_series)
+            for time_series_label, time_series in zip(
+                TIME_SERIS_LABELS, row["time_series"][0]
+            )
+        ]
 
 
 if __name__ == "__main__":
-    dataset = MonashSPO2QADataset()
-    dataset.load(split="train", EOS_TOKEN="")
+    dataset = MonashSPO2QADataset(split="train", EOS_TOKEN="")
 
     dataloader = DataLoader(
         dataset,
         batch_size=4,
         shuffle=True,
-        collate_fn=lambda batch: collate_fn(batch, patch_size=4),
+        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
+            batch, patch_size=4
+        ),
     )
 
-    m = float("-inf")
-    series = []
-    for ts_batch, prompts, answers in tqdm(dataloader):
-        print(ts_batch, prompts, answers)
-        series = max(series, ts_batch[0], key=len)
-        m = max(m, len(ts_batch[0]))
-
-    print(m)
-    print(series.tolist())
-    print(len(series))
+    for batch in tqdm(dataloader):
+        print(batch)
