@@ -26,8 +26,20 @@ class MonashDataset:
         print(f"Loading dataset: {data_name}")
         X, y = load_from_tsfile_to_dataframe(dataset_file, return_separate_X_and_y=True)
 
-        # Convert sktime format to numpy arrays
-        X_np = np.stack([x.to_numpy() for x in X.iloc[:, 0]])
+        # Convert sktime’s nested DataFrame to a 3D NumPy array:
+        #   shape = (n_instances, n_dimensions, series_length)
+        n_samples, n_dims = X.shape
+        # assume all series in a given column have the same length
+        series_length = X.iloc[0, 0].to_numpy().shape[0]
+
+        # Converting from a dataframe that contains a list of time series
+        # to a 3d tensor where X_np[idx] gives the 2d tensor of the time series
+        # at the position idx equivalent to the df[idx] time series list
+        X_np = np.zeros((n_samples, n_dims, series_length), dtype=float)
+        for i in range(n_samples):
+            for j in range(n_dims):
+                X_np[i, j, :] = X.iloc[i, j].to_numpy()
+
         y_np = np.array(y)
 
         self.feature = X_np
@@ -41,7 +53,7 @@ class MonashDataset:
         label = self.target[idx]
         item = np.expand_dims(item, axis=0)
 
-        return item, label
+        return {"time_series": item, "answer": label}
 
 
 if __name__ == "__main__":
