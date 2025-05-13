@@ -17,6 +17,20 @@ TEST_FRAC = 0.1
 VAL_FRAC = 0.1
 
 
+def get_value_count(key: str, dataset: Dataset):
+    dataloader = DataLoader(
+        dataset,
+        batch_size=1,
+        shuffle=True,
+        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
+            batch, patch_size=4
+        ),
+    )
+
+    for value in dataloader:
+        print(value)
+
+
 class TSQADataset(QADataset):
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         # 1) Load the single built‑in "train" split (≈ 7 k rows)
@@ -41,7 +55,8 @@ class TSQADataset(QADataset):
         return row["Question"]
 
     def _get_post_prompt(self, row) -> str:
-        return "Answer:"
+        # return "Answer:"
+        return row["Task"]
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         # TODO standardize normalization over the all datasets
@@ -56,16 +71,33 @@ class TSQADataset(QADataset):
 
 
 if __name__ == "__main__":
-    dataset = TSQADataset("train", "")
+    train = TSQADataset("train", "")
+    val = TSQADataset("validation", "")
+    test = TSQADataset("test", "")
 
-    dataloader = DataLoader(
-        dataset,
-        batch_size=4,
-        shuffle=True,
-        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
-            batch, patch_size=4
-        ),
-    )
+    # dataloader = DataLoader(
+    #     dataset,
+    #     batch_size=4,
+    #     shuffle=True,
+    #     collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
+    #         batch, patch_size=4
+    #     ),
+    # )
 
-    for batch in tqdm(dataloader):
-        print(batch)
+    from collections import Counter
+
+    train_values = [
+        (el[0], el[1] / len(train))
+        for el in Counter(map(lambda x: x["post_prompt"], train)).items()
+    ]
+    print("train", train_values)
+    val_values = [
+        (el[0], el[1] / len(val))
+        for el in Counter(map(lambda x: x["post_prompt"], val)).items()
+    ]
+    print("val", val_values)
+    test_values = [
+        (el[0], el[1] / len(test))
+        for el in Counter(map(lambda x: x["post_prompt"], test)).items()
+    ]
+    print("test", test_values)
