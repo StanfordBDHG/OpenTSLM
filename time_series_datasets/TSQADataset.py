@@ -56,7 +56,7 @@ class TSQADataset(QADataset):
 
     def _get_post_prompt(self, row) -> str:
         # return "Answer:"
-        return row["Task"]
+        return "Predict the " + row["Task"] + " Answer:"
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         # TODO standardize normalization over the all datasets
@@ -65,9 +65,8 @@ class TSQADataset(QADataset):
         means = series.mean(dim=0, keepdim=True)  # shape: (n_series, 1)
         stds = series.std(dim=0, keepdim=True)  # shape: (n_series, 1)
         series = (series - means) / (stds + 1e-8)  # broadcasts to (n_series, length)
-
         # TSQA has always only one time series
-        return [TextTimeSeriesPrompt("time series", series.tolist())]
+        return [TextTimeSeriesPrompt("This is the time series.", series.tolist())]
 
 
 if __name__ == "__main__":
