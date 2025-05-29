@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List
+from typing import List, Optional
 from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.monash.MonashSPO2QADataset import MonashSPO2QADataset
 from time_series_datasets.util import (
@@ -14,7 +14,7 @@ from tqdm.auto import tqdm
 from transformers import get_linear_schedule_with_warmup
 
 from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
-from model.llm.TimeSeriesLLM import TimeSeriesLLM
+from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
 from model.projector.MLPProjector import MLPProjector
 from model_config import (
     BATCH_SIZE,
@@ -43,25 +43,39 @@ else:
 # ---------------------------
 # Model
 # ---------------------------
-encoder = TransformerCNNEncoder().to(device)
-model = TimeSeriesLLM(encoder=encoder, projector_class=MLPProjector, device=device).to(
-    device
+model = EmbedHealthFlamingo(
+    device="cuda",
+    cross_attn_every_n_layers=1,
+).to(device)
+
+
+# Initialize optimizer
+params_to_optimize = model.named_parameters()
+
+params_to_optimize = list(
+    filter(
+        lambda x: x[1].requires_grad
+        and not getattr(x[1], "exclude_from_optimizer", False),
+        params_to_optimize,
+    )
 )
 
 
-# — Freeze the LLM backbone so we only update encoder + projector
-for p in model.llm.parameters():
-    p.requires_grad = False
-
-# Parameter groups with different learning rates
-enc_params = list(model.encoder.parameters())
-proj_params = list(model.projector.projector.parameters())
-optimizer = AdamW(
-    [
-        {"params": enc_params, "lr": LR_ENCODER, "weight_decay": WEIGHT_DECAY},
-        {"params": proj_params, "lr": LR_PROJECTOR, "weight_decay": WEIGHT_DECAY},
+# Group parameters for weight decay
+def get_grouped_params(model):
+    params_with_wd, params_without_wd = [], []
+    for n, p in params_to_optimize:
+        if "gated_cross_attn" in n:
+            params_with_wd.append(p)
+        else:
+            params_without_wd.append(p)
+    return [
+        {"params": params_with_wd, "weight_decay": 0.1},
+        {"params": params_without_wd, "weight_decay": 0.0},
     ]
-)
+
+
+optimizer = torch.optim.AdamW(get_grouped_params(params_to_optimize), lr=2e-4)
 
 
 def merge_data_loaders(
@@ -78,7 +92,7 @@ def merge_data_loaders(
     )
 
 
-QA_DATASET_CLASSES = [TSQADataset, MonashSPO2QADataset]
+QA_DATASET_CLASSES = [TSQADataset]
 
 # ---------------------------
 # Data loaders
@@ -136,28 +150,7 @@ scheduler = get_linear_schedule_with_warmup(
 # ---------------------------
 
 
-def _save_best(epoch: int, val_loss: float):
-    torch.save(
-        {
-            "encoder_state": model.encoder.state_dict(),
-            "projector_state": model.projector.state_dict(),
-            "val_loss": val_loss,
-            "epoch": epoch,
-        },
-        "best_encoder.pt",
-    )
-
-
-def _load_best():
-    if os.path.exists("best_encoder.pt"):
-        ckpt = torch.load("best_encoder.pt", map_location=device)
-        model.encoder.load_state_dict(ckpt["encoder_state"])
-        model.projector.load_state_dict(ckpt["projector_state"])
-        return ckpt.get("epoch", "?")
-    return None
-
-
-def _evaluate_test():
+def _evaluate_test(during_training_eval=False):
     """Run best model on test set and write prompt+generation+gold to JSONL."""
     model.eval()
     results = []
@@ -169,15 +162,14 @@ def _evaluate_test():
 
             # collect each sample’s I/O
             for sample, gen in zip(batch, gens):
-                results.append(
-                    {
-                        "pre_prompt": sample["pre_prompt"],
-                        "time_series_text": sample["time_series_text"],
-                        "post_prompt": sample["post_prompt"],
-                        "generated": gen,
-                        "gold": sample["answer"],
-                    }
-                )
+                result = {
+                    "pre_prompt": sample["pre_prompt"],
+                    "time_series_text": sample["time_series_text"],
+                    "post_prompt": sample["post_prompt"],
+                    "generated": gen,
+                    "gold": sample["answer"],
+                }
+                results.append(result)
 
     # write JSONL
     with open(RESULTS_FILE, "w", encoding="utf-8") as f:
@@ -231,7 +223,8 @@ def train():
         if avg_val_loss + 1e-4 < best_val_loss:
             best_val_loss = avg_val_loss
             epochs_no_improve = 0
-            _save_best(epoch, avg_val_loss)
+            model.store_to_file()
+            # _save_best(epoch, avg_val_loss)
             tqdm.write("✔️  New best model saved.\n")
 
         else:
@@ -243,10 +236,13 @@ def train():
                 tqdm.write("\nEarly stopping triggered.")
                 break
 
+        # Test eval
+        _evaluate_test(True)
+
     tqdm.write("Training finished.\n")
 
     # Test evaluation
-    best_epoch = _load_best()
+    best_epoch = model.load_from_file()
     if best_epoch is not None:
         print(f"Loaded best checkpoint from epoch {best_epoch} for test evaluation.")
     _evaluate_test()

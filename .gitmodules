@@ -1,0 +1,3 @@
+[submodule "open_flamingo"]
+	path = open_flamingo
+	url = https://github.com/mlfoundations/open_flamingo.git

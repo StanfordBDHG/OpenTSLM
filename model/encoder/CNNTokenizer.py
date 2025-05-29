@@ -6,16 +6,13 @@ from model_config import TRANSFORMER_INPUT_DIM, ENCODER_OUTPUT_DIM, PATCH_SIZE
 from model.encoder.TimeSeriesEncoderBase import TimeSeriesEncoderBase
 
 
-class TransformerCNNEncoder(TimeSeriesEncoderBase):
+class CNNTokenizer(TimeSeriesEncoderBase):
     def __init__(
         self,
         output_dim: int = ENCODER_OUTPUT_DIM,
         dropout: float = 0.0,
         transformer_input_dim: int = TRANSFORMER_INPUT_DIM,
-        num_heads: int = 8,
-        num_layers: int = 6,
         patch_size: int = PATCH_SIZE,
-        ff_dim: int = 1024,
         max_patches: int = 1024,
     ):
         """
@@ -48,17 +45,6 @@ class TransformerCNNEncoder(TimeSeriesEncoderBase):
         # 3) Input norm + dropout
         self.input_norm = nn.LayerNorm(transformer_input_dim)
         self.input_dropout = nn.Dropout(self.dropout)
-
-        # 4) Stack of TransformerEncoder layers with higher ff_dim
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=transformer_input_dim,
-            nhead=num_heads,
-            dim_feedforward=ff_dim,
-            dropout=self.dropout,
-            batch_first=True,
-            activation="gelu",
-        )
-        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -95,8 +81,5 @@ class TransformerCNNEncoder(TimeSeriesEncoderBase):
         # norm + dropout
         x = self.input_norm(x)
         x = self.input_dropout(x)
-
-        # apply Transformer encoder
-        x = self.encoder(x)
 
         return x

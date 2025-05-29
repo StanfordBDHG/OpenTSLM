@@ -123,12 +123,8 @@ def load_from_tsfile_to_dataframe(
     class_val_list = []
     line_num = 0
 
-    # Parse the file
-    # print(full_file_path_and_name)
     with open(full_file_path_and_name, "r", encoding="utf-8", errors="replace") as file:
-        # with open(full_file_path_and_name, "r", encoding="cp1252") as file:
         for line in tqdm(file):
-            # print(".", end='')
             # Strip white space from start/end of line and change to lowercase for use below
             line = line.strip().lower()
             # Empty lines are valid at any point in a file

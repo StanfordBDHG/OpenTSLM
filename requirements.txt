@@ -13,3 +13,7 @@ huggingface-hub
 datasets
 peft
 requests
+open-clip-torch
+einops
+einops-exts
+pyvim
