@@ -1,7 +1,7 @@
 import os
 import subprocess
 from typing import Literal, Optional
-from constants import RAW_DATA_PATH
+from constants import RAW_DATA
 
 import pandas as pd
 import torch
@@ -13,7 +13,7 @@ from sklearn.model_selection import train_test_split
 # ---------------------------
 
 REPO_URL = "https://github.com/Mcompetitions/M4-methods.git"
-REPO_DIR = f"{RAW_DATA_PATH}/m4"  # Local folder name after cloning
+REPO_DIR = f"{RAW_DATA}/m4"  # Local folder name after cloning
 
 # ---------------------------
 # Helper to ensure repo is available
@@ -66,11 +66,23 @@ class M4Dataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        series_id = row["M4id"]
-        values = row.drop("M4id").values.astype(float)
+        id_column = self.df.columns[0]
+        series_id = row[id_column]
+        values = row.drop(id_column).values.astype(float)
         tensor = torch.tensor(values, dtype=torch.float32)
-        # normalize
-        tensor = (tensor - tensor.mean()) / (tensor.std() + 1e-8)
+        
+        mean = tensor.mean()
+        std = tensor.std()
+        
+        if torch.isnan(mean) or torch.isnan(std) or std == 0:
+            if torch.any(torch.isnan(tensor)):
+                tensor = torch.nan_to_num(tensor, nan=0.0)
+            
+            if std == 0 and not torch.isnan(mean):
+                tensor = tensor - mean
+        else:
+            tensor = (tensor - mean) / std
+            
         return tensor, series_id
 
 
