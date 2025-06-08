@@ -13,6 +13,7 @@ import time
 import pandas as pd
 import json
 
+
 sys.path.append("../../time_series_datasets")
 
 from m4.m4_loader import get_m4_loader
@@ -129,24 +130,34 @@ def plot_time_series_batch(series_batch, ids, title="M4 Time Series Data", filen
     
     return plt.gcf()
 
+START_ID = 'M5'
+
 try:
     print("Loading M4 Monthly data...")
     data_loader = get_m4_loader("Monthly", split="all", batch_size=4, shuffle=False)
     
     # Prepare to collect data for parquet file
     records = []
+    parquet_file = "m4_captions_series.parquet"
+    existing_records = []
+    
+    # Load existing data if file exists
+    if os.path.exists(parquet_file):
+        existing_records = pd.read_parquet(parquet_file).to_dict('records')
+        print(f"Found {len(existing_records)} existing records")
+    
+    skip_mode = START_ID is not None
     
     for series_batch, ids in data_loader:
         print(f"Batch shape: {series_batch.shape}")
         print(f"Series IDs: {ids}")
         
-        print("\nPlotting time series data")
-        plot_time_series_batch(
-            series_batch, 
-            ids, 
-            filename="m4_time_series_plot.png"
-        )
-
+        if skip_mode and START_ID not in ids:
+            print(f"Skipping batch, waiting for ID: {START_ID}")
+            continue
+        elif skip_mode:
+            skip_mode = False
+        
         print("\nGenerating captions for time series data...")
         captions, series_data = generate_captions_for_batch(
             series_batch,
@@ -160,15 +171,14 @@ try:
                 "Series": series_data[sid]
             })
 
+        pd.concat([pd.DataFrame(existing_records), pd.DataFrame(records)], ignore_index=True).to_parquet(parquet_file)
+        
         # Remove the break to process all data
         break
     
-    # Create a DataFrame and save as parquet
-    df = pd.DataFrame(records)
-    parquet_file = "m4_captions_series.parquet"
-    df.to_parquet(parquet_file)
-    print(f"Data saved to '{parquet_file}'")
-    print(f"Saved {len(records)} records with columns: {df.columns.tolist()}")
+    if records:
+        print(f"Saved {len(records)} new records to '{parquet_file}'")
+
 
 except Exception as e:
     print(f"Error: {e}")
