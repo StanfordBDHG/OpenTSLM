@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from random import shuffle
 import sys
 import os
 import numpy as np
@@ -7,10 +8,13 @@ import torch
 from openai import OpenAI
 import textwrap
 import time
+import pandas as pd
+import json
 
 sys.path.append("../../time_series_datasets")
 
 from m4.m4_loader import get_m4_loader
+from m4 import load_m4
 
 
 def generate_caption(time_series_data, series_id):
@@ -45,21 +49,20 @@ def generate_caption(time_series_data, series_id):
 
 def generate_captions_for_batch(series_batch, ids):
     captions = {}
-    caption_file = "m4_captions.txt"
-    with open(caption_file, 'w') as f:
-        f.write("Captions for M4 Monthly Time Series Data\n\n")
+    series_data = {}
     
     # Generate captions for each series
     for i in range(len(ids)):
-        caption = generate_caption(series_batch[i], ids[i])
-        captions[ids[i]] = caption
+        # Extract the time series data
+        plot_data = extract_plot_data(series_batch[i])
+        series_str = json.dumps(plot_data.tolist())
+        series_data[ids[i]] = series_str
         
-        with open(caption_file, 'a') as f:
-            f.write(f"Series ID: {ids[i]}\n")
-            f.write(f"{caption}\n\n")
+        # Generate caption
+        caption = generate_caption(plot_data, ids[i])
+        captions[ids[i]] = caption
     
-    print(f"Captions saved to '{caption_file}'")
-    return captions, caption_file
+    return captions, series_data
 
 
 def extract_plot_data(series_tensor):
@@ -108,7 +111,10 @@ def plot_time_series_batch(series_batch, ids, title="M4 Time Series Data", filen
 
 try:
     print("Loading M4 Monthly data...")
-    data_loader = get_m4_loader("Monthly", split="all", batch_size=4)
+    data_loader = get_m4_loader("Monthly", split="all", batch_size=4, shuffle=False)
+    
+    # Prepare to collect data for parquet file
+    records = []
     
     for series_batch, ids in data_loader:
         print(f"Batch shape: {series_batch.shape}")
@@ -122,17 +128,31 @@ try:
         )
 
         print("\nGenerating captions for time series data...")
-        captions, caption_file = generate_captions_for_batch(
+        captions, series_data = generate_captions_for_batch(
             series_batch,
             ids,
         )
         
+        # Collect captions and series data for parquet file
+        for sid in ids:
+            records.append({
+                "Caption": captions[sid],
+                "Series": series_data[sid]
+            })
+
+        # Remove the break to process all data
         break
+    
+    # Create a DataFrame and save as parquet
+    df = pd.DataFrame(records)
+    parquet_file = "m4_captions_series.parquet"
+    df.to_parquet(parquet_file)
+    print(f"Data saved to '{parquet_file}'")
+    print(f"Saved {len(records)} records with columns: {df.columns.tolist()}")
 
 except Exception as e:
     print(f"Error: {e}")
     import traceback
     traceback.print_exc()
 
-print("\nDone!")
 
