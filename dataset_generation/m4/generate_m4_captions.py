@@ -6,6 +6,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from openai import OpenAI
+import base64
+from io import BytesIO
 import textwrap
 import time
 import pandas as pd
@@ -19,24 +21,42 @@ from m4 import load_m4
 
 def generate_caption(time_series_data, series_id):
     """
-    Generate a caption for the time-series using OpenAI API
+    Generate a caption for the time-series using OpenAI API by uploading a plot image
     """
     try:
         client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         
-        data_str = ", ".join(map(str, time_series_data))
+        plt.figure(figsize=(10, 6))
+        plt.plot(time_series_data, marker='o', linestyle='-', markersize=4)
+        plt.xlabel('Time Step')
+        plt.ylabel('Value')
+        plt.grid(True, alpha=0.3)
         
-        prompt = f"Generate a detailed description of the following time series data: {data_str}"
+        temp_image_path = f"temp_plot_{series_id}.png"
+        plt.savefig(temp_image_path)
+        plt.close()
         
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are an expert in time series analysis. Provide concise, informative descriptions."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=500
-        )
+        # Upload the image to OpenAI API
+        with open(temp_image_path, "rb") as image_file:
+            # Convert the image to base64
+            image_data = base64.b64encode(image_file.read()).decode('utf-8')
+            
+            # Create the API request with the image
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are an expert in time series analysis. Provide concise, informative descriptions of time series plots."},
+                    {"role": "user", "content": [
+                        {"type": "text", "text": "Generate a detailed description of this time series plot:"},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_data}", "detail": "high"}}
+                    ]}
+                ],
+                temperature=0.7,
+                max_tokens=500
+            )
+        
+        if os.path.exists(temp_image_path):
+            os.remove(temp_image_path)
         
         caption = response.choices[0].message.content
         print(f"Generated caption for series {series_id}")
