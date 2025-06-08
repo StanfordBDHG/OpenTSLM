@@ -37,16 +37,13 @@ def generate_caption(time_series_data, series_id):
         plt.savefig(temp_image_path)
         plt.close()
         
-        # Upload the image to OpenAI API
         with open(temp_image_path, "rb") as image_file:
-            # Convert the image to base64
             image_data = base64.b64encode(image_file.read()).decode('utf-8')
             
-            # Create the API request with the image
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are an expert in time series analysis. Provide concise, informative descriptions of time series plots."},
+                    {"role": "system", "content": "You are an expert in time series analysis."},
                     {"role": "user", "content": [
                         {"type": "text", "text": "Generate a detailed description of this time series plot:"},
                         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_data}", "detail": "high"}}
@@ -72,7 +69,6 @@ def generate_captions_for_batch(series_batch, ids):
     captions = {}
     series_data = {}
     
-    # Generate captions for each series
     for i in range(len(ids)):
         # Extract the time series data
         plot_data = extract_plot_data(series_batch[i])
@@ -130,13 +126,12 @@ def plot_time_series_batch(series_batch, ids, title="M4 Time Series Data", filen
     
     return plt.gcf()
 
-START_ID = 'M5'
+START_ID = None
 
 try:
     print("Loading M4 Monthly data...")
     data_loader = get_m4_loader("Monthly", split="all", batch_size=4, shuffle=False)
     
-    # Prepare to collect data for parquet file
     records = []
     parquet_file = "m4_captions_series.parquet"
     existing_records = []
@@ -164,7 +159,6 @@ try:
             ids,
         )
         
-        # Collect captions and series data for parquet file
         for sid in ids:
             records.append({
                 "Caption": captions[sid],
