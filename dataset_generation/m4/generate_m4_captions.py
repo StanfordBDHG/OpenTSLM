@@ -1,15 +1,11 @@
 #!/usr/bin/env python
-from random import shuffle
 import sys
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-import torch
 from openai import OpenAI
 import base64
-from io import BytesIO
 import textwrap
-import time
 import pandas as pd
 import json
 
@@ -17,10 +13,9 @@ import json
 sys.path.append("../../time_series_datasets")
 
 from m4.m4_loader import get_m4_loader
-from m4 import load_m4
 
 
-def generate_caption(time_series_data, series_id):
+def generate_caption(time_series_data, series_id, save_plot=False):
     """
     Generate a caption for the time-series using OpenAI API by uploading a plot image
     """
@@ -49,11 +44,12 @@ def generate_caption(time_series_data, series_id):
                         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_data}", "detail": "high"}}
                     ]}
                 ],
-                temperature=0.7,
-                max_tokens=500
+                temperature=0.5,
+                max_tokens=500,
+                seed=42
             )
         
-        if os.path.exists(temp_image_path):
+        if not save_plot and os.path.exists(temp_image_path):
             os.remove(temp_image_path)
         
         caption = response.choices[0].message.content
@@ -65,7 +61,7 @@ def generate_caption(time_series_data, series_id):
         return f"Error generating caption: {str(e)}"
 
 
-def generate_captions_for_batch(series_batch, ids):
+def generate_captions_for_batch(series_batch, ids, save_plot=False):
     captions = {}
     series_data = {}
     
@@ -76,7 +72,7 @@ def generate_captions_for_batch(series_batch, ids):
         series_data[ids[i]] = series_str
         
         # Generate caption
-        caption = generate_caption(plot_data, ids[i])
+        caption = generate_caption(plot_data, ids[i], save_plot=save_plot)
         captions[ids[i]] = caption
     
     return captions, series_data
@@ -94,38 +90,7 @@ def extract_plot_data(series_tensor):
         plot_data = series_np
         
     return plot_data
-
-def plot_time_series_batch(series_batch, ids, title="M4 Time Series Data", filename="m4_time_series_plot.png", captions=None):
-    fig_height = 4 * len(ids) if captions else 3 * len(ids)
-    plt.figure(figsize=(12, fig_height))
     
-    for i in range(len(ids)):
-        plt.subplot(len(ids), 1, i+1)
-        
-        plot_data = extract_plot_data(series_batch[i])
-        
-        plt.plot(plot_data, marker='o', linestyle='-', markersize=4)
-        
-        if captions and ids[i] in captions:
-            caption = captions[ids[i]]
-            
-            wrapped_caption = textwrap.fill(caption, width=100)
-            plt.figtext(0.1, 0.99 - (i/len(ids)), wrapped_caption, fontsize=8, wrap=True)
-            plt.title(f'Series ID: {ids[i]} (caption available)')
-        else:
-            plt.title(f'Series ID: {ids[i]}')
-            
-        plt.xlabel('Time Step')
-        plt.ylabel('Normalized Value')
-        plt.grid(True, alpha=0.3)
-    
-    plt.suptitle(title, fontsize=16)
-    plt.tight_layout(rect=[0, 0, 1, 0.97])
-    plt.savefig(filename)
-    print(f"Plot saved as '{filename}'")
-    
-    return plt.gcf()
-
 START_ID = None
 
 try:
@@ -157,6 +122,7 @@ try:
         captions, series_data = generate_captions_for_batch(
             series_batch,
             ids,
+            save_plot=False
         )
         
         for sid in ids:

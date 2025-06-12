@@ -72,7 +72,6 @@ class M4QADataset(QADataset):
             print(f"Series data: {row['Series'][:100]}...")
             raise
 
-# Example usage
 if __name__ == "__main__":
     train = M4QADataset("train", "")
     print(train[0])
