@@ -8,6 +8,7 @@ import base64
 import textwrap
 import pandas as pd
 import json
+import torch
 
 
 sys.path.append("../../time_series_datasets")
@@ -77,17 +78,14 @@ def generate_captions_for_batch(series_batch, ids, save_plot=False):
 
 
 def extract_plot_data(series_tensor):
-    series_np = series_tensor.detach().numpy()
-    series_np = np.nan_to_num(series_np)
-    
-    non_zero_indices = np.where(series_np != 0)[0]
+    non_zero_indices = torch.where(series_tensor != 0)[0]
     if len(non_zero_indices) > 0:
         last_non_zero = non_zero_indices[-1]
-        plot_data = series_np[:last_non_zero + 1]
+        sample = series_tensor[:last_non_zero + 1]
     else:
-        plot_data = series_np
-        
-    return plot_data
+        sample = series_tensor
+    return sample
+
 
 START_ID = None
 

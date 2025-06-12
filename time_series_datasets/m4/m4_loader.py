@@ -2,7 +2,7 @@ import os
 import subprocess
 from typing import Literal, Optional
 from constants import RAW_DATA
-
+import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -69,20 +69,22 @@ class M4Dataset(Dataset):
         id_column = self.df.columns[0]
         series_id = row[id_column]
         values = row.drop(id_column).values.astype(float)
-        tensor = torch.tensor(values, dtype=torch.float32)
         
-        mean = tensor.mean()
-        std = tensor.std()
-        
-        if torch.isnan(mean) or torch.isnan(std) or std == 0:
-            if torch.any(torch.isnan(tensor)):
-                tensor = torch.nan_to_num(tensor, nan=0.0)
-            
-            if std == 0 and not torch.isnan(mean):
-                tensor = tensor - mean
+        # Trim to the last non-NaN value
+        if np.isnan(values).all():
+            trimmed_values = np.array([])
         else:
-            tensor = (tensor - mean) / std
-            
+            last_valid = np.where(~np.isnan(values))[0][-1]
+            trimmed_values = values[:last_valid + 1]
+        tensor = torch.tensor(trimmed_values, dtype=torch.float32)
+
+        if tensor.numel() > 0:
+            mean = tensor.mean()
+            std = tensor.std()
+            if std > 0:
+                tensor = (tensor - mean) / std
+            else:
+                tensor = tensor - mean
         return tensor, series_id
 
 
