@@ -104,3 +104,5 @@ if __name__ == "__main__":
         for el in Counter(map(lambda x: x["post_prompt"], test)).items()
     ]
     print("test", test_values)
+
+
