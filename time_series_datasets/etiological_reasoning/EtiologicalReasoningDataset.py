@@ -42,6 +42,7 @@ class EtiologicalReasoningDataset(QADataset):
         # and returns a pandas dataframe.
         full_er_data = load_etiological_reasoning_dataset()
 
+        # Below is an example of how to load the TSQA dataset.
         # 1) Load the single built‑in "train" split (≈ 7 k rows)
         ds_full = load_dataset("ChengsenWang/TSQA", split="train")
 
