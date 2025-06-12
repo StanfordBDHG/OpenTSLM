@@ -24,7 +24,7 @@ def generate_caption(time_series_data, series_id, save_plot=False):
         client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         
         plt.figure(figsize=(10, 6))
-        plt.plot(time_series_data, marker='o', linestyle='-', markersize=4)
+        plt.plot(time_series_data, marker='o', linestyle='-', markersize=0)
         plt.grid(True, alpha=0.3)
         
         temp_image_path = f"temp_plot_{series_id}.png"
