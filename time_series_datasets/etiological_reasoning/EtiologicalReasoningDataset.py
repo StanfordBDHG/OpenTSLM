@@ -35,7 +35,7 @@ VAL_FRAC = 0.1
 
 # I have provided you below with an example from the TSQA dataset, which you could adopt.
 
-class EtiologicalReasoningDatasetLoader(QADataset):
+class EtiologicalReasoningDataset(QADataset):
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
 
         # This automatically downloads the dataset if it does not exist,
@@ -82,9 +82,9 @@ class EtiologicalReasoningDatasetLoader(QADataset):
 
 if __name__ == "__main__":
     # This is just for testing.
-    train = EtiologicalReasoningDatasetLoader("train", "")
-    val = EtiologicalReasoningDatasetLoader("validation", "")
-    test = EtiologicalReasoningDatasetLoader("test", "")
+    train = EtiologicalReasoningDataset("train", "")
+    val = EtiologicalReasoningDataset("validation", "")
+    test = EtiologicalReasoningDataset("test", "")
 
 
     from collections import Counter
