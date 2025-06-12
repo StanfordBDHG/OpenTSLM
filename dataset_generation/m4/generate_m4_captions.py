@@ -39,7 +39,7 @@ def generate_caption(time_series_data, series_id, save_plot=False):
                 messages=[
                     {"role": "system", "content": "You are an expert in time series analysis."},
                     {"role": "user", "content": [
-                        {"type": "text", "text": "Generate a detailed description of this time series plot:"},
+                        {"type": "text", "text": "Generate a detailed caption for the following time-series data:"},
                         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_data}", "detail": "high"}}
                     ]}
                 ],
