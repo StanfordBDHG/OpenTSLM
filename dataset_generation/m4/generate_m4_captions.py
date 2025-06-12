@@ -24,8 +24,6 @@ def generate_caption(time_series_data, series_id, save_plot=False):
         
         plt.figure(figsize=(10, 6))
         plt.plot(time_series_data, marker='o', linestyle='-', markersize=4)
-        plt.xlabel('Time Step')
-        plt.ylabel('Value')
         plt.grid(True, alpha=0.3)
         
         temp_image_path = f"temp_plot_{series_id}.png"
@@ -90,7 +88,7 @@ def extract_plot_data(series_tensor):
         plot_data = series_np
         
     return plot_data
-    
+
 START_ID = None
 
 try:
@@ -122,7 +120,7 @@ try:
         captions, series_data = generate_captions_for_batch(
             series_batch,
             ids,
-            save_plot=False
+            save_plot=True
         )
         
         for sid in ids:
