@@ -81,10 +81,11 @@ def extract_plot_data(series_tensor):
     non_zero_indices = torch.where(series_tensor != 0)[0]
     if len(non_zero_indices) > 0:
         last_non_zero = non_zero_indices[-1]
-        sample = series_tensor[:last_non_zero + 1]
+        tensor = series_tensor[:last_non_zero + 1]
     else:
-        sample = series_tensor
-    return sample
+        tensor = series_tensor
+    
+    return tensor.detach().cpu().contiguous().numpy()
 
 
 START_ID = None
