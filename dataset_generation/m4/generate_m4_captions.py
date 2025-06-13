@@ -95,12 +95,12 @@ try:
     data_loader = get_m4_loader("Monthly", split="all", batch_size=4, shuffle=False)
     
     records = []
-    parquet_file = "m4_captions_series.parquet"
+    csv_file = "m4_captions_series.csv"
     existing_records = []
     
     # Load existing data if file exists
-    if os.path.exists(parquet_file):
-        existing_records = pd.read_parquet(parquet_file).to_dict('records')
+    if os.path.exists(csv_file):
+        existing_records = pd.read_csv(csv_file).to_dict('records')
         print(f"Found {len(existing_records)} existing records")
     
     skip_mode = START_ID is not None
@@ -128,13 +128,18 @@ try:
                 "Series": series_data[sid]
             })
 
-        pd.concat([pd.DataFrame(existing_records), pd.DataFrame(records)], ignore_index=True).to_parquet(parquet_file)
+        batch_df = pd.DataFrame([{
+            "Caption": captions[sid],
+            "Series": str(series_data[sid])  
+        } for sid in ids])
+        
+        batch_df.to_csv(csv_file, mode='a', header=not os.path.exists(csv_file), index=False)
         
         # Remove the break to process all data
         break
     
     if records:
-        print(f"Saved {len(records)} new records to '{parquet_file}'")
+        print(f"Saved {len(records)} new records to '{csv_file}'")
 
 
 except Exception as e:
