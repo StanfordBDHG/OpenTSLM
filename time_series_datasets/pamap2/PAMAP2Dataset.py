@@ -141,7 +141,6 @@ class PAMAP2Dataset(Dataset):
         for file in list_of_files:
             procData = pd.read_table(file, header=None, sep=r"\s+")
             procData.columns = columns
-            print(file)
             procData["subject_id"] = int(file[-5])
             dataCollection = pd.concat([dataCollection, procData], ignore_index=True)
 
@@ -159,10 +158,10 @@ class PAMAP2Dataset(Dataset):
         super().__init__()
         self.df = self._load_data()
 
-        print(f"columns: {self.df.columns}")
-
         # create 2‑minute windows and store them as tensors + labels
-        self.windows, self.labels = self._make_windows(window_size="2T", min_pct=0.5)
+        self.time_series, self.labels = self._make_windows(
+            window_size="2T", min_pct=0.5
+        )
 
     def _make_windows(self, window_size="2T", min_pct=0.5):
         """
@@ -203,27 +202,26 @@ class PAMAP2Dataset(Dataset):
 
                 # 6) store the **transposed** feature‑array + label
                 #    now the shape is (n_features, n_steps)
-                windows.append(win[feature_cols].T.values)
+
+                ts_dict = {col: win[col].values for col in feature_cols}
+                windows.append(ts_dict)
                 labels.append(mode)
 
         return windows, labels
 
     def __len__(self):
         # now based on windows, not raw rows
-        return len(self.windows)
+        return len(self.time_series)
 
     def __getitem__(self, idx):
         # returns (n_steps × n_features array, activity string)
-        return self.windows[idx], self.labels[idx]
-
-
-# ---------------------------
-# Example usage
-# ---------------------------
+        return {"time_series": self.time_series[idx], "label": self.labels[idx]}
 
 
 if __name__ == "__main__":
-    dataeset = PAMAP2Dataset()
+    dataset = PAMAP2Dataset()
 
-    for e in dataeset[:5]:
-        print(e)
+    for data_point in dataset:
+        window = data_point["time_series"]
+        label = data_point["label"]
+        print(f"{window}, {label}")
