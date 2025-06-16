@@ -65,17 +65,89 @@ def download_batch_results(client, batch):
         print(f"Error downloading batch results: {e}")
         return None
 
+def get_batch_ids(client, limit = None):
+    """Extract only the batch IDs from all batches stored in OpenAI"""
+    try:
+        batches = client.batches.list(limit=limit)
+        return [batch.id for batch in batches.data]
+    except Exception as e:
+        print(f"Error listing batches: {e}")
+        return []
+
+
+def parse_batch_results(results):
+    """Parse the custom_id and content with the time series description from batch results"""
+    if not results:
+        return []
+    
+    parsed_data = []
+    for item in results:
+        if 'custom_id' in item and 'response' in item and 'body' in item['response']:
+            body = item['response']['body']
+            if 'choices' in body and len(body['choices']) > 0:
+                content = body['choices'][0]['message'].get('content')
+                parsed_data.append({
+                    'custom_id': item['custom_id'],
+                    'content': content
+                })
+    
+    return parsed_data
+
+
+def merge_time_series_with_captions(captions, time_series_file):
+    """Merge time series data with captions into a single CSV"""
+    try:
+        # Read the time series data
+        time_series_df = pd.read_csv(time_series_file)
+        
+        # Convert captions to DataFrame
+        captions_df = pd.DataFrame(captions)
+        captions_df = captions_df.rename(columns={'custom_id': 'custom_id', 'content': 'caption'})
+        
+        # Merge the two DataFrames on custom_id
+        merged_df = pd.merge(time_series_df, captions_df, on='custom_id', how='left')
+        
+        return merged_df
+    except Exception as e:
+        print(f"Error merging data: {e}")
+        return pd.DataFrame(captions)
+
+
+
 def main():
     client = OpenAI()
-    # file = upload_file(client, "m4_caption_requests_20250614_004332.jsonl")
-    # print(file)
-    # batch = create_batch(client, file.id)
-    # print(batch)
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Process batch requests and merge with time series data')
+    parser.add_argument('--requests', help='Path to the requests JSONL file')
+    parser.add_argument('--time-series', default='m4_series.csv', help='Path to the time series CSV file')
+    args = parser.parse_args()
+    
+    # List batches
+    batch_ids = get_batch_ids(client, limit=10)
+    captions = []
+    for batch_id in batch_ids:
+        batch = retrieve_batch_status(client, batch_id)
+        results = download_batch_results(client, batch)
+        
+        parsed_data = parse_batch_results(results)
+        captions.extend(parsed_data)
+    
+    # If we have time series data, merge it with the captions
+    if os.path.exists(args.time_series):
+        merged_df = merge_time_series_with_captions(captions, args.time_series)
+        output_filename = "m4_series.csv"  # Overwrite the original file with merged data
+        merged_df.to_csv(output_filename, index=False)
+        print(f"Results merged with time series data and saved to {output_filename}")
+    else:
+        # Just save the captions if no time series data is available
+        df = pd.DataFrame(captions)
+        df = df.rename(columns={'custom_id': 'custom_id', 'content': 'caption'})
+        output_filename = "m4_captions.csv"
+        df.to_csv(output_filename, index=False)
+        print(f"Results saved to {output_filename}")
+        print(f"Warning: Time series file {args.time_series} not found. Only captions were saved.")
 
-    batch = retrieve_batch_status(client, "batch_684cad40ea048190ac5db0d3b0b7399f")
-    print(batch)
-    results = download_batch_results(client, batch)
-    print(results)
+
 
 if __name__ == "__main__":
     main()

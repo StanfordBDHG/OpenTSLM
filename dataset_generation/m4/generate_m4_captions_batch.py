@@ -98,17 +98,32 @@ def save_requests_to_jsonl(requests, output_file):
     print(f"Saved {len(requests)} requests to {output_file}")
 
 
+def save_series_to_csv(series_data, output_file):
+    """Save time series data to a CSV file with custom_id and time series columns"""
+    # Create a list of dictionaries with custom_id and time_series
+    data_list = []
+    for series_id, series_str in series_data.items():
+        data_list.append({
+            'id': f"series-{series_id}",
+            'series': series_str
+        })
+    
+    # Convert to DataFrame and save as CSV
+    df = pd.DataFrame(data_list)
+    df.to_csv(output_file, index=False)
+    print(f"Saved {len(series_data)} series data entries to {output_file}")
+
+
 if __name__ == "__main__":
     START_ID = None
-    BATCH_SIZE = 4  # Maximum batch size is capped at 100MB
+    BATCH_SIZE = 10  # Maximum batch size is capped at 200MB / 50,000 requests -> 2500 TS ~ 175MB = 40 batch files in total 
 
     try:
         print("Loading M4 Monthly data...")
         data_loader = get_m4_loader("Monthly", split="all", batch_size=BATCH_SIZE, shuffle=False)
         
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        requests_file = f"m4_caption_requests_{timestamp}.jsonl"
-        series_data_file = f"m4_series_data_{timestamp}.json"
+        requests_file = "m4_caption_requests.jsonl"
+        series_csv_file = "m4_series.csv"
         
         all_requests = []
         all_series_data = {}
@@ -140,13 +155,10 @@ if __name__ == "__main__":
         
         if all_requests:
             save_requests_to_jsonl(all_requests, requests_file)
+            save_series_to_csv(all_series_data, series_csv_file)
             
-            with open(series_data_file, 'w') as f:
-                json.dump(all_series_data, f)
-            
-            print(f"Saved {len(all_series_data)} series data entries to {series_data_file}")
             print(f"\nTo process these requests, run the process_batch_requests.py script with:")
-            print(f"python process_batch_requests.py --requests {requests_file} --series-data {series_data_file}")
+            print(f"python process_batch_requests.py")
 
     except Exception as e:
         print(f"Error: {e}")
