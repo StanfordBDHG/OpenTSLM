@@ -21,7 +21,16 @@ def prepare_caption_request(time_series_data, series_id, save_plot=False):
     by creating a plot image and encoding it as base64
     """
     try:
-        plt.figure(figsize=(10, 6))
+        num_samples = len(time_series_data)
+        
+        if num_samples < 500:
+            figsize = (12, 6)
+        elif num_samples < 1500:
+            figsize = (15, 5)
+        else:
+            figsize = (18, 4)
+            
+        plt.figure(figsize=figsize)
         plt.plot(time_series_data, marker='o', linestyle='-', markersize=0)
         plt.grid(True, alpha=0.3)
         
@@ -116,7 +125,7 @@ def save_series_to_csv(series_data, output_file):
 
 if __name__ == "__main__":
     START_ID = None
-    BATCH_SIZE = 10  # Maximum batch size is capped at 200MB / 50,000 requests -> 2500 TS ~ 175MB = 40 batch files in total 
+    BATCH_SIZE = 4  # Maximum batch size is capped at 200MB / 50,000 requests -> 2500 TS ~ 175MB = 40 batch files in total 
 
     try:
         print("Loading M4 Monthly data...")
