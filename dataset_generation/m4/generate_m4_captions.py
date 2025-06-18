@@ -21,7 +21,10 @@ def generate_caption(time_series_data, series_id, save_plot=False):
     Generate a caption for the time-series using OpenAI API by uploading a plot image
     """
     try:
-        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable not found. Please specify API key in environment variable.")
+        client = OpenAI(api_key=api_key)
         
         plt.figure(figsize=(10, 6))
         plt.plot(time_series_data, marker='o', linestyle='-', markersize=0)
