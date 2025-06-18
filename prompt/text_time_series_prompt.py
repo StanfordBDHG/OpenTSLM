@@ -15,7 +15,8 @@ class TextTimeSeriesPrompt(Prompt):
     def __init__(self, text: str, time_series: Sequence):
         assert isinstance(text, str), "Text must be a string!"
         assert isinstance(time_series, (np.ndarray, Sequence)), (
-            "Time series must be a list or numpy array!"
+            "Time series must be a list or numpy array! But got: "
+            f"{type(time_series)}"
         )
 
         ts_array = np.array(time_series)

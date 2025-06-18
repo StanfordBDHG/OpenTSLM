@@ -31,12 +31,10 @@ DOWNLOAD_COMMAND = (
 
 # Sleep stage mapping
 SLEEP_STAGES = {
-    1: "Movement time",
-    2: "Sleep stage 1",
-    3: "Sleep stage 2",
-    4: "Sleep stage 3",
-    5: "Sleep stage 4",
-    6: "Sleep stage unknown",
+    2: "Sleep stage 1 (NREM1)",
+    3: "Sleep stage 2 (NREM2)",
+    4: "Sleep stage 3 (NREM3)",  # Combined with stage 4
+    5: "Sleep stage 3 (NREM3)",  # Combined with stage 3
     7: "Sleep stage REM",
     8: "Sleep stage Wake"
 }
@@ -49,7 +47,14 @@ def download_sleepedf_data_if_not_exists():
     subprocess.run(DOWNLOAD_COMMAND.split(" "), check=True)
 
 def process_recording(psg_path: str, hyp_path: str, duration: int = 30, channel: str = "EEG Fpz-Cz"):
-    """Process a single recording and return its epochs and labels."""
+    """Process a single recording and return its epochs and labels.
+    
+    Args:
+        psg_path: Path to the PSG file
+        hyp_path: Path to the hypnogram file
+        duration: Duration of each epoch in seconds (default: 30)
+        channel: EEG channel to use (default: "EEG Fpz-Cz")
+    """
     # Load data
     raw = mne.io.read_raw_edf(psg_path, preload=True)
     ann = mne.read_annotations(hyp_path)
@@ -64,7 +69,7 @@ def process_recording(psg_path: str, hyp_path: str, duration: int = 30, channel:
 
     # Get events
     events, _ = mne.events_from_annotations(raw)
-
+    
     # Filter out any event that would run past the end
     valid = [ev for ev in events if ev[0] + epoch_samples <= n_times]
     if not valid:
@@ -83,11 +88,24 @@ def process_recording(psg_path: str, hyp_path: str, duration: int = 30, channel:
 
     data = epochs.get_data()            # (n_epochs, 1, n_times)
     labels = epochs.events[:, -1]       # sleep-stage codes
+    
+    # Filter out movement time (1) and unknown (6) stages
+    valid_mask = ~np.isin(labels, [1, 6])
+    data = data[valid_mask]
+    labels = labels[valid_mask]
+    
+    # Combine stages 3 and 4 into NREM3
+    labels = np.where(np.isin(labels, [4, 5]), 4, labels)
 
     return data, labels
 
 def get_sleepedf_data(duration: int = 30, channel: str = "EEG Fpz-Cz") -> Dataset:
-    """Download and process Sleep-EDF data, returning a Dataset with all recordings."""
+    """Download and process Sleep-EDF data, returning a Dataset with all recordings.
+    
+    Args:
+        duration: Duration of each epoch in seconds (default: 30)
+        channel: EEG channel to use (default: "EEG Fpz-Cz")
+    """
     download_sleepedf_data_if_not_exists()
     
     # Get list of PSG files
@@ -118,9 +136,10 @@ def get_sleepedf_data(duration: int = 30, channel: str = "EEG Fpz-Cz") -> Datase
         try:
             # Process this recording
             data, labels = process_recording(psg_path, hyp_path, duration, channel)
-            all_data.append(data)
-            all_labels.append(labels)
-            recording_indices.extend([i] * len(labels))
+            if len(labels) > 0:  # Only add if we have valid epochs
+                all_data.append(data)
+                all_labels.append(labels)
+                recording_indices.extend([i] * len(labels))
         except Exception as e:
             print(f"Warning: Error processing {psg_file}: {str(e)}, skipping...")
             skipped_files.append(psg_file)
@@ -152,6 +171,14 @@ def get_sleepedf_data(duration: int = 30, channel: str = "EEG Fpz-Cz") -> Datase
     
     # Set format to numpy for all columns
     dataset.set_format(type="numpy")
+    
+    # Print dataset statistics
+    print("\nDataset statistics:")
+    print(f"Total number of epochs: {len(dataset)}")
+    print("\nSleep stage distribution:")
+    unique_labels, counts = np.unique(dataset["label"], return_counts=True)
+    for label, count in zip(unique_labels, counts):
+        print(f"{SLEEP_STAGES[label]}: {count} epochs ({count/len(dataset)*100:.1f}%)")
     
     return dataset
 
