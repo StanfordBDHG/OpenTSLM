@@ -68,17 +68,39 @@ def parse_batch_results(results):
 
 
 def main():
+    # Check for API key
+    if not os.environ.get("OPENAI_API_KEY"):
+        print("OPENAI_API_KEY environment variable not found. Please set your API key.")
+        return
+    
     client = OpenAI()
 
     # List batches
     batch_ids = get_batch_ids(client, limit=10)
     captions = []
+    
     for batch_id in batch_ids:
         batch = retrieve_batch_status(client, batch_id)
+        if batch is None:
+            print(f"Failed to retrieve batch {batch_id}")
+            continue
+            
+        # Only process completed batches
+        if batch.status != "completed":
+            print(f"Skipping batch {batch_id} - status: {batch.status}")
+            continue
+            
         results = download_batch_results(client, batch)
+        if results is None:
+            print(f"Failed to download results for batch {batch_id}")
+            continue
         
         parsed_data = parse_batch_results(results)
         captions.extend(parsed_data)
+    
+    if not captions:
+        print("No completed batches found or no captions extracted.")
+        return
     
     # Just save the captions
     df = pd.DataFrame(captions)

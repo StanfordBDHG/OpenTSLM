@@ -166,8 +166,8 @@ if __name__ == "__main__":
             save_requests_to_jsonl(all_requests, requests_file)
             save_series_to_csv(all_series_data, series_csv_file)
             
-            print(f"\nTo process these requests, run the process_batch_requests.py script with:")
-            print(f"python process_batch_requests.py")
+            print(f"\nTo process these requests, run the push_batch_requests.py script with:")
+            print(f"python push_batch_requests.py")
 
     except Exception as e:
         print(f"Error: {e}")

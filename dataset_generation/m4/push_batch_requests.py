@@ -38,8 +38,16 @@ def main():
     client = OpenAI()
 
     file = upload_file(client, "m4_caption_requests.jsonl")
+    if file is None:
+        print("Failed to upload file. Exiting.")
+        return
+    
     print(file)
     batch = create_batch(client, file.id)
+    if batch is None:
+        print("Failed to create batch. Exiting.")
+        return
+    
     print(batch)
 
 
