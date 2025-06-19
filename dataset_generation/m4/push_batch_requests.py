@@ -36,6 +36,11 @@ def create_batch(client, file_id):
 
 
 def main():
+    # Check for API key
+    if not os.environ.get("OPENAI_API_KEY"):
+        print("OPENAI_API_KEY environment variable not found. Please set your API key.")
+        return
+    
     client = OpenAI()
 
     # Find all JSONL files that start with "m4_"

@@ -127,6 +127,11 @@ if __name__ == "__main__":
     START_ID = None
     BATCH_SIZE = 2500  # Maximum batch size is capped at 200MB / 50,000 requests -> 2500 TS ~ 175MB = 40 batch files in total 
 
+    # Check for API key early
+    if not os.environ.get("OPENAI_API_KEY"):
+        print("OPENAI_API_KEY environment variable not found. Please set your API key.")
+        sys.exit(1)
+
     try:
         skip_mode = START_ID is not None
         
