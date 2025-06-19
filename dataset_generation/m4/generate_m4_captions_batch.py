@@ -125,14 +125,14 @@ def save_series_to_csv(series_data, output_file):
 
 if __name__ == "__main__":
     START_ID = None
-    BATCH_SIZE = 4  # Maximum batch size is capped at 200MB / 50,000 requests -> 2500 TS ~ 175MB = 40 batch files in total 
+    BATCH_SIZE = 2500  # Maximum batch size is capped at 200MB / 50,000 requests -> 2500 TS ~ 175MB = 40 batch files in total 
 
     try:
         skip_mode = START_ID is not None
         
         # List of .csv files to process
-        frequencies = ["Yearly", "Quarterly", "Monthly", "Weekly", "Daily", "Hourly"]
-        # frequencies = ["Monthly"]
+        # frequencies = ["Yearly", "Quarterly", "Monthly", "Weekly", "Daily", "Hourly"]
+        frequencies = ["Monthly"]
         
         all_series_data = {}
         
@@ -174,7 +174,6 @@ if __name__ == "__main__":
         if all_series_data:
             combined_csv_file = "m4_series.csv"
             save_series_to_csv(all_series_data, combined_csv_file)
-            print(f"Saved {len(all_series_data)} total series entries to {combined_csv_file}")
         
         print(f"\nTo process these requests, run the push_batch_requests.py script with:")
         print(f"python push_batch_requests.py")
