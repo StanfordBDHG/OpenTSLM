@@ -9,6 +9,7 @@ import pandas as pd
 import json
 import torch
 from datetime import datetime
+from tqdm import tqdm
 
 sys.path.append("../../time_series_datasets")
 
@@ -64,7 +65,6 @@ def prepare_caption_request(time_series_data, series_id, save_plot=False):
             }
         }
         
-        print(f"Prepared request for series {series_id}")
         return request
     
     except Exception as e:
@@ -76,7 +76,7 @@ def prepare_requests_for_batch(series_batch, ids, save_plot=False):
     requests = []
     series_data = {}
     
-    for i in range(len(ids)):
+    for i in tqdm(range(len(ids)), desc="Preparing requests", leave=False):
         plot_data = extract_plot_data(series_batch[i])
         series_str = json.dumps(plot_data.tolist())
         series_data[ids[i]] = series_str
@@ -102,7 +102,7 @@ def extract_plot_data(series_tensor):
 def save_requests_to_jsonl(requests, output_file):
     """Save requests to a JSONL file for batch processing"""
     with open(output_file, 'w') as f:
-        for request in requests:
+        for request in tqdm(requests, desc="Writing JSONL file", leave=False):
             f.write(json.dumps(request) + '\n')
     print(f"Saved {len(requests)} requests to {output_file}")
 
@@ -111,7 +111,7 @@ def save_series_to_csv(series_data, output_file):
     """Save time series data to a CSV file with custom_id and time series columns"""
     # Create a list of dictionaries with custom_id and time_series
     data_list = []
-    for series_id, series_str in series_data.items():
+    for series_id, series_str in tqdm(series_data.items(), desc="Preparing CSV data"):
         data_list.append({
             'id': f"series-{series_id}",
             'series': series_str
@@ -141,12 +141,12 @@ if __name__ == "__main__":
         
         all_series_data = {}
         
-        for frequency in frequencies:
+        for frequency in tqdm(frequencies, desc="Processing frequencies"):
             print(f"Loading M4 {frequency} data...")
             data_loader = get_m4_loader(frequency, split="all", batch_size=BATCH_SIZE, shuffle=False)
             batch_id = 1
 
-            for series_batch, ids in data_loader:
+            for series_batch, ids in tqdm(data_loader, desc=f"Processing {frequency} batches", leave=False):
                 requests_file = f"m4_{frequency}_caption_requests_{batch_id}.jsonl"
 
                 print(f"Batch shape: {series_batch.shape}")
