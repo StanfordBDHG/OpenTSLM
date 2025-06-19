@@ -128,47 +128,57 @@ if __name__ == "__main__":
     BATCH_SIZE = 4  # Maximum batch size is capped at 200MB / 50,000 requests -> 2500 TS ~ 175MB = 40 batch files in total 
 
     try:
-        print("Loading M4 Monthly data...")
-        data_loader = get_m4_loader("Monthly", split="all", batch_size=BATCH_SIZE, shuffle=False)
-        
-        requests_file = "m4_caption_requests.jsonl"
-        series_csv_file = "m4_series.csv"
-        
-        all_requests = []
-        all_series_data = {}
-        
         skip_mode = START_ID is not None
         
-        for series_batch, ids in data_loader:
-            print(f"Batch shape: {series_batch.shape}")
-            print(f"Series IDs: {ids}")
-            
-            if skip_mode and START_ID not in ids:
-                print(f"Skipping batch, waiting for ID: {START_ID}")
-                continue
-            elif skip_mode:
-                skip_mode = False
-            
-            print("\nPreparing requests for time series data...")
-            batch_requests, series_data = prepare_requests_for_batch(
-                series_batch,
-                ids,
-                save_plot=False
-            )
-            
-            all_requests.extend(batch_requests)
-            all_series_data.update(series_data)
-            
-            # Remove the break to process all data
-            break
+        # List of .csv files to process
+        frequencies = ["Yearly", "Quarterly", "Monthly", "Weekly", "Daily", "Hourly"]
+        # frequencies = ["Monthly"]
         
-        if all_requests:
-            save_requests_to_jsonl(all_requests, requests_file)
-            save_series_to_csv(all_series_data, series_csv_file)
-            
-            print(f"\nTo process these requests, run the push_batch_requests.py script with:")
-            print(f"python push_batch_requests.py")
+        all_series_data = {}
+        
+        for frequency in frequencies:
+            print(f"Loading M4 {frequency} data...")
+            data_loader = get_m4_loader(frequency, split="all", batch_size=BATCH_SIZE, shuffle=False)
+            batch_id = 1
 
+            for series_batch, ids in data_loader:
+                requests_file = f"m4_{frequency}_caption_requests_{batch_id}.jsonl"
+
+                print(f"Batch shape: {series_batch.shape}")
+                print(f"Series IDs: {ids}")
+                
+                if skip_mode and START_ID not in ids:
+                    print(f"Skipping batch, waiting for ID: {START_ID}")
+                    continue
+                elif skip_mode:
+                    skip_mode = False
+                
+                print(f"\nPreparing requests for {frequency} time series data...")
+                batch_requests, series_data = prepare_requests_for_batch(
+                    series_batch,
+                    ids,
+                    save_plot=False
+                )
+                
+                # Save requests directly to JSONL file for this batch
+                save_requests_to_jsonl(batch_requests, requests_file)
+                
+                # Add series data to the combined dictionary
+                all_series_data.update(series_data)
+
+                batch_id += 1
+                
+                # Remove the break to process all data from each frequency
+                break
+        
+        if all_series_data:
+            combined_csv_file = "m4_series.csv"
+            save_series_to_csv(all_series_data, combined_csv_file)
+            print(f"Saved {len(all_series_data)} total series entries to {combined_csv_file}")
+        
+        print(f"\nTo process these requests, run the push_batch_requests.py script with:")
+        print(f"python push_batch_requests.py")
+    
     except Exception as e:
         print(f"Error: {e}")
         import traceback
