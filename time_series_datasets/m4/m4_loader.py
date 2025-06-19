@@ -78,13 +78,13 @@ class M4Dataset(Dataset):
             trimmed_values = values[:last_valid + 1]
         tensor = torch.tensor(trimmed_values, dtype=torch.float32)
 
-        if tensor.numel() > 0:
-            mean = tensor.mean()
-            std = tensor.std()
-            if std > 0:
-                tensor = (tensor - mean) / std
-            else:
-                tensor = tensor - mean
+        #if tensor.numel() > 0:
+        #    mean = tensor.mean()
+        #    std = tensor.std()
+        #    if std > 0:
+        #        tensor = (tensor - mean) / std
+        #    else:
+        #        tensor = tensor - mean*/
         return tensor, series_id
 
 
