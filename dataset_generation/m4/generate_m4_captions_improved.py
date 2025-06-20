@@ -22,8 +22,17 @@ def generate_caption_efficient(time_series_data, series_id, client, save_plot=Fa
     Generate a caption for the time-series using OpenAI API with efficient image handling
     """
     try:
+        num_samples = len(time_series_data)
+        
+        if num_samples < 500:
+            figsize = (12, 6)
+        elif num_samples < 1500:
+            figsize = (15, 5)
+        else:
+            figsize = (18, 4)
+
         # Create plot in memory instead of saving to disk
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=figsize)
         plt.plot(time_series_data, marker='o', linestyle='-', markersize=0)
         plt.grid(True, alpha=0.3)
         
