@@ -62,8 +62,12 @@ def main():
 
 
     # Process each file
+    ctr = 0
     for file_path in jsonl_files:
-        print(f"\nProcessing {file_path}...")
+        ctr += 1
+        if ctr == 1:
+            continue
+        print(f"\nProcessing {file_path} ({ctr}/{len(jsonl_files)})...")
         
         # Upload file
         file = upload_file(client, file_path)
@@ -84,7 +88,7 @@ def main():
         
         # Add a small delay between API calls to avoid rate limits
         time.sleep(1)
-
+        
 
 if __name__ == "__main__":
     main()

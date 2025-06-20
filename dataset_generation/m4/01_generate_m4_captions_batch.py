@@ -125,7 +125,7 @@ def save_series_to_csv(series_data, output_file):
 
 if __name__ == "__main__":
     START_ID = None
-    BATCH_SIZE = 2500  # Maximum batch size is capped at 200MB / 50,000 requests -> 2500 TS ~ 175MB = 40 batch files in total 
+    BATCH_SIZE = 3  # Maximum batch size is capped at 200MB / 50,000 requests -> 2500 TS ~ 175MB = 40 batch files in total 
 
     # Check for API key early
     if not os.environ.get("OPENAI_API_KEY"):
@@ -137,7 +137,7 @@ if __name__ == "__main__":
         
         # List of .csv files to process
         # frequencies = ["Yearly", "Quarterly", "Monthly", "Weekly", "Daily", "Hourly"]
-        frequencies = ["Monthly"]
+        frequencies = ["Weekly"]
         
         all_series_data = {}
         
@@ -173,8 +173,7 @@ if __name__ == "__main__":
 
                 batch_id += 1
                 
-                # Remove the break to process all data from each frequency
-                break
+          
         
         if all_series_data:
             combined_csv_file = "m4_series.csv"
