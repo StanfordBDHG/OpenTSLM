@@ -19,12 +19,19 @@ VAL_FRAC = 0.1
 
 class M4QADataset(QADataset):
     def _load_splits(self) -> Tuple[List[dict], List[dict], List[dict]]:
-        parquet_path = os.path.join(
+        base_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "dataset_generation", "m4", "m4_captions_series.parquet"
+            "dataset_generation", "m4"
         )
+        series_path = os.path.join(base_path, "m4_series_Weekly.csv")
+        captions_path = os.path.join(base_path, "m4_captions_Weekly.csv")
         
-        df = pd.read_parquet(parquet_path)
+        # Load the series and captions data
+        series_df = pd.read_csv(series_path)
+        captions_df = pd.read_csv(captions_path)
+        
+        # Merge the dataframes on the 'id' column
+        df = pd.merge(series_df, captions_df, on='id')
         
         # Split the data into train, validation, and test sets
         df_train_val, df_test = train_test_split(
