@@ -11,10 +11,24 @@ import torch
 import time
 from tqdm import tqdm
 import io
+import argparse
 
 sys.path.append("../../time_series_datasets")
 
 from m4.m4_loader import get_m4_loader
+
+
+def parse_args():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description='Generate captions for M4 time series data')
+    parser.add_argument('--frequency', type=str, default='Weekly', 
+                       choices=['Yearly', 'Quarterly', 'Monthly', 'Weekly', 'Daily', 'Hourly'],
+                       help='Frequency of the time series data to process')
+    parser.add_argument('--start-id', type=str, default=None,
+                       help='Resume processing from a specific series ID')
+    parser.add_argument('--limit', type=int, default=None,
+                       help='Limit the number of series to process (for testing)')
+    return parser.parse_args()
 
 
 def generate_caption_efficient(time_series_data, series_id, client, save_plot=False):
@@ -89,11 +103,21 @@ def load_existing_captions(csv_file):
 
 
 def main():
+    # Parse command line arguments
+    args = parse_args()
+    FREQUENCY = args.frequency
+    START_ID = args.start_id
+    LIMIT = args.limit
+    
     # Configuration
-    FREQUENCY = "Weekly"  # Change this to your desired frequency
-    START_ID = None  # Set this to resume from a specific ID
     CAPTIONS_FILE = f"m4_captions_{FREQUENCY}.csv"
     SERIES_FILE = f"m4_series_{FREQUENCY}.csv"
+    
+    print(f"Processing M4 {FREQUENCY} frequency data")
+    if START_ID:
+        print(f"Resuming from series ID: {START_ID}")
+    if LIMIT:
+        print(f"Limiting to {LIMIT} series")
     
     # Check for API key
     if not os.environ.get("OPENAI_API_KEY"):
@@ -170,9 +194,10 @@ def main():
             # Add small delay to avoid rate limits
             time.sleep(0.5)
             
-            # Optional: limit for testing
-            # if total_processed >= 5:  # Uncomment to limit processing
-            #     break
+            # Check if we've reached the limit
+            if LIMIT and total_processed >= LIMIT:
+                print(f"Reached limit of {LIMIT} series, stopping...")
+                break
         
         print(f"\nProcessing complete!")
         print(f"Total series processed: {total_processed}")
