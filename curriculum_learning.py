@@ -319,8 +319,12 @@ class CurriculumTrainer:
         return metrics
     
     def _train_stage(self, stage: str, stage_name: str, dataset_class, 
-                    metric_func: Callable = None) -> Dict[str, Any]:
+                    metric_func: Callable = None, batch_size: int = None) -> Dict[str, Any]:
         """Generic training function for any stage."""
+        # Use provided batch_size or default to global BATCH_SIZE
+        if batch_size is None:
+            batch_size = BATCH_SIZE
+            
         print(f"\n🚀 Starting {stage_name} Training with {self.model_type}")
         print("=" * 60)
         
@@ -351,7 +355,7 @@ class CurriculumTrainer:
         train_loader = self._merge_data_loaders(
             [dataset_class("train", EOS_TOKEN=self.model.get_eos_token())],
             shuffle=True,
-            batch_size=BATCH_SIZE,
+            batch_size=batch_size,
             patch_size=PATCH_SIZE,
         )
         
@@ -440,25 +444,27 @@ class CurriculumTrainer:
         metrics = self._evaluate_stage(stage, test_loader, stage_name, metric_func)
         return metrics
     
-    def stage1_mcq(self) -> Dict[str, Any]:
+    def stage1_mcq(self, batch_size: int = None) -> Dict[str, Any]:
         """Stage 1: Multiple Choice Question Answering (TSQA)."""
         return self._train_stage(
             stage="stage1_mcq",
             stage_name="MCQ (TSQA)",
             dataset_class=TSQADataset,
-            metric_func=lambda preds, golds: {"accuracy": self._calculate_accuracy(preds, golds)}
+            metric_func=lambda preds, golds: {"accuracy": self._calculate_accuracy(preds, golds)},
+            batch_size=batch_size
         )
     
-    def stage2_captioning(self) -> Dict[str, Any]:
+    def stage2_captioning(self, batch_size: int = None) -> Dict[str, Any]:
         """Stage 2: Caption Generation (M4)."""
         return self._train_stage(
             stage="stage2_captioning",
             stage_name="Captioning (M4)",
             dataset_class=M4QADataset,
-            metric_func=None  # Only test loss for captioning
+            metric_func=None,  # Only test loss for captioning
+            batch_size=batch_size
         )
     
-    def run_curriculum(self, stages: List[str] = None):
+    def run_curriculum(self, stages: List[str] = None, batch_size: int = None):
         """Run the complete curriculum learning pipeline."""
         if stages is None:
             stages = CURRICULUM_STAGES
@@ -466,15 +472,17 @@ class CurriculumTrainer:
         print(f"🎓 Starting Curriculum Learning with {self.model_type}")
         print(f"📊 Stages: {', '.join(stages)}")
         print(f"💻 Device: {self.device}")
+        if batch_size:
+            print(f"📦 Batch size: {batch_size}")
         print("=" * 80)
         
         results = {}
         
         for stage in stages:
             if stage == "stage1_mcq":
-                results[stage] = self.stage1_mcq()
+                results[stage] = self.stage1_mcq(batch_size=batch_size)
             elif stage == "stage2_captioning":
-                results[stage] = self.stage2_captioning()
+                results[stage] = self.stage2_captioning(batch_size=batch_size)
             else:
                 print(f"⚠️  Unknown stage: {stage}, skipping...")
         
@@ -514,6 +522,12 @@ def main():
         default=None,
         help="Device to use (cuda, mps, cpu)"
     )
+    parser.add_argument(
+        "--batch_size", 
+        type=int, 
+        default=None,
+        help="Batch size for training (default: use value from model_config.py)"
+    )
     
     args = parser.parse_args()
     
@@ -521,7 +535,7 @@ def main():
     trainer = CurriculumTrainer(args.model, args.device)
     
     # Run curriculum
-    results = trainer.run_curriculum(args.stages)
+    results = trainer.run_curriculum(args.stages, args.batch_size)
     
     # Print summary
     print("\n📈 Final Results Summary:")

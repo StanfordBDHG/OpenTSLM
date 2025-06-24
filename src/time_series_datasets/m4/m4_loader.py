@@ -20,7 +20,7 @@ from sklearn.model_selection import train_test_split
 # Constants
 # ---------------------------
 
-RAW_DATA_DIR = "time_series_datasets/raw_data/m4"
+RAW_DATA_DIR = "data/m4"
 AVAILABLE_FREQUENCIES = ["Monthly", "Quarterly", "Weekly"]
 
 TEST_FRAC = 0.1
