@@ -1,8 +1,8 @@
 # EmbedHealth
 
 <div align="center">
-  <img src="assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="80" style="margin-right: 10%;">
-  <img src="assets/eth_cdhi_logo.png" alt="ETH Centre for Digital Health Interventions" height="80">
+  <img src="assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="120">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="assets/eth_cdhi_logo.png" alt="ETH Centre for Digital Health Interventions" height="120">
 </div>
 
 ## Installation
