@@ -17,3 +17,4 @@ open-clip-torch
 einops
 einops-exts
 pyvim
+openai
