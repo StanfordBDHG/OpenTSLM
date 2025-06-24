@@ -1,197 +1,209 @@
-import os
-import subprocess
-from typing import Literal, Optional
-from constants import RAW_DATA_PATH
+"""
+m4_loader.py
+------------
+Loader utilities for the M4 time series dataset with captions.
 
+This module provides functions to load, merge, and split the processed M4 time series and caption data
+for use in machine learning tasks such as time series caption generation.
+
+Expected data location: time_series_datasets/raw_data/m4/
+"""
+import os
+import json
 import pandas as pd
-import torch
-from torch.utils.data import Dataset, DataLoader
+import numpy as np
+from typing import Dict, List, Literal, Optional, Tuple
+from datasets import Dataset
 from sklearn.model_selection import train_test_split
 
 # ---------------------------
 # Constants
 # ---------------------------
 
-REPO_URL = "https://github.com/Mcompetitions/M4-methods.git"
-REPO_DIR = f"{RAW_DATA_PATH}/m4"  # Local folder name after cloning
+RAW_DATA_DIR = "time_series_datasets/raw_data/m4"
+AVAILABLE_FREQUENCIES = ["Monthly", "Quarterly", "Weekly"]
 
-# ---------------------------
-# Helper to ensure repo is available
-# ---------------------------
-
-def ensure_m4_repo(repo_dir: str = REPO_DIR):
-    """Clone the M4-methods repo if it's not already present."""
-    if not os.path.isdir(repo_dir):
-        print(f"Cloning M4-methods into ./{repo_dir} …")
-        subprocess.run(["git", "clone", REPO_URL, repo_dir], check=True)
+TEST_FRAC = 0.1
+VAL_FRAC = 0.1
 
 # ---------------------------
 # Core loader
 # ---------------------------
 
-def load_m4(
-    frequency: Literal["Yearly", "Quarterly", "Monthly", "Weekly", "Daily", "Hourly"],
-    repo_dir: str = REPO_DIR
-) -> pd.DataFrame:
+def load_m4_data(frequency: Literal["Monthly", "Quarterly", "Weekly"]) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Load the full training data of the M4 dataset for a given frequency.
-
+    Load the M4 series and captions data for a given frequency.
+    
     Args:
-        frequency: One of ["Yearly","Quarterly","Monthly","Weekly","Daily","Hourly"].
-        repo_dir: Local path to the cloned repo.
-
+        frequency: One of ["Monthly", "Quarterly", "Weekly"]
+        
     Returns:
-        DataFrame with columns ["M4id", "x1", "x2", ..., "xN"].
+        Tuple of (series_df, captions_df) where:
+        - series_df has columns ["id", "series"] 
+        - captions_df has columns ["id", "caption"]
+    Raises:
+        ValueError: If frequency is not supported or no common IDs are found.
+        FileNotFoundError: If the required CSV files are missing.
     """
-    ensure_m4_repo(repo_dir)
-    filename = f"Dataset/Train/{frequency}-train.csv"
-    path = os.path.join(repo_dir, filename)
-    return pd.read_csv(path)
+    if frequency not in AVAILABLE_FREQUENCIES:
+        raise ValueError(f"Frequency must be one of {AVAILABLE_FREQUENCIES}")
+    
+    # Load series data
+    series_file = os.path.join(RAW_DATA_DIR, f"m4_series_{frequency}.csv")
+    if not os.path.exists(series_file):
+        raise FileNotFoundError(f"Series file not found: {series_file}")
+    
+    series_df = pd.read_csv(series_file)
+    
+    # Load captions data
+    captions_file = os.path.join(RAW_DATA_DIR, f"m4_captions_{frequency}.csv")
+    if not os.path.exists(captions_file):
+        raise FileNotFoundError(f"Captions file not found: {captions_file}")
+    
+    captions_df = pd.read_csv(captions_file)
+    
+    # Ensure both dataframes have the same IDs
+    series_ids = set(series_df['id'])
+    caption_ids = set(captions_df['id'])
+    common_ids = series_ids.intersection(caption_ids)
+    
+    if len(common_ids) == 0:
+        raise ValueError(f"No common IDs found between series and captions for frequency {frequency}")
+    
+    # Filter to common IDs
+    series_df = series_df[series_df['id'].isin(common_ids)].reset_index(drop=True)
+    captions_df = captions_df[captions_df['id'].isin(common_ids)].reset_index(drop=True)
+    
+    print(f"Loaded {len(series_df)} samples for frequency {frequency}")
+    
+    return series_df, captions_df
 
-# ---------------------------
-# PyTorch Dataset + Collation
-# ---------------------------
-
-class M4Dataset(Dataset):
+def load_all_m4_data() -> Dict[str, Tuple[pd.DataFrame, pd.DataFrame]]:
     """
-    PyTorch Dataset for a subset of M4 time series.
-    Returns a normalized series tensor and its ID.
-    """
-    def __init__(self, df: pd.DataFrame):
-        super().__init__()
-        self.df = df
-
-    def __len__(self):
-        return len(self.df)
-
-    def __getitem__(self, idx):
-        row = self.df.iloc[idx]
-        series_id = row["M4id"]
-        values = row.drop("M4id").values.astype(float)
-        tensor = torch.tensor(values, dtype=torch.float32)
-        # normalize
-        tensor = (tensor - tensor.mean()) / (tensor.std() + 1e-8)
-        return tensor, series_id
-
-
-def collate_fn(batch, *, patch_size: int = 1):
-    """
-    Pad variable-length series in the batch to the same length.
+    Load M4 data for all available frequencies.
+    
     Returns:
-        - Tensor of shape (batch_size, max_len)
-        - List of series IDs
+        Dictionary mapping frequency to (series_df, captions_df) tuple
     """
-    series_list, ids = zip(*batch)
-    max_len = max(seq.size(0) for seq in series_list)
-    max_len = ((max_len + patch_size - 1) // patch_size) * patch_size
+    data = {}
+    for frequency in AVAILABLE_FREQUENCIES:
+        try:
+            series_df, captions_df = load_m4_data(frequency)
+            data[frequency] = (series_df, captions_df)
+        except Exception as e:
+            print(f"Warning: Could not load data for frequency {frequency}: {e}")
+    
+    return data
 
-    padded = []
-    for seq in series_list:
-        if seq.size(0) < max_len:
-            pad_len = max_len - seq.size(0)
-            seq = torch.nn.functional.pad(seq, (0, pad_len), "constant", 0)
-        else:
-            seq = seq[:max_len]
-        padded.append(seq)
-    return torch.stack(padded), list(ids)
-
-# ---------------------------
-# DataLoader helper with train/val/test/all splits
-# ---------------------------
-
-def get_m4_loader(
-    frequency: Literal["Yearly", "Quarterly", "Monthly", "Weekly", "Daily", "Hourly"],
-    split: Literal["train", "val", "test", "all"] = "train",
-    val_frac: float = 0.1,
-    test_frac: float = 0.1,
-    seed: int = 42,
-    batch_size: int = 8,
-    shuffle: Optional[bool] = None,
-    repo_dir: str = REPO_DIR,
-    patch_size: int = 1
-) -> DataLoader:
+def create_combined_dataset(
+    data_dict: Dict[str, Tuple[pd.DataFrame, pd.DataFrame]],
+    seed: int = 42
+) -> Tuple[Dataset, Dataset, Dataset]:
     """
-    Returns a DataLoader for train/validation/test/all splits of the M4 dataset.
-
+    Create train/val/test splits from combined data across all frequencies.
+    
     Args:
-        frequency: Data frequency.
-        split: One of "train", "val", "test", or "all".
-        val_frac: Fraction of the original training set used for validation.
-        test_frac: Fraction of the original training set used for test.
-        seed: RNG seed for reproducibility.
-        batch_size: Batch size.
-        shuffle: Whether to shuffle (defaults to True for train/all, False otherwise).
-        repo_dir: Local path to cloned repo.
-        patch_size: Pad length multiple.
-
+        data_dict: Dictionary mapping frequency to (series_df, captions_df) tuple
+        seed: Random seed for reproducibility
+        
     Returns:
-        DataLoader yielding (series_tensor, id_list).
+        Tuple of (train_dataset, val_dataset, test_dataset)
     """
-    # 1) Load full training DataFrame
-    df_full = load_m4(frequency, repo_dir=repo_dir)
+    all_samples = []
+    
+    for frequency, (series_df, captions_df) in data_dict.items():
+        # Merge series and captions data
+        merged_df = series_df.merge(captions_df, on='id', how='inner')
+        
+        # Convert to list of dictionaries
+        for _, row in merged_df.iterrows():
+            # Parse the series string to list of floats
+            try:
+                series_str = row['series']
+                if isinstance(series_str, str):
+                    series_list = json.loads(series_str)
+                else:
+                    series_list = series_str
+                
+                sample = {
+                    'id': row['id'],
+                    'frequency': frequency,
+                    'series': series_list,
+                    'caption': row['caption']
+                }
+                all_samples.append(sample)
+            except Exception as e:
+                print(f"Warning: Could not parse series for {row['id']}: {e}")
+                continue
+    
+    # Create dataset
+    full_dataset = Dataset.from_list(all_samples)
+    
+    # Split into train/val/test
+    train_val, test = full_dataset.train_test_split(
+        test_size=TEST_FRAC, seed=seed
+    ).values()
+    
+    val_frac_adj = VAL_FRAC / (1.0 - TEST_FRAC)
+    train, val = train_val.train_test_split(
+        test_size=val_frac_adj, seed=seed + 1
+    ).values()
+    
+    print(f"Dataset splits - Train: {len(train)}, Val: {len(val)}, Test: {len(test)}")
+    
+    return train, val, test
 
-    if split == "all":
-        df_subset = df_full
-    else:
-        # 2) Split into train_rest and test
-        df_train_rest, df_test = train_test_split(
-            df_full, test_size=test_frac, random_state=seed, shuffle=True
-        )
-        # 3) Split train_rest into train and val
-        val_frac_adj = val_frac / (1.0 - test_frac)
-        df_train, df_val = train_test_split(
-            df_train_rest, test_size=val_frac_adj, random_state=seed + 1, shuffle=True
-        )
-        # 4) Select subset by split
-        if split == "train":
-            df_subset = df_train
-        elif split in ("val", "validation"):
-            df_subset = df_val
-        elif split == "test":
-            df_subset = df_test
-        else:
-            raise ValueError("split must be 'train', 'val', 'test', or 'all'")
+# ---------------------------
+# Helper functions
+# ---------------------------
 
-    # Determine default shuffle
-    if shuffle is None:
-        shuffle = split in ("train", "all")
+def get_frequency_distribution(dataset: Dataset) -> Dict[str, int]:
+    """
+    Get the distribution of frequencies in a dataset.
+    
+    Args:
+        dataset: The dataset to analyze.
+    Returns:
+        Dictionary mapping frequency to count.
+    """
+    frequencies = dataset['frequency']
+    return dict(pd.Series(frequencies).value_counts())
 
-    # Wrap in DataLoader
-    dataset = M4Dataset(df_subset)
-    return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        collate_fn=lambda batch: collate_fn(batch, patch_size=patch_size)
-    )
+def print_dataset_info(dataset: Dataset, name: str):
+    """
+    Print information about a dataset split.
+    
+    Args:
+        dataset: The dataset split.
+        name: Name of the split (e.g., 'Train').
+    """
+    freq_dist = get_frequency_distribution(dataset)
+    print(f"\n{name} dataset:")
+    print(f"  Total samples: {len(dataset)}")
+    print(f"  Frequency distribution:")
+    for freq, count in freq_dist.items():
+        print(f"    {freq}: {count} ({count/len(dataset)*100:.1f}%)")
 
 # ---------------------------
 # Example usage
 # ---------------------------
 
 if __name__ == "__main__":
-    # Monthly all data
-    all_loader = get_m4_loader("Monthly", split="all", batch_size=4)
-    train_loader = get_m4_loader("Monthly", split="train", batch_size=4)
-    val_loader = get_m4_loader("Monthly", split="val", batch_size=4)
-    test_loader = get_m4_loader("Monthly", split="test", batch_size=4)
-
-    print("All batch:")
-    for series_batch, ids in all_loader:
-        print(series_batch.shape, ids)
-        break
-
-    print("Train batch:")
-    for series_batch, ids in train_loader:
-        print(series_batch.shape, ids)
-        break
-
-    print("Validation batch:")
-    for series_batch, ids in val_loader:
-        print(series_batch.shape, ids)
-        break
-
-    print("Test batch:")
-    for series_batch, ids in test_loader:
-        print(series_batch.shape, ids)
-        break
+    # Load all data
+    data_dict = load_all_m4_data()
+    
+    # Create splits
+    train, val, test = create_combined_dataset(data_dict)
+    
+    # Print information
+    print_dataset_info(train, "Train")
+    print_dataset_info(val, "Validation")
+    print_dataset_info(test, "Test")
+    
+    # Example of accessing data
+    print(f"\nExample sample from train:")
+    sample = train[0]
+    print(f"  ID: {sample['id']}")
+    print(f"  Frequency: {sample['frequency']}")
+    print(f"  Series length: {len(sample['series'])}")
+    print(f"  Caption preview: {sample['caption'][:100]}...")
