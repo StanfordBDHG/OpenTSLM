@@ -342,7 +342,7 @@ class CurriculumTrainer:
                 print()
         except Exception as e:
             print(f"❌ Error loading previous stage: {e}")
-            raise
+            raise Exception(f"Error loading previous stage: {e}")
         
         # Initialize optimizer and scheduler
         optimizer = self._get_optimizer()
