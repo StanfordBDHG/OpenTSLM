@@ -9,8 +9,7 @@
 
 1. **Clone the Repository**  
    ```bash
-   git clone https://github.com/your-org/embedhealth.git
-   cd embedhealth
+   git clone https://github.com/StanfordBDHG/EmbedHealth.git
    ```
 
 2. **Install Dependencies**  
