@@ -12,9 +12,21 @@ from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
 import torch
+import torch.distributed as dist
 from torch.optim import AdamW
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import ConcatDataset, DataLoader, Dataset
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import (
+    CPUOffload,
+    MixedPrecision,
+    ShardingStrategy,
+    BackwardPrefetch,
+    FullStateDictConfig,
+    StateDictType,
+)
 from tqdm.auto import tqdm
 from transformers import get_linear_schedule_with_warmup
 
@@ -45,16 +57,41 @@ class CurriculumTrainer:
     Trains models stage by stage with shared training logic.
     """
     
-    def __init__(self, model_type: str, device: str = None):
+    def __init__(self, model_type: str, device: str = None, fsdp: bool = False, fsdp_use_orig_params: bool = False, fsdp_sharding_strategy: str = "full", precision: str = "fp32", gradient_checkpointing: bool = False, dist_url: str = "env://", dist_backend: str = "nccl", local_rank: int = int(os.environ.get("LOCAL_RANK", 0))):
         """
         Initialize the curriculum trainer.
         
         Args:
             model_type: Either 'EmbedHealthSP' or 'EmbedHealthFlamingo'
             device: Device to use for training ('cuda', 'mps', or 'cpu')
+            fsdp: Use FullyShardedDataParallel for distributed training
+            fsdp_use_orig_params: Passed into the FSDP constructor. Enables param_groups and gradient masking for weight_decay
+            fsdp_sharding_strategy: FSDP sharding strategy
+            precision: Training precision
+            gradient_checkpointing: Enable gradient checkpointing
+            dist_url: URL used to set up distributed training
+            dist_backend: Distributed backend
+            local_rank: Local GPU rank
         """
         self.model_type = model_type
         self.device = device or self._get_device()
+        
+        # Distributed training parameters
+        self.fsdp = fsdp
+        self.fsdp_use_orig_params = fsdp_use_orig_params
+        self.fsdp_sharding_strategy = fsdp_sharding_strategy
+        self.precision = precision
+        self.gradient_checkpointing = gradient_checkpointing
+        self.dist_url = dist_url
+        self.dist_backend = dist_backend
+        self.local_rank = local_rank
+        
+        # Initialize distributed training if needed
+        self.rank = 0
+        self.world_size = 1
+        if fsdp or self._should_use_distributed():
+            self._init_distributed()
+        
         self.model = self._initialize_model()
         self.results_dir = "results"
         self._create_results_dir()
@@ -86,11 +123,68 @@ class CurriculumTrainer:
             model = EmbedHealthFlamingo(
                 device=self.device,
                 cross_attn_every_n_layers=1,
+                gradient_checkpointing=self.gradient_checkpointing,
             ).to(self.device)
         else:
             raise ValueError(f"Unknown model type: {self.model_type}")
+        
+        # Wrap with FSDP if requested
+        if self.fsdp and self.model_type == "EmbedHealthFlamingo":
+            model = self._wrap_fsdp(model)
+        elif self.world_size > 1 and not self.fsdp:
+            # Use DDP for multi-GPU training without FSDP
+            model = DDP(model, device_ids=[self.local_rank] if torch.cuda.is_available() else None)
             
         return model
+    
+    def _wrap_fsdp(self, model):
+        """Wrap model with FSDP for EmbedHealthFlamingo."""
+        if self.model_type != "EmbedHealthFlamingo":
+            raise ValueError("FSDP is only supported for EmbedHealthFlamingo")
+        
+        # Initialize mixed precision policy
+        if self.precision != "fp32":
+            cast_dtype = self._get_cast_dtype(self.precision)
+            mp_policy = MixedPrecision(
+                param_dtype=torch.float32,
+                reduce_dtype=cast_dtype,
+                buffer_dtype=cast_dtype,
+            )
+        else:
+            mp_policy = None
+        
+        # FSDP wrapper kwargs
+        wrapper_kwargs = dict(
+            process_group=None,  # Use default process group
+            cpu_offload=CPUOffload(offload_params=False),
+            device_id=self.local_rank,
+            sync_module_states=True,
+            sharding_strategy=ShardingStrategy.FULL_SHARD
+            if self.fsdp_sharding_strategy == "full"
+            else ShardingStrategy.HYBRID_SHARD,
+            use_orig_params=self.fsdp_use_orig_params,
+            mixed_precision=mp_policy,
+            forward_prefetch=True,
+            backward_prefetch=BackwardPrefetch.BACKWARD_PRE,
+            limit_all_gathers=True,
+        )
+        
+        # Wrap the model with FSDP
+        model.wrap_fsdp(wrapper_kwargs, self.local_rank)
+        
+        if self.rank == 0:
+            print(f"Wrapped {self.model_type} with FSDP")
+        
+        return model
+    
+    def _get_cast_dtype(self, precision: str):
+        """Get cast dtype for mixed precision."""
+        if precision == "bf16":
+            return torch.bfloat16
+        elif precision == "fp16":
+            return torch.float16
+        else:
+            return None
     
     def _create_results_dir(self):
         """Create the results directory structure."""
@@ -140,24 +234,59 @@ class CurriculumTrainer:
             ], lr=2e-4)
     
     def _merge_data_loaders(
-        self, datasets: List[Dataset], shuffle: bool, batch_size: int, patch_size: int
+        self, datasets: List[Dataset], shuffle: bool, batch_size: int, patch_size: int, distribute_data: bool = False
     ) -> DataLoader:
         """Create a merged data loader from multiple datasets."""
         merged_ds = ConcatDataset(datasets)
-        return DataLoader(
-            merged_ds,
-            shuffle=shuffle,
-            batch_size=batch_size,
-            collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
-                batch, patch_size=patch_size
-            ),
-        )
+        
+        # Use distributed sampler if distributed training is enabled
+        if distribute_data and dist.is_initialized():
+            sampler = DistributedSampler(
+                merged_ds, 
+                num_replicas=self.world_size, 
+                rank=self.rank, 
+                shuffle=shuffle
+            )
+            return DataLoader(
+                merged_ds,
+                sampler=sampler,
+                batch_size=batch_size,
+                collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
+                    batch, patch_size=patch_size
+                ),
+            )
+        else:
+            return DataLoader(
+                merged_ds,
+                shuffle=shuffle,
+                batch_size=batch_size,
+                collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
+                    batch, patch_size=patch_size
+                ),
+            )
     
     def _save_checkpoint(self, stage: str, epoch: int, val_loss: float, optimizer, scheduler):
         """Save model checkpoint for a specific stage."""
         checkpoint_dir = os.path.join(self.results_dir, self.model_type, stage, "checkpoints")
         
-        if self.model_type == "EmbedHealthSP":
+        # Only save on rank 0 for distributed training
+        if dist.is_initialized() and self.rank != 0:
+            return
+        
+        if self.fsdp and self.model_type == "EmbedHealthFlamingo":
+            # Save FSDP state dict
+            with FSDP.state_dict_type(self.model, StateDictType.FULL_STATE_DICT):
+                model_state = self.model.state_dict()
+            # Save optimizer state with FSDP
+            optim_state = FSDP.optim_state_dict(self.model, optimizer)
+            checkpoint = {
+                "model_state": model_state,
+                "optimizer_state": optim_state,
+                "scheduler_state": scheduler.state_dict(),
+                "val_loss": val_loss,
+                "epoch": epoch,
+            }
+        elif self.model_type == "EmbedHealthSP":
             checkpoint = {
                 "encoder_state": self.model.encoder.state_dict(),
                 "projector_state": self.model.projector.state_dict(),
@@ -167,8 +296,13 @@ class CurriculumTrainer:
                 "epoch": epoch,
             }
         else:
+            # Handle DDP or single GPU case
+            model_state = self.model.state_dict()
+            if hasattr(self.model, 'module'):
+                # Remove 'module.' prefix for DDP
+                model_state = {k.replace('module.', ''): v for k, v in model_state.items()}
             checkpoint = {
-                "model_state": self.model.state_dict(),
+                "model_state": model_state,
                 "optimizer_state": optimizer.state_dict(),
                 "scheduler_state": scheduler.state_dict(),
                 "val_loss": val_loss,
@@ -186,13 +320,26 @@ class CurriculumTrainer:
         if os.path.exists(checkpoint_path):
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
             
-            if self.model_type == "EmbedHealthSP":
+            if self.fsdp and self.model_type == "EmbedHealthFlamingo":
+                # Load FSDP state dict
+                with FSDP.state_dict_type(self.model, StateDictType.FULL_STATE_DICT):
+                    self.model.load_state_dict(checkpoint["model_state"])
+                # Load optimizer state with FSDP
+                optim_state = FSDP.optim_state_dict_to_load(checkpoint["optimizer_state"], self.model, optimizer)
+                optimizer.load_state_dict(optim_state)
+            elif self.model_type == "EmbedHealthSP":
                 self.model.encoder.load_state_dict(checkpoint["encoder_state"])
                 self.model.projector.load_state_dict(checkpoint["projector_state"])
+                optimizer.load_state_dict(checkpoint["optimizer_state"])
             else:
-                self.model.load_state_dict(checkpoint["model_state"])
+                # Handle DDP or single GPU case
+                model_state = checkpoint["model_state"]
+                if hasattr(self.model, 'module'):
+                    # Add 'module.' prefix for DDP
+                    model_state = {f'module.{k}': v for k, v in model_state.items()}
+                self.model.load_state_dict(model_state)
+                optimizer.load_state_dict(checkpoint["optimizer_state"])
             
-            optimizer.load_state_dict(checkpoint["optimizer_state"])
             scheduler.load_state_dict(checkpoint["scheduler_state"])
             
             return checkpoint.get("epoch", "?"), checkpoint.get("val_loss", float("inf"))
@@ -261,12 +408,16 @@ class CurriculumTrainer:
     def _evaluate_stage(self, stage: str, test_loader: DataLoader, stage_name: str, 
                        metric_func: Callable = None) -> Dict[str, Any]:
         """Evaluate model on test set for a specific stage."""
+        # Only evaluate on rank 0 for distributed training
+        if dist.is_initialized() and self.rank != 0:
+            return {"test_loss": 0.0}
+        
         self.model.eval()
         results = []
         test_loss = 0.0
         
         with torch.no_grad():
-            for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}"):
+            for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
                 # Compute loss
                 loss = self.model.compute_loss(batch)
                 test_loss += loss.item()
@@ -295,26 +446,27 @@ class CurriculumTrainer:
             additional_metrics = metric_func(predictions, gold_answers)
             metrics.update(additional_metrics)
         
-        # Save results
-        results_file = os.path.join(
-            self.results_dir, self.model_type, stage, "results", "test_predictions.jsonl"
-        )
-        with open(results_file, "w", encoding="utf-8") as f:
-            for row in results:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        
-        # Save metrics
-        metrics_file = os.path.join(
-            self.results_dir, self.model_type, stage, "results", "metrics.json"
-        )
-        with open(metrics_file, "w") as f:
-            json.dump(metrics, f, indent=2)
-        
-        print(f"✅ {stage_name} evaluation complete:")
-        print(f"   Test predictions saved to: {results_file}")
-        print(f"   Metrics saved to: {metrics_file}")
-        for metric, value in metrics.items():
-            print(f"   {metric}: {value:.4f}")
+        # Save results only on rank 0
+        if self.rank == 0:
+            results_file = os.path.join(
+                self.results_dir, self.model_type, stage, "results", "test_predictions.jsonl"
+            )
+            with open(results_file, "w", encoding="utf-8") as f:
+                for row in results:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            
+            # Save metrics
+            metrics_file = os.path.join(
+                self.results_dir, self.model_type, stage, "results", "metrics.json"
+            )
+            with open(metrics_file, "w") as f:
+                json.dump(metrics, f, indent=2)
+            
+            print(f"✅ {stage_name} evaluation complete:")
+            print(f"   Test predictions saved to: {results_file}")
+            print(f"   Metrics saved to: {metrics_file}")
+            for metric, value in metrics.items():
+                print(f"   {metric}: {value:.4f}")
         
         return metrics
     
@@ -357,6 +509,7 @@ class CurriculumTrainer:
             shuffle=True,
             batch_size=batch_size,
             patch_size=PATCH_SIZE,
+            distribute_data=self.world_size > 1
         )
         
         val_loader = self._merge_data_loaders(
@@ -364,6 +517,7 @@ class CurriculumTrainer:
             shuffle=False,
             batch_size=1,
             patch_size=PATCH_SIZE,
+            distribute_data=False  # Don't distribute validation
         )
         
         test_loader = self._merge_data_loaders(
@@ -371,6 +525,7 @@ class CurriculumTrainer:
             shuffle=False,
             batch_size=1,
             patch_size=PATCH_SIZE,
+            distribute_data=False  # Don't distribute test
         )
         
         # Scheduler
@@ -391,27 +546,39 @@ class CurriculumTrainer:
         epochs_no_improve = 0
         
         for epoch in range(1, NUM_EPOCHS + 1):
+            # Set epoch for distributed sampler
+            if hasattr(train_loader.sampler, 'set_epoch'):
+                train_loader.sampler.set_epoch(epoch)
+            
             # Training
             self.model.train()
             running_loss = 0.0
-            prog = tqdm(train_loader, desc=f"Epoch {epoch}/{NUM_EPOCHS}")
+            prog = tqdm(train_loader, desc=f"Epoch {epoch}/{NUM_EPOCHS}", disable=self.rank != 0)
             
             for batch in prog:
                 optimizer.zero_grad()
                 loss = self.model.compute_loss(batch)
                 loss.backward()
-                clip_grad_norm_(self.model.parameters(), GRAD_CLIP_NORM)
+                
+                # Handle gradient clipping for FSDP vs regular training
+                if self.fsdp and self.model_type == "EmbedHealthFlamingo":
+                    self.model.clip_grad_norm_(GRAD_CLIP_NORM)
+                else:
+                    clip_grad_norm_(self.model.parameters(), GRAD_CLIP_NORM)
+                
                 optimizer.step()
                 scheduler.step()
                 
                 running_loss += loss.item()
-                prog.set_postfix(
-                    loss=f"{loss.item():.4f}", 
-                    lr=f"{scheduler.get_last_lr()[0]:.2e}"
-                )
+                if self.rank == 0:
+                    prog.set_postfix(
+                        loss=f"{loss.item():.4f}", 
+                        lr=f"{scheduler.get_last_lr()[0]:.2e}"
+                    )
             
             avg_train_loss = running_loss / len(train_loader)
-            tqdm.write(f"Epoch {epoch} — train loss: {avg_train_loss:.4f}")
+            if self.rank == 0:
+                tqdm.write(f"Epoch {epoch} — train loss: {avg_train_loss:.4f}")
             
             # Validation
             val_loss = 0.0
@@ -421,19 +588,23 @@ class CurriculumTrainer:
                     val_loss += self.model.compute_loss(batch).item()
             
             avg_val_loss = val_loss / len(val_loader)
-            tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}\n")
+            if self.rank == 0:
+                tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}\n")
             
             # Early stopping
             if avg_val_loss + 1e-4 < best_val_loss:
                 best_val_loss = avg_val_loss
                 epochs_no_improve = 0
                 self._save_checkpoint(stage, epoch, avg_val_loss, optimizer, scheduler)
-                tqdm.write("✔️  New best model saved.\n")
+                if self.rank == 0:
+                    tqdm.write("✔️  New best model saved.\n")
             else:
                 epochs_no_improve += 1
-                tqdm.write(f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs.")
+                if self.rank == 0:
+                    tqdm.write(f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs.")
                 if epochs_no_improve >= EARLY_STOP_PAT:
-                    tqdm.write("\nEarly stopping triggered.")
+                    if self.rank == 0:
+                        tqdm.write("\nEarly stopping triggered.")
                     break
         
         # Load best model and evaluate
@@ -469,12 +640,19 @@ class CurriculumTrainer:
         if stages is None:
             stages = CURRICULUM_STAGES
         
-        print(f"🎓 Starting Curriculum Learning with {self.model_type}")
-        print(f"📊 Stages: {', '.join(stages)}")
-        print(f"💻 Device: {self.device}")
-        if batch_size:
-            print(f"📦 Batch size: {batch_size}")
-        print("=" * 80)
+        if self.rank == 0:
+            print(f"🎓 Starting Curriculum Learning with {self.model_type}")
+            print(f"📊 Stages: {', '.join(stages)}")
+            print(f"💻 Device: {self.device}")
+            if batch_size:
+                print(f"📦 Batch size: {batch_size}")
+            if self.world_size > 1:
+                print(f"🌐 Distributed training with {self.world_size} GPUs")
+                if self.fsdp:
+                    print(f"🔧 Using FSDP with {self.fsdp_sharding_strategy} sharding")
+                else:
+                    print(f"🔧 Using DDP")
+            print("=" * 80)
         
         results = {}
         
@@ -484,20 +662,59 @@ class CurriculumTrainer:
             elif stage == "stage2_captioning":
                 results[stage] = self.stage2_captioning(batch_size=batch_size)
             else:
-                print(f"⚠️  Unknown stage: {stage}, skipping...")
+                if self.rank == 0:
+                    print(f"⚠️  Unknown stage: {stage}, skipping...")
         
-        # Save overall results
-        overall_results_file = os.path.join(
-            self.results_dir, self.model_type, "curriculum_results.json"
-        )
-        with open(overall_results_file, "w") as f:
-            json.dump(results, f, indent=2)
-        
-        print(f"\n🎉 Curriculum Learning Complete!")
-        print(f"📁 All results saved to: {self.results_dir}/{self.model_type}/")
-        print(f"📊 Overall results: {overall_results_file}")
+        # Save overall results only on rank 0
+        if self.rank == 0:
+            overall_results_file = os.path.join(
+                self.results_dir, self.model_type, "curriculum_results.json"
+            )
+            with open(overall_results_file, "w") as f:
+                json.dump(results, f, indent=2)
+            
+            print(f"\n🎉 Curriculum Learning Complete!")
+            print(f"📁 All results saved to: {self.results_dir}/{self.model_type}/")
+            print(f"📊 Overall results: {overall_results_file}")
         
         return results
+
+    def _should_use_distributed(self) -> bool:
+        """Check if distributed training should be used."""
+        return (
+            "WORLD_SIZE" in os.environ and 
+            int(os.environ["WORLD_SIZE"]) > 1
+        ) or (
+            "LOCAL_RANK" in os.environ and 
+            int(os.environ["LOCAL_RANK"]) >= 0
+        )
+        
+    def _init_distributed(self):
+        """Initialize distributed training."""
+        if "WORLD_SIZE" in os.environ:
+            self.world_size = int(os.environ["WORLD_SIZE"])
+        if "RANK" in os.environ:
+            self.rank = int(os.environ["RANK"])
+        elif "LOCAL_RANK" in os.environ:
+            self.rank = int(os.environ["LOCAL_RANK"])
+            
+        # Initialize process group
+        dist.init_process_group(
+            backend=self.dist_backend,
+            init_method=self.dist_url,
+            world_size=self.world_size,
+            rank=self.rank
+        )
+        
+        # Set device for this process
+        if torch.cuda.is_available():
+            torch.cuda.set_device(self.local_rank)
+            self.device = torch.device("cuda", self.local_rank)
+        
+        if self.rank == 0:
+            print(f"Initialized distributed training with {self.world_size} GPUs")
+            if self.fsdp:
+                print(f"Using FSDP with sharding strategy: {self.fsdp_sharding_strategy}")
 
 
 def main():
@@ -529,10 +746,73 @@ def main():
         help="Batch size for training (default: use value from model_config.py)"
     )
     
+    # Distributed training arguments
+    parser.add_argument(
+        "--fsdp", 
+        default=False, 
+        action="store_true",
+        help="Use FullyShardedDataParallel for distributed training"
+    )
+    parser.add_argument(
+        "--fsdp_use_orig_params", 
+        default=False, 
+        action="store_true",
+        help="Passed into the FSDP constructor. Enables param_groups and gradient masking for weight_decay"
+    )
+    parser.add_argument(
+        "--fsdp_sharding_strategy", 
+        default="full", 
+        type=str, 
+        choices=["full", "hybrid"],
+        help="FSDP sharding strategy"
+    )
+    parser.add_argument(
+        "--precision", 
+        default="fp32", 
+        type=str, 
+        choices=["fp32", "fp16", "bf16"],
+        help="Training precision"
+    )
+    parser.add_argument(
+        "--gradient_checkpointing", 
+        default=False, 
+        action="store_true",
+        help="Enable gradient checkpointing"
+    )
+    parser.add_argument(
+        "--dist_url", 
+        default="env://", 
+        type=str,
+        help="URL used to set up distributed training"
+    )
+    parser.add_argument(
+        "--dist_backend", 
+        default="nccl", 
+        type=str,
+        help="Distributed backend"
+    )
+    parser.add_argument(
+        "--local_rank", 
+        type=int, 
+        default=int(os.environ.get("LOCAL_RANK", 0)),
+        help="Local GPU rank"
+    )
+    
     args = parser.parse_args()
     
     # Initialize trainer
-    trainer = CurriculumTrainer(args.model, args.device)
+    trainer = CurriculumTrainer(
+        args.model, 
+        args.device, 
+        fsdp=args.fsdp,
+        fsdp_use_orig_params=args.fsdp_use_orig_params,
+        fsdp_sharding_strategy=args.fsdp_sharding_strategy,
+        precision=args.precision,
+        gradient_checkpointing=args.gradient_checkpointing,
+        dist_url=args.dist_url,
+        dist_backend=args.dist_backend,
+        local_rank=args.local_rank
+    )
     
     # Run curriculum
     results = trainer.run_curriculum(args.stages, args.batch_size)
