@@ -359,11 +359,11 @@ class CurriculumTrainer:
         with torch.no_grad():
             for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
                 # Compute loss
-                loss = self.model.compute_loss(batch)
+                loss = self._get_model().compute_loss(batch)
                 test_loss += loss.item()
                 
                 # Generate predictions
-                predictions = self.model.generate(batch)
+                predictions = self._get_model().generate(batch)
                 
                 # Collect results
                 for sample, pred in zip(batch, predictions):
@@ -447,7 +447,7 @@ class CurriculumTrainer:
         
         # Create data loaders
         train_loader = self._merge_data_loaders(
-            [dataset_class("train", EOS_TOKEN=self.model.get_eos_token())],
+            [dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())],
             shuffle=True,
             batch_size=batch_size,
             patch_size=PATCH_SIZE,
@@ -455,7 +455,7 @@ class CurriculumTrainer:
         )
         
         val_loader = self._merge_data_loaders(
-            [dataset_class("validation", EOS_TOKEN=self.model.get_eos_token())],
+            [dataset_class("validation", EOS_TOKEN=self._get_model().get_eos_token())],
             shuffle=False,
             batch_size=1,
             patch_size=PATCH_SIZE,
@@ -463,7 +463,7 @@ class CurriculumTrainer:
         )
         
         test_loader = self._merge_data_loaders(
-            [dataset_class("test", EOS_TOKEN=self.model.get_eos_token())],
+            [dataset_class("test", EOS_TOKEN=self._get_model().get_eos_token())],
             shuffle=False,
             batch_size=1,
             patch_size=PATCH_SIZE,
@@ -499,7 +499,7 @@ class CurriculumTrainer:
             
             for batch in prog:
                 optimizer.zero_grad()
-                loss = self.model.compute_loss(batch)
+                loss = self._get_model().compute_loss(batch)
                 loss.backward()
                 
                 # Handle gradient clipping for distributed training
@@ -524,7 +524,7 @@ class CurriculumTrainer:
             self.model.eval()
             with torch.no_grad():
                 for batch in val_loader:
-                    val_loss += self.model.compute_loss(batch).item()
+                    val_loss += self._get_model().compute_loss(batch).item()
             
             avg_val_loss = val_loss / len(val_loader)
             if self.rank == 0:
@@ -693,6 +693,12 @@ class CurriculumTrainer:
         
         if self.rank == 0:
             print(f"✅ Stage {stage} marked as completed")
+
+    def _get_model(self):
+        """Get the underlying model (handles DDP wrapping)."""
+        if hasattr(self.model, 'module'):
+            return self.model.module
+        return self.model
 
 
 def main():
