@@ -11,7 +11,7 @@ from tqdm.auto import tqdm
 
 from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
-from model_config import (
+from src.model_config import (
     PATCH_SIZE,
     RESULTS_FILE,
 )

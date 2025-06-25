@@ -88,8 +88,8 @@ class M4QADataset(QADataset):
             normalized_series = (series_tensor - mean) / std
         else:
             normalized_series = series_tensor - mean
-        # Create the prompt with just the time series (no caption text)
-        text_prompt = "This is the time series data:"
+        # Create the prompt with mean and std information
+        text_prompt = f"This is the time series, it has mean {mean:.4f} and std {std:.4f}:"
         return [TextTimeSeriesPrompt(text_prompt, normalized_series.tolist())]
 
 

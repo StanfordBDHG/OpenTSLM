@@ -59,14 +59,15 @@ class TSQADataset(QADataset):
         return "Predict the " + row["Task"] + " Answer:"
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
-        # TODO standardize normalization over the all datasets
         series = torch.tensor(json.loads(row["Series"]), dtype=torch.float32)
 
         means = series.mean(dim=0, keepdim=True)  # shape: (n_series, 1)
         stds = series.std(dim=0, keepdim=True)  # shape: (n_series, 1)
         series = (series - means) / (stds + 1e-8)  # broadcasts to (n_series, length)
         # TSQA has always only one time series
-        return [TextTimeSeriesPrompt("This is the time series.", series.tolist())]
+        mean_val = means[0, 0].item()
+        std_val = stds[0, 0].item()
+        return [TextTimeSeriesPrompt(f"This is the time series, it has mean {mean_val:.4f} and std {std_val:.4f}.", series.tolist())]
 
 
 if __name__ == "__main__":

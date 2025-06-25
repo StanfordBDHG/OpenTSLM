@@ -2,7 +2,7 @@ from abc import abstractmethod
 import torch
 import torch.nn as nn
 
-from model_config import ENCODER_OUTPUT_DIM
+from src.model_config import ENCODER_OUTPUT_DIM
 
 
 class TimeSeriesEncoderBase(nn.Module):

@@ -407,7 +407,7 @@ class CurriculumTrainer:
         return correct / total if total > 0 else 0.0
     
     def _evaluate_stage(self, stage: str, test_loader: DataLoader, stage_name: str, 
-                       metric_func: Callable = None) -> Dict[str, Any]:
+                       metric_func: Callable = None, epoch: int = None) -> Dict[str, Any]:
         """Evaluate model on test set for a specific stage."""
         # Only evaluate on rank 0 for distributed training
         if dist.is_initialized() and self.rank != 0:
@@ -441,6 +441,8 @@ class CurriculumTrainer:
         
         # Calculate stage-specific metrics
         metrics = {"test_loss": avg_test_loss}
+        if epoch is not None:
+            metrics["epoch"] = epoch
         if metric_func:
             predictions = [r["generated"] for r in results]
             gold_answers = [r["gold"] for r in results]
@@ -613,7 +615,7 @@ class CurriculumTrainer:
         if best_epoch is not None:
             print(f"📂 Loaded best checkpoint from epoch {best_epoch} for evaluation.")
         
-        metrics = self._evaluate_stage(stage, test_loader, stage_name, metric_func)
+        metrics = self._evaluate_stage(stage, test_loader, stage_name, metric_func, best_epoch)
         return metrics
     
     def stage1_mcq(self, batch_size: int = None) -> Dict[str, Any]:
@@ -641,9 +643,19 @@ class CurriculumTrainer:
         if stages is None:
             stages = CURRICULUM_STAGES
         
+        # Filter out completed stages
+        incomplete_stages = []
+        for stage in stages:
+            if self._is_stage_completed(stage):
+                if self.rank == 0:
+                    print(f"⏭️  Skipping completed stage: {stage}")
+            else:
+                incomplete_stages.append(stage)
+        
         if self.rank == 0:
             print(f"🎓 Starting Curriculum Learning with {self.model_type}")
-            print(f"📊 Stages: {', '.join(stages)}")
+            print(f"📊 All stages: {', '.join(stages)}")
+            print(f"🔄 Incomplete stages: {', '.join(incomplete_stages)}")
             print(f"💻 Device: {self.device}")
             if batch_size:
                 print(f"📦 Batch size: {batch_size}")
@@ -657,11 +669,16 @@ class CurriculumTrainer:
         
         results = {}
         
-        for stage in stages:
+        # Run only incomplete stages
+        for stage in incomplete_stages:
             if stage == "stage1_mcq":
-                results[stage] = self.stage1_mcq(batch_size=batch_size)
+                stage_results = self.stage1_mcq(batch_size=batch_size)
+                results[stage] = stage_results
+                self._mark_stage_completed(stage, stage_results)
             elif stage == "stage2_captioning":
-                results[stage] = self.stage2_captioning(batch_size=batch_size)
+                stage_results = self.stage2_captioning(batch_size=batch_size)
+                results[stage] = stage_results
+                self._mark_stage_completed(stage, stage_results)
             else:
                 if self.rank == 0:
                     print(f"⚠️  Unknown stage: {stage}, skipping...")
@@ -716,6 +733,36 @@ class CurriculumTrainer:
             print(f"Initialized distributed training with {self.world_size} GPUs")
             if self.fsdp:
                 print(f"Using FSDP with sharding strategy: {self.fsdp_sharding_strategy}")
+
+    def _is_stage_completed(self, stage: str) -> bool:
+        """Check if a stage is completed by looking for completion flag in metrics."""
+        metrics_file = os.path.join(
+            self.results_dir, self.model_type, stage, "results", "metrics.json"
+        )
+        
+        if not os.path.exists(metrics_file):
+            return False
+            
+        try:
+            with open(metrics_file, "r") as f:
+                metrics = json.load(f)
+            return metrics.get("completed", False)
+        except:
+            return False
+    
+    def _mark_stage_completed(self, stage: str, metrics: Dict[str, Any]):
+        """Mark a stage as completed by adding completion flag to metrics."""
+        metrics["completed"] = True
+        metrics["completion_epoch"] = metrics.get("epoch", "?")
+        
+        metrics_file = os.path.join(
+            self.results_dir, self.model_type, stage, "results", "metrics.json"
+        )
+        with open(metrics_file, "w") as f:
+            json.dump(metrics, f, indent=2)
+        
+        if self.rank == 0:
+            print(f"✅ Stage {stage} marked as completed")
 
 
 def main():

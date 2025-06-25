@@ -9,7 +9,7 @@ import torch
 from typing import List, Dict, Tuple
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-from model_config import ENCODER_OUTPUT_DIM
+from src.model_config import ENCODER_OUTPUT_DIM
 from model.llm.TimeSeriesLLM import TimeSeriesLLM
 
 

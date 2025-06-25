@@ -2,7 +2,7 @@ from typing import Literal, Optional
 
 from time_series_datasets.util import load_qa_dataset
 from datasets import load_dataset
-from model_config import *
+from src.model_config import *
 
 
 def get_tsqa_dataset(

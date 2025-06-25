@@ -4,7 +4,7 @@ from typing import List, Dict, Tuple
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.nn.utils.rnn import pad_sequence
 
-from model_config import ENCODER_OUTPUT_DIM
+from src.model_config import ENCODER_OUTPUT_DIM
 
 class TimeSeriesLLM(nn.Module):
     def __init__(
