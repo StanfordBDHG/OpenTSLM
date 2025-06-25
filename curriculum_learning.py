@@ -65,17 +65,13 @@ class CurriculumTrainer:
     All datasets are automatically downloaded and processed.
     """
     
-    def __init__(self, model_type: str, device: str = None, fsdp: bool = False, fsdp_use_orig_params: bool = False, fsdp_sharding_strategy: str = "full", precision: str = "fp32", gradient_checkpointing: bool = False, dist_url: str = "env://", dist_backend: str = "nccl", local_rank: int = int(os.environ.get("LOCAL_RANK", 0))):
+    def __init__(self, model_type: str, device: str = None, gradient_checkpointing: bool = False, dist_url: str = "env://", dist_backend: str = "nccl", local_rank: int = int(os.environ.get("LOCAL_RANK", 0))):
         """
         Initialize the curriculum trainer.
         
         Args:
             model_type: Either 'EmbedHealthSP' or 'EmbedHealthFlamingo'
             device: Device to use for training ('cuda', 'mps', or 'cpu')
-            fsdp: Use FullyShardedDataParallel for distributed training
-            fsdp_use_orig_params: Passed into the FSDP constructor. Enables param_groups and gradient masking for weight_decay
-            fsdp_sharding_strategy: FSDP sharding strategy
-            precision: Training precision
             gradient_checkpointing: Enable gradient checkpointing
             dist_url: URL used to set up distributed training
             dist_backend: Distributed backend
@@ -85,10 +81,6 @@ class CurriculumTrainer:
         self.device = device or self._get_device()
         
         # Distributed training parameters
-        self.fsdp = fsdp
-        self.fsdp_use_orig_params = fsdp_use_orig_params
-        self.fsdp_sharding_strategy = fsdp_sharding_strategy
-        self.precision = precision
         self.gradient_checkpointing = gradient_checkpointing
         self.dist_url = dist_url
         self.dist_backend = dist_backend
@@ -97,7 +89,7 @@ class CurriculumTrainer:
         # Initialize distributed training if needed
         self.rank = 0
         self.world_size = 1
-        if fsdp or self._should_use_distributed():
+        if self._should_use_distributed():
             self._init_distributed()
         
         self.model = self._initialize_model()
@@ -136,69 +128,12 @@ class CurriculumTrainer:
         else:
             raise ValueError(f"Unknown model type: {self.model_type}")
         
-        # Wrap with FSDP if requested
-        if self.fsdp and self.model_type == "EmbedHealthFlamingo":
-            model = self._wrap_fsdp(model)
-        elif self.world_size > 1 and not self.fsdp:
-            # Use DDP for multi-GPU training without FSDP
+        # Use DDP for multi-GPU training (simpler and more reliable than FSDP)
+        if self.world_size > 1:
             model = DDP(model, device_ids=[self.local_rank] if torch.cuda.is_available() else None)
+            if self.rank == 0:
+                print(f"Wrapped {self.model_type} with DDP for distributed training")
             
-        return model
-    
-    def _wrap_fsdp(self, model):
-        """Wrap model with FSDP for EmbedHealthFlamingo."""
-        if self.model_type != "EmbedHealthFlamingo":
-            raise ValueError("FSDP is only supported for EmbedHealthFlamingo")
-        
-        # Initialize mixed precision policy
-        if self.precision != "fp32":
-            cast_dtype = self._get_cast_dtype(self.precision)
-            mp_policy = MixedPrecision(
-                param_dtype=torch.float32,
-                reduce_dtype=cast_dtype,
-                buffer_dtype=cast_dtype,
-            )
-        else:
-            mp_policy = None
-        
-        # Use a simpler FSDP configuration that's more compatible
-        # Instead of the complex manual wrapping, use auto-wrap
-        from torch.distributed.fsdp.wrap import (
-            transformer_auto_wrap_policy,
-            size_based_auto_wrap_policy,
-        )
-        
-        # Use transformer auto wrap policy for better compatibility
-        auto_wrap_policy = transformer_auto_wrap_policy(
-            transformer_layer_cls={
-                torch.nn.TransformerEncoderLayer,
-                torch.nn.TransformerDecoderLayer,
-            }
-        )
-        
-        # FSDP wrapper kwargs
-        wrapper_kwargs = dict(
-            process_group=None,  # Use default process group
-            cpu_offload=CPUOffload(offload_params=False),
-            device_id=self.local_rank,
-            sync_module_states=True,
-            sharding_strategy=ShardingStrategy.FULL_SHARD
-            if self.fsdp_sharding_strategy == "full"
-            else ShardingStrategy.HYBRID_SHARD,
-            use_orig_params=self.fsdp_use_orig_params,
-            mixed_precision=mp_policy,
-            forward_prefetch=True,
-            backward_prefetch=BackwardPrefetch.BACKWARD_PRE,
-            limit_all_gathers=True,
-            auto_wrap_policy=auto_wrap_policy,
-        )
-        
-        # Wrap the entire model with FSDP instead of using the complex manual wrapping
-        model = FSDP(model, **wrapper_kwargs)
-        
-        if self.rank == 0:
-            print(f"Wrapped {self.model_type} with FSDP using auto-wrap policy")
-        
         return model
     
     def _get_cast_dtype(self, precision: str):
@@ -235,12 +170,7 @@ class CurriculumTrainer:
             ])
         else:
             # For Flamingo, use grouped parameters
-            # Use FSDP-optimized parameter filtering if using FSDP
-            if self.fsdp:
-                params_to_optimize = self.model.named_parameters()
-            else:
-                params_to_optimize = self.model.named_parameters()
-            
+            params_to_optimize = self.model.named_parameters()
             params_to_optimize = list(
                 filter(
                     lambda x: x[1].requires_grad
@@ -302,20 +232,7 @@ class CurriculumTrainer:
         if dist.is_initialized() and self.rank != 0:
             return
         
-        if self.fsdp and self.model_type == "EmbedHealthFlamingo":
-            # Save FSDP state dict
-            with FSDP.state_dict_type(self.model, StateDictType.FULL_STATE_DICT):
-                model_state = self.model.state_dict()
-            # Save optimizer state with FSDP
-            optim_state = FSDP.optim_state_dict(self.model, optimizer)
-            checkpoint = {
-                "model_state": model_state,
-                "optimizer_state": optim_state,
-                "scheduler_state": scheduler.state_dict(),
-                "val_loss": val_loss,
-                "epoch": epoch,
-            }
-        elif self.model_type == "EmbedHealthSP":
+        if self.model_type == "EmbedHealthSP":
             checkpoint = {
                 "encoder_state": self.model.encoder.state_dict(),
                 "projector_state": self.model.projector.state_dict(),
@@ -349,14 +266,7 @@ class CurriculumTrainer:
         if os.path.exists(checkpoint_path):
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
             
-            if self.fsdp and self.model_type == "EmbedHealthFlamingo":
-                # Load FSDP state dict
-                with FSDP.state_dict_type(self.model, StateDictType.FULL_STATE_DICT):
-                    self.model.load_state_dict(checkpoint["model_state"])
-                # Load optimizer state with FSDP
-                optim_state = FSDP.optim_state_dict_to_load(checkpoint["optimizer_state"], self.model, optimizer)
-                optimizer.load_state_dict(optim_state)
-            elif self.model_type == "EmbedHealthSP":
+            if self.model_type == "EmbedHealthSP":
                 self.model.encoder.load_state_dict(checkpoint["encoder_state"])
                 self.model.projector.load_state_dict(checkpoint["projector_state"])
                 optimizer.load_state_dict(checkpoint["optimizer_state"])
@@ -592,11 +502,8 @@ class CurriculumTrainer:
                 loss = self.model.compute_loss(batch)
                 loss.backward()
                 
-                # Handle gradient clipping for FSDP vs regular training
-                if self.fsdp and self.model_type == "EmbedHealthFlamingo":
-                    self.model.clip_grad_norm_(GRAD_CLIP_NORM)
-                else:
-                    clip_grad_norm_(self.model.parameters(), GRAD_CLIP_NORM)
+                # Handle gradient clipping for distributed training
+                clip_grad_norm_(self.model.parameters(), GRAD_CLIP_NORM)
                 
                 optimizer.step()
                 scheduler.step()
@@ -690,10 +597,6 @@ class CurriculumTrainer:
                 print(f"📦 Batch size: {batch_size}")
             if self.world_size > 1:
                 print(f"🌐 Distributed training with {self.world_size} GPUs")
-                if self.fsdp:
-                    print(f"🔧 Using FSDP with {self.fsdp_sharding_strategy} sharding")
-                else:
-                    print(f"🔧 Using DDP")
             print("=" * 80)
         
         results = {}
@@ -760,8 +663,6 @@ class CurriculumTrainer:
         
         if self.rank == 0:
             print(f"Initialized distributed training with {self.world_size} GPUs")
-            if self.fsdp:
-                print(f"Using FSDP with sharding strategy: {self.fsdp_sharding_strategy}")
 
     def _is_stage_completed(self, stage: str) -> bool:
         """Check if a stage is completed by looking for completion flag in metrics."""
@@ -825,32 +726,6 @@ def main():
     
     # Distributed training arguments
     parser.add_argument(
-        "--fsdp", 
-        default=False, 
-        action="store_true",
-        help="Use FullyShardedDataParallel for distributed training"
-    )
-    parser.add_argument(
-        "--fsdp_use_orig_params", 
-        default=False, 
-        action="store_true",
-        help="Passed into the FSDP constructor. Enables param_groups and gradient masking for weight_decay"
-    )
-    parser.add_argument(
-        "--fsdp_sharding_strategy", 
-        default="full", 
-        type=str, 
-        choices=["full", "hybrid"],
-        help="FSDP sharding strategy"
-    )
-    parser.add_argument(
-        "--precision", 
-        default="fp32", 
-        type=str, 
-        choices=["fp32", "fp16", "bf16"],
-        help="Training precision"
-    )
-    parser.add_argument(
         "--gradient_checkpointing", 
         default=False, 
         action="store_true",
@@ -881,10 +756,6 @@ def main():
     trainer = CurriculumTrainer(
         args.model, 
         args.device, 
-        fsdp=args.fsdp,
-        fsdp_use_orig_params=args.fsdp_use_orig_params,
-        fsdp_sharding_strategy=args.fsdp_sharding_strategy,
-        precision=args.precision,
         gradient_checkpointing=args.gradient_checkpointing,
         dist_url=args.dist_url,
         dist_backend=args.dist_backend,
