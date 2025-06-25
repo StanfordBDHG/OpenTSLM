@@ -65,8 +65,9 @@ class TSQADataset(QADataset):
         stds = series.std(dim=0, keepdim=True)  # shape: (n_series, 1)
         series = (series - means) / (stds + 1e-8)  # broadcasts to (n_series, length)
         # TSQA has always only one time series
-        mean_val = means[0, 0].item()
-        std_val = stds[0, 0].item()
+        # Make tensor indexing more robust
+        mean_val = means.flatten()[0].item()
+        std_val = stds.flatten()[0].item()
         return [TextTimeSeriesPrompt(f"This is the time series, it has mean {mean_val:.4f} and std {std_val:.4f}.", series.tolist())]
 
 
