@@ -16,7 +16,7 @@ from transformers import get_linear_schedule_with_warmup
 from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
 from model.projector.MLPProjector import MLPProjector
-from model_config import (
+from src.model_config import (
     BATCH_SIZE,
     EARLY_STOP_PAT,
     GRAD_CLIP_NORM,

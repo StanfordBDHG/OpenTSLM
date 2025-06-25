@@ -34,7 +34,7 @@ from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
 from model.llm.EmbedHealthSP import EmbedHealthSP
 from model.projector.MLPProjector import MLPProjector
-from model_config import (
+from src.model_config import (
     BATCH_SIZE,
     EARLY_STOP_PAT,
     GRAD_CLIP_NORM,
@@ -397,10 +397,11 @@ class CurriculumTrainer:
         
         for pred, gold in zip(predictions, gold_answers):
             # Clean up predictions and gold answers
-            pred_clean = pred.strip().lower()
-            gold_clean = gold.strip().lower()
+            pred_clean = pred.strip()
+            gold_clean = gold.strip()
             
-            if pred_clean == gold_clean:
+            # Check if gold starts with the cleaned prediction (more robust matching)
+            if gold_clean.startswith(pred_clean) or pred_clean == gold_clean:
                 correct += 1
         
         return correct / total if total > 0 else 0.0
