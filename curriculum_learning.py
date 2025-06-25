@@ -161,6 +161,21 @@ class CurriculumTrainer:
         else:
             mp_policy = None
         
+        # Use a simpler FSDP configuration that's more compatible
+        # Instead of the complex manual wrapping, use auto-wrap
+        from torch.distributed.fsdp.wrap import (
+            transformer_auto_wrap_policy,
+            size_based_auto_wrap_policy,
+        )
+        
+        # Use transformer auto wrap policy for better compatibility
+        auto_wrap_policy = transformer_auto_wrap_policy(
+            transformer_layer_cls={
+                torch.nn.TransformerEncoderLayer,
+                torch.nn.TransformerDecoderLayer,
+            }
+        )
+        
         # FSDP wrapper kwargs
         wrapper_kwargs = dict(
             process_group=None,  # Use default process group
@@ -175,13 +190,14 @@ class CurriculumTrainer:
             forward_prefetch=True,
             backward_prefetch=BackwardPrefetch.BACKWARD_PRE,
             limit_all_gathers=True,
+            auto_wrap_policy=auto_wrap_policy,
         )
         
-        # Wrap the underlying Flamingo model with FSDP
-        model.model.wrap_fsdp(wrapper_kwargs, self.local_rank)
+        # Wrap the entire model with FSDP instead of using the complex manual wrapping
+        model = FSDP(model, **wrapper_kwargs)
         
         if self.rank == 0:
-            print(f"Wrapped {self.model_type} with FSDP")
+            print(f"Wrapped {self.model_type} with FSDP using auto-wrap policy")
         
         return model
     
@@ -219,7 +235,12 @@ class CurriculumTrainer:
             ])
         else:
             # For Flamingo, use grouped parameters
-            params_to_optimize = self.model.named_parameters()
+            # Use FSDP-optimized parameter filtering if using FSDP
+            if self.fsdp:
+                params_to_optimize = self.model.named_parameters()
+            else:
+                params_to_optimize = self.model.named_parameters()
+            
             params_to_optimize = list(
                 filter(
                     lambda x: x[1].requires_grad
