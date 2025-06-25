@@ -55,6 +55,14 @@ class CurriculumTrainer:
     """
     Curriculum learning trainer for EmbedHealth models.
     Trains models stage by stage with shared training logic.
+    While this may look like a lot of code, it's actually quite simple and modular.
+    We simply train either EmbedHealthSP or EmbedHealthFlamingo, both using the same training loop.
+    We train across different stages:
+    - stage1_mcq: Trains the model on a time-series MCQ dataset (TSQA)
+    - stage2_captioning: Trains the model on a time-series captioning dataset (M4 time series captioning)
+
+    If you run this script, you should be able to reproduce our results from the paper.
+    All datasets are automatically downloaded and processed.
     """
     
     def __init__(self, model_type: str, device: str = None, fsdp: bool = False, fsdp_use_orig_params: bool = False, fsdp_sharding_strategy: str = "full", precision: str = "fp32", gradient_checkpointing: bool = False, dist_url: str = "env://", dist_backend: str = "nccl", local_rank: int = int(os.environ.get("LOCAL_RANK", 0))):
@@ -169,8 +177,8 @@ class CurriculumTrainer:
             limit_all_gathers=True,
         )
         
-        # Wrap the model with FSDP
-        model.wrap_fsdp(wrapper_kwargs, self.local_rank)
+        # Wrap the underlying Flamingo model with FSDP
+        model.model.wrap_fsdp(wrapper_kwargs, self.local_rank)
         
         if self.rank == 0:
             print(f"Wrapped {self.model_type} with FSDP")
