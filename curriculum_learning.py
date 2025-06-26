@@ -670,7 +670,16 @@ class CurriculumTrainer:
             print(f"   Best validation loss: {best_val_loss:.4f}")
             print(f"   Epochs without improvement: {epochs_no_improve}")
         
+        # Synchronize all ranks before moving to evaluation
+        if dist.is_initialized():
+            dist.barrier()
+        
         metrics = self._evaluate_stage(stage_name, test_loader, stage_name, metric_func, best_epoch)
+        
+        # Synchronize all ranks after evaluation before moving to next stage
+        if dist.is_initialized():
+            dist.barrier()
+            
         return metrics
     
     def stage1_mcq(self, batch_size: int = None) -> Dict[str, Any]:
@@ -742,6 +751,10 @@ class CurriculumTrainer:
         
         # Run only incomplete stages
         for stage in incomplete_stages:
+            # Synchronize all ranks before starting each stage
+            if dist.is_initialized():
+                dist.barrier()
+                
             if stage == "stage1_mcq":
                 stage_results = self.stage1_mcq(batch_size=batch_size)
                 results[stage] = stage_results
@@ -753,6 +766,10 @@ class CurriculumTrainer:
             else:
                 if self.rank == 0:
                     print(f"⚠️  Unknown stage: {stage}, skipping...")
+            
+            # Synchronize all ranks after completing each stage
+            if dist.is_initialized():
+                dist.barrier()
         
         # Save overall results only on rank 0
         if self.rank == 0:
