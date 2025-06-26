@@ -34,6 +34,8 @@ from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
 from model.llm.EmbedHealthSP import EmbedHealthSP
 from model.projector.MLPProjector import MLPProjector
+import datetime
+
 from src.model_config import (
     BATCH_SIZE,
     EARLY_STOP_PAT,
@@ -811,7 +813,8 @@ class CurriculumTrainer:
             backend=self.dist_backend,
             init_method=self.dist_url,
             world_size=self.world_size,
-            rank=self.rank
+            rank=self.rank,
+            timeout=datetime.timedelta(minutes=30),
         )
         
         # Set device for this process
