@@ -288,12 +288,30 @@ class CurriculumTrainer:
                 self.model.projector.load_state_dict(checkpoint["projector_state"])
                 optimizer.load_state_dict(checkpoint["optimizer_state"])
             else:
-                # Handle DDP or single GPU case
+                # Handle DDP or single GPU case for EmbedHealthFlamingo
                 model_state = checkpoint["model_state"]
                 if hasattr(self.model, 'module'):
                     # Add 'module.' prefix for DDP
                     model_state = {f'module.{k}': v for k, v in model_state.items()}
-                self.model.load_state_dict(model_state)
+                
+                # Load state dict with strict=False to handle missing keys
+                try:
+                    missing_keys, unexpected_keys = self.model.load_state_dict(model_state, strict=False)
+                    if missing_keys and self.rank == 0:
+                        print(f"⚠️  Warning: Missing keys when loading checkpoint for {stage}:")
+                        for key in missing_keys[:10]:  # Show first 10 missing keys
+                            print(f"   - {key}")
+                        if len(missing_keys) > 10:
+                            print(f"   ... and {len(missing_keys) - 10} more keys")
+                    if unexpected_keys and self.rank == 0:
+                        print(f"⚠️  Warning: Unexpected keys when loading checkpoint for {stage}:")
+                        for key in unexpected_keys[:10]:  # Show first 10 unexpected keys
+                            print(f"   - {key}")
+                        if len(unexpected_keys) > 10:
+                            print(f"   ... and {len(unexpected_keys) - 10} more keys")
+                except Exception as e:
+                    raise RuntimeError(f"Failed to load model state from checkpoint for {stage}: {e}")
+                
                 optimizer.load_state_dict(checkpoint["optimizer_state"])
             
             scheduler.load_state_dict(checkpoint["scheduler_state"])
@@ -334,8 +352,31 @@ class CurriculumTrainer:
                 self.model.encoder.load_state_dict(checkpoint["encoder_state"])
                 self.model.projector.load_state_dict(checkpoint["projector_state"])
             else:
-                self.model.load_state_dict(checkpoint["model_state"])
-            
+                # Handle EmbedHealthFlamingo with graceful loading
+                model_state = checkpoint["model_state"]
+                if hasattr(self.model, 'module'):
+                    # Add 'module.' prefix for DDP
+                    model_state = {f'module.{k}': v for k, v in model_state.items()}
+                
+                # Load state dict with strict=False to handle missing keys
+                try:
+                    missing_keys, unexpected_keys = self.model.load_state_dict(model_state, strict=False)
+                    if missing_keys and self.rank == 0:
+                        print(f"⚠️  Warning: Missing keys when loading previous stage {previous_stage}:")
+                        for key in missing_keys[:5]:  # Show first 5 missing keys
+                            print(f"   - {key}")
+                        if len(missing_keys) > 5:
+                            print(f"   ... and {len(missing_keys) - 5} more keys")
+                        print(f"   This is normal when transitioning between stages with different model configurations.")
+                    if unexpected_keys and self.rank == 0:
+                        print(f"⚠️  Warning: Unexpected keys when loading previous stage {previous_stage}:")
+                        for key in unexpected_keys[:5]:  # Show first 5 unexpected keys
+                            print(f"   - {key}")
+                        if len(unexpected_keys) > 5:
+                            print(f"   ... and {len(unexpected_keys) - 5} more keys")
+                except Exception as e:
+                    raise RuntimeError(f"Failed to load model state from previous stage {previous_stage}: {e}")
+                
             return {
                 "stage": previous_stage,
                 "metrics": metrics,
@@ -516,6 +557,9 @@ class CurriculumTrainer:
         best_epoch, best_val_loss = self._load_checkpoint(stage_name, optimizer, scheduler)
         if best_epoch is not None:
             print(f"📂 Resuming {stage_name} from epoch {best_epoch} (val_loss: {best_val_loss:.4f})")
+        else:
+            print(f"🆕 Starting fresh training for {stage_name}")
+            best_val_loss = float("inf")  # Ensure proper initialization
         
         # Training loop
         epochs_no_improve = 0
@@ -561,7 +605,8 @@ class CurriculumTrainer:
             
             avg_val_loss = val_loss / len(val_loader)
             if self.rank == 0:
-                tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}\n")
+                tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}")
+                tqdm.write(f"Epoch {epoch} — best  loss: {best_val_loss:.4f}")
             
             # Early stopping
             if avg_val_loss + 1e-4 < best_val_loss:
@@ -573,16 +618,23 @@ class CurriculumTrainer:
             else:
                 epochs_no_improve += 1
                 if self.rank == 0:
-                    tqdm.write(f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs.")
+                    tqdm.write(f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs.\n")
                 if epochs_no_improve >= EARLY_STOP_PAT:
                     if self.rank == 0:
-                        tqdm.write("\nEarly stopping triggered.")
+                        tqdm.write(f"\nEarly stopping triggered after {epoch} epochs.")
+                        tqdm.write(f"Final stats: best_val_loss={best_val_loss:.4f}, epochs_no_improve={epochs_no_improve}")
                     break
         
         # Load best model and evaluate
         best_epoch, _ = self._load_checkpoint(stage_name, optimizer, scheduler)
         if best_epoch is not None:
             print(f"📂 Loaded best checkpoint from epoch {best_epoch} for evaluation.")
+        
+        if self.rank == 0:
+            print(f"🏁 Training completed for {stage_name}")
+            print(f"   Total epochs run: {epoch}")
+            print(f"   Best validation loss: {best_val_loss:.4f}")
+            print(f"   Epochs without improvement: {epochs_no_improve}")
         
         metrics = self._evaluate_stage(stage_name, test_loader, stage_name, metric_func, best_epoch)
         return metrics

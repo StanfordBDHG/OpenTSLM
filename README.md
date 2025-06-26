@@ -36,11 +36,6 @@ EmbedHealth uses the Llama 3.2 1B model, which is stored in a Hugging Face repos
    - Generate a new token with `read` scope.
    - Copy the token for CLI login.
 
-4. **Download the Model**  
-   ```bash
-   python scripts/download_model.py --model llama-3.2-1b
-   ```
-
 ## Multi-stage training (Curriculum)
 
 EmbedHealth uses curriculum learning with progressive training stages:
