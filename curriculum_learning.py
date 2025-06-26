@@ -162,10 +162,13 @@ class CurriculumTrainer:
     
     def _get_optimizer(self, batch_size: int = None, lr_encoder: float = None, lr_projector: float = None, lr_base: float = None):
         """Get optimizer for the model with configurable learning rates."""
+        # Get the underlying model (handles DDP wrapping)
+        model = self._get_model()
+        
         if self.model_type == "EmbedHealthSP":
             # Parameter groups with different learning rates for SP
-            enc_params = list(self.model.encoder.parameters())
-            proj_params = list(self.model.projector.projector.parameters())
+            enc_params = list(model.encoder.parameters())
+            proj_params = list(model.projector.projector.parameters())
             
             # Use provided learning rates or defaults
             encoder_lr = lr_encoder if lr_encoder is not None else LR_ENCODER
@@ -182,7 +185,7 @@ class CurriculumTrainer:
             ])
         else:
             # For Flamingo, use grouped parameters
-            params_to_optimize = self.model.named_parameters()
+            params_to_optimize = model.named_parameters()
             params_to_optimize = list(
                 filter(
                     lambda x: x[1].requires_grad
