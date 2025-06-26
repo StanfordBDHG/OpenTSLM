@@ -498,9 +498,16 @@ class CurriculumTrainer:
             if previous_stage_info:
                 print(f"📂 Loading best model from {previous_stage_info['stage']}:")
                 print(f"   Achieved at epoch: {previous_stage_info['epoch']}")
-                print(f"   Validation loss: {previous_stage_info['val_loss']:.4f}")
+                val_loss = previous_stage_info['val_loss']
+                if isinstance(val_loss, (int, float)):
+                    print(f"   Validation loss: {val_loss:.4f}")
+                else:
+                    print(f"   Validation loss: {val_loss}")
                 for metric, value in previous_stage_info['metrics'].items():
-                    print(f"   {metric}: {value:.4f}")
+                    if isinstance(value, (int, float)):
+                        print(f"   {metric}: {value:.4f}")
+                    else:
+                        print(f"   {metric}: {value}")
                 print()
             else:
                 # Only allow fresh model for first stage
@@ -885,7 +892,10 @@ def main():
     for stage, metrics in results.items():
         print(f"\n{stage.upper()}:")
         for metric, value in metrics.items():
-            print(f"  {metric}: {value:.4f}")
+            if isinstance(value, (int, float)):
+                print(f"  {metric}: {value:.4f}")
+            else:
+                print(f"  {metric}: {value}")
 
 
 if __name__ == "__main__":
