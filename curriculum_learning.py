@@ -496,27 +496,30 @@ class CurriculumTrainer:
         try:
             previous_stage_info = self._load_previous_stage_model(stage_name)
             if previous_stage_info:
-                print(f"📂 Loading best model from {previous_stage_info['stage']}:")
-                print(f"   Achieved at epoch: {previous_stage_info['epoch']}")
-                val_loss = previous_stage_info['val_loss']
-                if isinstance(val_loss, (int, float)):
-                    print(f"   Validation loss: {val_loss:.4f}")
-                else:
-                    print(f"   Validation loss: {val_loss}")
-                for metric, value in previous_stage_info['metrics'].items():
-                    if isinstance(value, (int, float)):
-                        print(f"   {metric}: {value:.4f}")
+                if self.rank == 0:
+                    print(f"📂 Loading best model from {previous_stage_info['stage']}:")
+                    print(f"   Achieved at epoch: {previous_stage_info['epoch']}")
+                    val_loss = previous_stage_info['val_loss']
+                    if isinstance(val_loss, (int, float)):
+                        print(f"   Validation loss: {val_loss:.4f}")
                     else:
-                        print(f"   {metric}: {value}")
-                print()
+                        print(f"   Validation loss: {val_loss}")
+                    for metric, value in previous_stage_info['metrics'].items():
+                        if isinstance(value, (int, float)):
+                            print(f"   {metric}: {value:.4f}")
+                        else:
+                            print(f"   {metric}: {value}")
+                    print()
             else:
                 # Only allow fresh model for first stage
                 if stage_name != CURRICULUM_STAGES[0]:
                     raise RuntimeError(f"Cannot start {stage_name} with fresh model. Previous stage {CURRICULUM_STAGES[CURRICULUM_STAGES.index(stage_name) - 1]} must be completed first.")
-                print("🆕 Starting with fresh model (first stage)")
-                print()
+                if self.rank == 0:
+                    print("🆕 Starting with fresh model (first stage)")
+                    print()
         except Exception as e:
-            print(f"❌ Error loading previous stage: {e}")
+            if self.rank == 0:
+                print(f"❌ Error loading previous stage: {e}")
             raise Exception(f"Error loading previous stage: {e}")
         
         # Initialize optimizer and scheduler
@@ -611,12 +614,25 @@ class CurriculumTrainer:
                     val_loss += self._get_model().compute_loss(batch).item()
             
             avg_val_loss = val_loss / len(val_loader)
+            
+            # Synchronize validation loss across all ranks
+            if dist.is_initialized():
+                val_loss_tensor = torch.tensor(avg_val_loss, device=self.device)
+                dist.all_reduce(val_loss_tensor, op=dist.ReduceOp.SUM)
+                avg_val_loss = val_loss_tensor.item() / self.world_size
+            
             if self.rank == 0:
                 tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}")
                 tqdm.write(f"Epoch {epoch} — best  loss: {best_val_loss:.4f}")
             
-            # Early stopping
-            if avg_val_loss + 1e-4 < best_val_loss:
+            # Early stopping - all ranks need to make the same decision
+            should_save = avg_val_loss + 1e-4 < best_val_loss
+            if dist.is_initialized():
+                save_tensor = torch.tensor(1 if should_save else 0, device=self.device)
+                dist.all_reduce(save_tensor, op=dist.ReduceOp.SUM)
+                should_save = save_tensor.item() > 0  # If any rank thinks we should save, we save
+            
+            if should_save:
                 best_val_loss = avg_val_loss
                 epochs_no_improve = 0
                 self._save_checkpoint(stage_name, epoch, avg_val_loss, optimizer, scheduler)
@@ -626,11 +642,22 @@ class CurriculumTrainer:
                 epochs_no_improve += 1
                 if self.rank == 0:
                     tqdm.write(f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs.\n")
+                
+                # Synchronize early stopping decision across all ranks
                 if epochs_no_improve >= EARLY_STOP_PAT:
                     if self.rank == 0:
                         tqdm.write(f"\nEarly stopping triggered after {epoch} epochs.")
                         tqdm.write(f"Final stats: best_val_loss={best_val_loss:.4f}, epochs_no_improve={epochs_no_improve}")
                     break
+            
+            # Synchronize best_val_loss and epochs_no_improve across all ranks
+            if dist.is_initialized():
+                best_loss_tensor = torch.tensor(best_val_loss, device=self.device)
+                epochs_tensor = torch.tensor(epochs_no_improve, device=self.device)
+                dist.broadcast(best_loss_tensor, src=0)
+                dist.broadcast(epochs_tensor, src=0)
+                best_val_loss = best_loss_tensor.item()
+                epochs_no_improve = int(epochs_tensor.item())
         
         # Load best model and evaluate
         best_epoch, _ = self._load_checkpoint(stage_name, optimizer, scheduler)
