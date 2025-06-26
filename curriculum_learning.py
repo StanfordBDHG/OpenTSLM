@@ -55,7 +55,7 @@ class CurriculumTrainer:
     """
     Curriculum learning trainer for EmbedHealth models.
     Trains models stage by stage with shared training logic.
-    While this may look like a lot of code, it's actually quite simple and modular.
+    While this may look like a lot of code, it's actually quite modular.
     We simply train either EmbedHealthSP or EmbedHealthFlamingo, both using the same training loop.
     We train across different stages:
     - stage1_mcq: Trains the model on a time-series MCQ dataset (TSQA)
@@ -408,6 +408,8 @@ class CurriculumTrainer:
         """Evaluate model on test set for a specific stage."""
         # Only evaluate on rank 0 for distributed training
         if dist.is_initialized() and self.rank != 0:
+            # Other ranks wait for evaluation to complete
+            dist.barrier()
             return {"test_loss": 0.0}
         
         self.model.eval()
@@ -466,7 +468,14 @@ class CurriculumTrainer:
             print(f"   Test predictions saved to: {results_file}")
             print(f"   Metrics saved to: {metrics_file}")
             for metric, value in metrics.items():
-                print(f"   {metric}: {value:.4f}")
+                if isinstance(value, (int, float)):
+                    print(f"   {metric}: {value:.4f}")
+                else:
+                    print(f"   {metric}: {value}")
+        
+        # Signal other ranks that evaluation is complete
+        if dist.is_initialized():
+            dist.barrier()
         
         return metrics
     
@@ -662,7 +671,8 @@ class CurriculumTrainer:
         # Load best model and evaluate
         best_epoch, _ = self._load_checkpoint(stage_name, optimizer, scheduler)
         if best_epoch is not None:
-            print(f"📂 Loaded best checkpoint from epoch {best_epoch} for evaluation.")
+            if self.rank == 0:
+                print(f"📂 Loaded best checkpoint from epoch {best_epoch} for evaluation.")
         
         if self.rank == 0:
             print(f"🏁 Training completed for {stage_name}")
@@ -670,16 +680,8 @@ class CurriculumTrainer:
             print(f"   Best validation loss: {best_val_loss:.4f}")
             print(f"   Epochs without improvement: {epochs_no_improve}")
         
-        # Synchronize all ranks before moving to evaluation
-        if dist.is_initialized():
-            dist.barrier()
-        
         metrics = self._evaluate_stage(stage_name, test_loader, stage_name, metric_func, best_epoch)
         
-        # Synchronize all ranks after evaluation before moving to next stage
-        if dist.is_initialized():
-            dist.barrier()
-            
         return metrics
     
     def stage1_mcq(self, batch_size: int = None) -> Dict[str, Any]:
