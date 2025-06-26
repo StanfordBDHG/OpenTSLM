@@ -158,15 +158,25 @@ class CurriculumTrainer:
             os.makedirs(os.path.join(stage_dir, "checkpoints"), exist_ok=True)
             os.makedirs(os.path.join(stage_dir, "results"), exist_ok=True)
     
-    def _get_optimizer(self):
-        """Get optimizer for the model."""
+    def _get_optimizer(self, batch_size: int = None, lr_encoder: float = None, lr_projector: float = None, lr_base: float = None):
+        """Get optimizer for the model with configurable learning rates."""
         if self.model_type == "EmbedHealthSP":
             # Parameter groups with different learning rates for SP
             enc_params = list(self.model.encoder.parameters())
             proj_params = list(self.model.projector.projector.parameters())
+            
+            # Use provided learning rates or defaults
+            encoder_lr = lr_encoder if lr_encoder is not None else LR_ENCODER
+            projector_lr = lr_projector if lr_projector is not None else LR_PROJECTOR
+            
+            if self.rank == 0:
+                print(f"📊 Learning rates for {self.model_type}:")
+                print(f"   Encoder LR: {encoder_lr:.2e}")
+                print(f"   Projector LR: {projector_lr:.2e}")
+            
             return AdamW([
-                {"params": enc_params, "lr": LR_ENCODER, "weight_decay": WEIGHT_DECAY},
-                {"params": proj_params, "lr": LR_PROJECTOR, "weight_decay": WEIGHT_DECAY},
+                {"params": enc_params, "lr": encoder_lr, "weight_decay": WEIGHT_DECAY},
+                {"params": proj_params, "lr": projector_lr, "weight_decay": WEIGHT_DECAY},
             ])
         else:
             # For Flamingo, use grouped parameters
@@ -187,10 +197,17 @@ class CurriculumTrainer:
                 else:
                     params_without_wd.append(p)
             
+            # Use provided base learning rate or default
+            base_lr = lr_base if lr_base is not None else 2e-4
+            
+            if self.rank == 0:
+                print(f"📊 Learning rate for {self.model_type}:")
+                print(f"   Base LR: {base_lr:.2e}")
+            
             return torch.optim.AdamW([
                 {"params": params_with_wd, "weight_decay": 0.1},
                 {"params": params_without_wd, "weight_decay": 0.0},
-            ], lr=2e-4)
+            ], lr=base_lr)
     
     def _merge_data_loaders(
         self, datasets: List[Dataset], shuffle: bool, batch_size: int, patch_size: int, distribute_data: bool = False
@@ -412,7 +429,8 @@ class CurriculumTrainer:
         
         return metrics
     
-    def _train_stage(self, stage: str, stage_name: str, dataset_class, 
+    def _train_stage(self, stage_name: str, dataset_class, num_epochs: int, 
+                    lr_encoder: float, lr_projector: float, lr_base: float, 
                     metric_func: Callable = None, batch_size: int = None) -> Dict[str, Any]:
         """Generic training function for any stage."""
         # Use provided batch_size or default to global BATCH_SIZE
@@ -421,10 +439,21 @@ class CurriculumTrainer:
             
         print(f"\n🚀 Starting {stage_name} Training with {self.model_type}")
         print("=" * 60)
+        print(f"📊 Stage Configuration:")
+        print(f"   Epochs: {num_epochs}")
+        if self.model_type == "EmbedHealthSP":
+            print(f"   Encoder LR: {lr_encoder:.2e}")
+            print(f"   Projector LR: {lr_projector:.2e}")
+        else:
+            print(f"   Base LR: {lr_base:.2e}")
+        print(f"   Batch size per GPU: {batch_size}")
+        if self.world_size > 1:
+            print(f"   Effective batch size: {batch_size * self.world_size}")
+        print()
         
         # Load previous stage model and display metrics
         try:
-            previous_stage_info = self._load_previous_stage_model(stage)
+            previous_stage_info = self._load_previous_stage_model(stage_name)
             if previous_stage_info:
                 print(f"📂 Loading best model from {previous_stage_info['stage']}:")
                 print(f"   Achieved at epoch: {previous_stage_info['epoch']}")
@@ -434,8 +463,8 @@ class CurriculumTrainer:
                 print()
             else:
                 # Only allow fresh model for first stage
-                if stage != CURRICULUM_STAGES[0]:
-                    raise RuntimeError(f"Cannot start {stage} with fresh model. Previous stage {CURRICULUM_STAGES[CURRICULUM_STAGES.index(stage) - 1]} must be completed first.")
+                if stage_name != CURRICULUM_STAGES[0]:
+                    raise RuntimeError(f"Cannot start {stage_name} with fresh model. Previous stage {CURRICULUM_STAGES[CURRICULUM_STAGES.index(stage_name) - 1]} must be completed first.")
                 print("🆕 Starting with fresh model (first stage)")
                 print()
         except Exception as e:
@@ -443,7 +472,7 @@ class CurriculumTrainer:
             raise Exception(f"Error loading previous stage: {e}")
         
         # Initialize optimizer and scheduler
-        optimizer = self._get_optimizer()
+        optimizer = self._get_optimizer(batch_size, lr_encoder, lr_projector, lr_base)
         
         # Create data loaders
         train_loader = self._merge_data_loaders(
@@ -471,7 +500,7 @@ class CurriculumTrainer:
         )
         
         # Scheduler
-        total_steps = NUM_EPOCHS * len(train_loader)
+        total_steps = num_epochs * len(train_loader)
         warmup_steps = int(WARMUP_FRAC * total_steps)
         scheduler = get_linear_schedule_with_warmup(
             optimizer,
@@ -479,15 +508,19 @@ class CurriculumTrainer:
             num_training_steps=total_steps,
         )
         
+        if self.rank == 0:
+            print(f"📈 Total training steps: {total_steps}")
+            print(f"🔥 Warmup steps: {warmup_steps}")
+        
         # Load previous checkpoint if exists (for resuming current stage)
-        best_epoch, best_val_loss = self._load_checkpoint(stage, optimizer, scheduler)
+        best_epoch, best_val_loss = self._load_checkpoint(stage_name, optimizer, scheduler)
         if best_epoch is not None:
-            print(f"📂 Resuming {stage} from epoch {best_epoch} (val_loss: {best_val_loss:.4f})")
+            print(f"📂 Resuming {stage_name} from epoch {best_epoch} (val_loss: {best_val_loss:.4f})")
         
         # Training loop
         epochs_no_improve = 0
         
-        for epoch in range(1, NUM_EPOCHS + 1):
+        for epoch in range(1, num_epochs + 1):
             # Set epoch for distributed sampler
             if hasattr(train_loader.sampler, 'set_epoch'):
                 train_loader.sampler.set_epoch(epoch)
@@ -495,7 +528,7 @@ class CurriculumTrainer:
             # Training
             self.model.train()
             running_loss = 0.0
-            prog = tqdm(train_loader, desc=f"Epoch {epoch}/{NUM_EPOCHS}", disable=self.rank != 0)
+            prog = tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs}", disable=self.rank != 0)
             
             for batch in prog:
                 optimizer.zero_grad()
@@ -534,7 +567,7 @@ class CurriculumTrainer:
             if avg_val_loss + 1e-4 < best_val_loss:
                 best_val_loss = avg_val_loss
                 epochs_no_improve = 0
-                self._save_checkpoint(stage, epoch, avg_val_loss, optimizer, scheduler)
+                self._save_checkpoint(stage_name, epoch, avg_val_loss, optimizer, scheduler)
                 if self.rank == 0:
                     tqdm.write("✔️  New best model saved.\n")
             else:
@@ -547,29 +580,49 @@ class CurriculumTrainer:
                     break
         
         # Load best model and evaluate
-        best_epoch, _ = self._load_checkpoint(stage, optimizer, scheduler)
+        best_epoch, _ = self._load_checkpoint(stage_name, optimizer, scheduler)
         if best_epoch is not None:
             print(f"📂 Loaded best checkpoint from epoch {best_epoch} for evaluation.")
         
-        metrics = self._evaluate_stage(stage, test_loader, stage_name, metric_func, best_epoch)
+        metrics = self._evaluate_stage(stage_name, test_loader, stage_name, metric_func, best_epoch)
         return metrics
     
     def stage1_mcq(self, batch_size: int = None) -> Dict[str, Any]:
-        """Stage 1: Multiple Choice Question Answering (TSQA)."""
+        """Stage 1: Multiple Choice Question Answering (TSQA).
+        
+        Configuration:
+        - Epochs: 20
+        - EmbedHealthSP: encoder_lr=2e-4, projector_lr=1e-4
+        - EmbedHealthFlamingo: base_lr=2e-4
+        - Metric: Accuracy
+        """
         return self._train_stage(
-            stage="stage1_mcq",
-            stage_name="MCQ (TSQA)",
+            stage_name="stage1_mcq",
             dataset_class=TSQADataset,
+            num_epochs=20,
+            lr_encoder=2e-4,
+            lr_projector=1e-4,
+            lr_base=2e-4,
             metric_func=lambda preds, golds: {"accuracy": self._calculate_accuracy(preds, golds)},
             batch_size=batch_size
         )
     
     def stage2_captioning(self, batch_size: int = None) -> Dict[str, Any]:
-        """Stage 2: Caption Generation (M4)."""
+        """Stage 2: Caption Generation (M4).
+        
+        Configuration:
+        - Epochs: 15
+        - EmbedHealthSP: encoder_lr=1e-4, projector_lr=5e-5 (lower for fine-tuning)
+        - EmbedHealthFlamingo: base_lr=1e-4 (lower for fine-tuning)
+        - Metric: Test loss only
+        """
         return self._train_stage(
-            stage="stage2_captioning",
-            stage_name="Captioning (M4)",
+            stage_name="stage2_captioning",
             dataset_class=M4QADataset,
+            num_epochs=15,
+            lr_encoder=1e-4,
+            lr_projector=5e-5,
+            lr_base=1e-4,
             metric_func=None,  # Only test loss for captioning
             batch_size=batch_size
         )
@@ -769,7 +822,10 @@ def main():
     )
     
     # Run curriculum
-    results = trainer.run_curriculum(args.stages, args.batch_size)
+    results = trainer.run_curriculum(
+        args.stages, 
+        args.batch_size
+    )
     
     # Print summary
     print("\n📈 Final Results Summary:")

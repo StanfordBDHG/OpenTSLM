@@ -13,6 +13,13 @@ echo "Model: $MODEL"
 echo "GPUs: $NUM_GPUS"
 echo "Batch size per GPU: $BATCH_SIZE"
 echo "Stages: $STAGES"
+echo ""
+echo "📊 Training Configuration:"
+echo "   Effective batch size: $((BATCH_SIZE * NUM_GPUS))"
+echo "   Learning rates and epochs are defined per stage in the code"
+echo "   Stage 1 (MCQ): 20 epochs, LR varies by model"
+echo "   Stage 2 (Captioning): 15 epochs, LR varies by model"
+echo ""
 
 # Check if CUDA is available
 if ! command -v nvidia-smi &> /dev/null; then
@@ -35,4 +42,9 @@ torchrun --nnodes=1 --nproc_per_node=$NUM_GPUS curriculum_learning.py \
     --gradient_checkpointing
 
 echo "✅ DDP training completed!"
-echo "🎉 All training completed!" 
+echo "🎉 All training completed!"
+echo ""
+echo "💡 Tips for tuning:"
+echo "   - Learning rates and epochs are defined in STAGE_CONFIGS in curriculum_learning.py"
+echo "   - For larger effective batch sizes, you may need to increase learning rates"
+echo "   - Edit the STAGE_CONFIGS dictionary to adjust per-stage settings" 
