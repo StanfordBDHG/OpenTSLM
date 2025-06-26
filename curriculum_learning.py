@@ -254,18 +254,21 @@ class CurriculumTrainer:
         if dist.is_initialized() and self.rank != 0:
             return
         
+        # Get the underlying model (handles DDP wrapping)
+        model = self._get_model()
+        
         if self.model_type == "EmbedHealthSP":
             checkpoint = {
-                "encoder_state": self.model.encoder.state_dict(),
-                "projector_state": self.model.projector.state_dict(),
+                "encoder_state": model.encoder.state_dict(),
+                "projector_state": model.projector.state_dict(),
                 "optimizer_state": optimizer.state_dict(),
                 "scheduler_state": scheduler.state_dict(),
                 "val_loss": val_loss,
                 "epoch": epoch,
             }
         else:
-            # Handle DDP or single GPU case
-            model_state = self.model.state_dict()
+            # Handle DDP or single GPU case for EmbedHealthFlamingo
+            model_state = model.state_dict()
             if hasattr(self.model, 'module'):
                 # Remove 'module.' prefix for DDP
                 model_state = {k.replace('module.', ''): v for k, v in model_state.items()}
@@ -288,9 +291,12 @@ class CurriculumTrainer:
         if os.path.exists(checkpoint_path):
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
             
+            # Get the underlying model (handles DDP wrapping)
+            model = self._get_model()
+            
             if self.model_type == "EmbedHealthSP":
-                self.model.encoder.load_state_dict(checkpoint["encoder_state"])
-                self.model.projector.load_state_dict(checkpoint["projector_state"])
+                model.encoder.load_state_dict(checkpoint["encoder_state"])
+                model.projector.load_state_dict(checkpoint["projector_state"])
                 optimizer.load_state_dict(checkpoint["optimizer_state"])
             else:
                 # Handle DDP or single GPU case for EmbedHealthFlamingo
@@ -353,9 +359,12 @@ class CurriculumTrainer:
             
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
             
+            # Get the underlying model (handles DDP wrapping)
+            model = self._get_model()
+            
             if self.model_type == "EmbedHealthSP":
-                self.model.encoder.load_state_dict(checkpoint["encoder_state"])
-                self.model.projector.load_state_dict(checkpoint["projector_state"])
+                model.encoder.load_state_dict(checkpoint["encoder_state"])
+                model.projector.load_state_dict(checkpoint["projector_state"])
             else:
                 # Handle EmbedHealthFlamingo with graceful loading
                 model_state = checkpoint["model_state"]
@@ -604,7 +613,7 @@ class CurriculumTrainer:
                 loss.backward()
                 
                 # Handle gradient clipping for distributed training
-                clip_grad_norm_(self.model.parameters(), GRAD_CLIP_NORM)
+                clip_grad_norm_(self._get_model().parameters(), GRAD_CLIP_NORM)
                 
                 optimizer.step()
                 scheduler.step()
