@@ -789,9 +789,9 @@ class CurriculumTrainer:
             stage_name="stage2_captioning",
             dataset_class=M4QADataset,
             num_epochs=60,
-            lr_encoder=1e-4,
-            lr_projector=5e-5,
-            lr_base=1e-4,
+            lr_encoder=2e-4,
+            lr_projector=1e-4,
+            lr_base=2e-4,
             metric_func=None,  # Only test loss for captioning
             batch_size=batch_size
         )
