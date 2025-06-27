@@ -881,7 +881,7 @@ class CurriculumTrainer:
             print(f"Initialized distributed training with {self.world_size} GPUs")
 
     def _is_stage_completed(self, stage: str) -> bool:
-        """Check if a stage is completed by looking for completion flag in metrics."""
+        """Check if a stage is completed by verifying both training and evaluation were successful."""
         metrics_file = os.path.join(
             self.results_dir, self.model_type, stage, "results", "metrics.json"
         )
@@ -892,7 +892,24 @@ class CurriculumTrainer:
         try:
             with open(metrics_file, "r") as f:
                 metrics = json.load(f)
-            return metrics.get("completed", False)
+            
+            # Check if the completion flag exists
+            if not metrics.get("completed", False):
+                return False
+            
+            # Check if evaluation was actually completed by looking for test_loss
+            if "test_loss" not in metrics:
+                return False
+            
+            # Check if test predictions file exists
+            test_predictions_file = os.path.join(
+                self.results_dir, self.model_type, stage, "results", "test_predictions.jsonl"
+            )
+            if not os.path.exists(test_predictions_file):
+                return False
+            
+            return True
+            
         except:
             return False
     
