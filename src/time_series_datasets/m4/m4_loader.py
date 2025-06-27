@@ -25,7 +25,7 @@ from sklearn.model_selection import train_test_split
 # Constants
 # ---------------------------
 
-RELEASE_URL = "https://github.com/StanfordBDHG/M4TimeSeriesCaptionDataset/releases/download/v0.1/M4TimeSeriesCaptionDatasetv01.zip"
+RELEASE_URL = "https://polybox.ethz.ch/index.php/s/QxLJwrWPBSZm8Y5/download/M4TimeSeriesCaptionDatasetv01.zip"
 DATA_DIR = "data/M4TimeSeriesCaptionDataset"
 GENERATED_DATA_DIR = os.path.join(DATA_DIR, "generated")
 
