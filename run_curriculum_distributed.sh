@@ -82,8 +82,8 @@ eval $CMD
 
 echo "✅ DDP training completed!"
 echo "🎉 All training completed!"
-echo ""s
-echo "💡 Tips for tuning:"
+echo ""
+echo "�� Tips for tuning:"
 echo "   - Learning rates and epochs are defined per stage in curriculum_learning.py"
 echo "   - For larger effective batch sizes, you may need to increase learning rates"
 echo "   - MedGemma models are optimized for healthcare applications"

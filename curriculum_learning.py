@@ -67,7 +67,9 @@ class CurriculumTrainer:
     All datasets are automatically downloaded and processed.
     """
     
-    def __init__(self, model_type: str, device: str = None, gradient_checkpointing: bool = False, dist_url: str = "env://", dist_backend: str = "nccl", local_rank: int = int(os.environ.get("LOCAL_RANK", 0))):
+    def __init__(self, model_type: str, device: str = None, gradient_checkpointing: bool = False, 
+                 dist_url: str = "env://", dist_backend: str = "nccl", local_rank: int = int(os.environ.get("LOCAL_RANK", 0)),
+                 llm_id: str = None):
         """
         Initialize the curriculum trainer.
         
@@ -78,9 +80,11 @@ class CurriculumTrainer:
             dist_url: URL used to set up distributed training
             dist_backend: Distributed backend
             local_rank: Local GPU rank
+            llm_id: LLM model ID (e.g., 'google/medgemma-2b', 'meta-llama/Llama-3.2-1B')
         """
         self.model_type = model_type
         self.device = device or self._get_device()
+        self.llm_id = llm_id
         
         # Distributed training parameters
         self.gradient_checkpointing = gradient_checkpointing
@@ -114,6 +118,7 @@ class CurriculumTrainer:
             model = EmbedHealthSP(
                 encoder=encoder, 
                 projector_class=MLPProjector, 
+                llm_id=self.llm_id,
                 device=self.device
             ).to(self.device)
             
@@ -126,6 +131,7 @@ class CurriculumTrainer:
                 device=self.device,
                 cross_attn_every_n_layers=1,
                 gradient_checkpointing=self.gradient_checkpointing,
+                llm_id=self.llm_id,
             ).to(self.device)
         else:
             raise ValueError(f"Unknown model type: {self.model_type}")
@@ -431,7 +437,7 @@ class CurriculumTrainer:
         test_loss = 0.0
         
         # Set higher max_tokens for generation during evaluation
-        max_new_tokens = 200 if stage == "stage2_captioning" else 100
+        max_new_tokens = 300
         
         with torch.no_grad():
             for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
@@ -1015,24 +1021,9 @@ def main():
         gradient_checkpointing=args.gradient_checkpointing,
         dist_url=args.dist_url,
         dist_backend=args.dist_backend,
-        local_rank=args.local_rank
+        local_rank=args.local_rank,
+        llm_id=args.llm_id
     )
-    
-    # Override LLM ID if specified (for EmbedHealthFlamingo)
-    if args.llm_id and args.model == "EmbedHealthFlamingo":
-        # Reinitialize the model with the specified LLM ID
-        from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
-        device = trainer.device
-        trainer.model = EmbedHealthFlamingo(
-            device=device,
-            llm_id=args.llm_id,
-            cross_attn_every_n_layers=1,
-            gradient_checkpointing=args.gradient_checkpointing,
-        ).to(device)
-        trainer.llm = trainer.model
-        
-        if trainer.rank == 0:
-            print(f"🔄 Reinitialized EmbedHealthFlamingo with LLM: {args.llm_id}")
     
     # Run curriculum
     results = trainer.run_curriculum(
