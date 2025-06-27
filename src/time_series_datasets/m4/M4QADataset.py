@@ -92,6 +92,17 @@ class M4QADataset(QADataset):
         text_prompt = f"This is the time series, it has mean {mean:.4f} and std {std:.4f}:"
         return [TextTimeSeriesPrompt(text_prompt, normalized_series.tolist())]
 
+    def _format_sample(self, row):
+        """Override to preserve the time series ID."""
+        # Get the base formatted sample
+        base_sample = super()._format_sample(row)
+        
+        # Add the ID if it exists in the original row
+        if 'id' in row:
+            base_sample['id'] = row['id']
+        
+        return base_sample
+
 
 # ---------------------------
 # Example usage

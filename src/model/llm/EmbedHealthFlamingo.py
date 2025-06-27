@@ -61,6 +61,8 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 "gptneoxforcausallm": "gpt_neox.layers",
                 "mpt": "transformer.blocks",
                 "mosaicgpt": "transformer.blocks",
+                "gemma": "model.layers",
+                "medgemma": "model.layers",
             }
 
             for k in __KNOWN_DECODER_LAYERS_ATTR_NAMES:

@@ -430,14 +430,17 @@ class CurriculumTrainer:
         results = []
         test_loss = 0.0
         
+        # Set higher max_tokens for generation during evaluation
+        max_new_tokens = 200 if stage == "stage2_captioning" else 100
+        
         with torch.no_grad():
             for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
                 # Compute loss
                 loss = self._get_model().compute_loss(batch)
                 test_loss += loss.item()
                 
-                # Generate predictions
-                predictions = self._get_model().generate(batch)
+                # Generate predictions with higher max_tokens
+                predictions = self._get_model().generate(batch, max_new_tokens=max_new_tokens)
                 
                 # Collect results
                 for sample, pred in zip(batch, predictions):
@@ -448,6 +451,11 @@ class CurriculumTrainer:
                         "generated": pred,
                         "gold": sample["answer"],
                     }
+                    
+                    # Add time series ID for stage2 captioning
+                    if stage == "stage2_captioning" and "id" in sample:
+                        result["time_series_id"] = sample["id"]
+                    
                     results.append(result)
         
         avg_test_loss = test_loss / len(test_loader)
@@ -481,6 +489,7 @@ class CurriculumTrainer:
             print(f"✅ {stage_name} evaluation complete:")
             print(f"   Test predictions saved to: {results_file}")
             print(f"   Metrics saved to: {metrics_file}")
+            print(f"   Max tokens used for generation: {max_new_tokens}")
             for metric, value in metrics.items():
                 if isinstance(value, (int, float)):
                     print(f"   {metric}: {value:.4f}")
@@ -639,8 +648,8 @@ class CurriculumTrainer:
         
         # Training loop
         epochs_no_improve = 0
-        
-        for epoch in range(1, num_epochs + 1):
+        start_epoch = best_epoch + 1 if best_epoch is not None else 1
+        for epoch in range(start_epoch, num_epochs + 1):
             # Set epoch for distributed sampler
             if hasattr(train_loader.sampler, 'set_epoch'):
                 train_loader.sampler.set_epoch(epoch)
@@ -963,6 +972,14 @@ def main():
         help="Batch size for training (default: use value from model_config.py)"
     )
     
+    # Model-specific arguments
+    parser.add_argument(
+        "--llm_id", 
+        type=str, 
+        default=None,
+        help="LLM model ID for EmbedHealthFlamingo (e.g., 'google/medgemma-2b', 'meta-llama/Llama-3.2-1B')"
+    )
+    
     # Distributed training arguments
     parser.add_argument(
         "--gradient_checkpointing", 
@@ -1000,6 +1017,22 @@ def main():
         dist_backend=args.dist_backend,
         local_rank=args.local_rank
     )
+    
+    # Override LLM ID if specified (for EmbedHealthFlamingo)
+    if args.llm_id and args.model == "EmbedHealthFlamingo":
+        # Reinitialize the model with the specified LLM ID
+        from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
+        device = trainer.device
+        trainer.model = EmbedHealthFlamingo(
+            device=device,
+            llm_id=args.llm_id,
+            cross_attn_every_n_layers=1,
+            gradient_checkpointing=args.gradient_checkpointing,
+        ).to(device)
+        trainer.llm = trainer.model
+        
+        if trainer.rank == 0:
+            print(f"🔄 Reinitialized EmbedHealthFlamingo with LLM: {args.llm_id}")
     
     # Run curriculum
     results = trainer.run_curriculum(
