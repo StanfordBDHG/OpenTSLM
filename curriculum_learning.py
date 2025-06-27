@@ -493,6 +493,27 @@ class CurriculumTrainer:
         
         return metrics
     
+    def _is_evaluation_completed(self, stage: str) -> bool:
+        """Check if evaluation was completed for a stage by looking for test predictions file."""
+        test_predictions_file = os.path.join(
+            self.results_dir, self.model_type, stage, "results", "test_predictions.jsonl"
+        )
+        metrics_file = os.path.join(
+            self.results_dir, self.model_type, stage, "results", "metrics.json"
+        )
+        
+        # Check if both files exist
+        if not os.path.exists(test_predictions_file) or not os.path.exists(metrics_file):
+            return False
+            
+        # Also check if metrics file has evaluation results
+        try:
+            with open(metrics_file, "r") as f:
+                metrics = json.load(f)
+            return "test_loss" in metrics
+        except:
+            return False
+
     def _train_stage(self, stage_name: str, dataset_class, num_epochs: int, 
                     lr_encoder: float, lr_projector: float, lr_base: float, 
                     metric_func: Callable = None, batch_size: int = None) -> Dict[str, Any]:
@@ -544,6 +565,28 @@ class CurriculumTrainer:
             if self.rank == 0:
                 print(f"❌ Error loading previous stage: {e}")
             raise Exception(f"Error loading previous stage: {e}")
+        
+        # Check if evaluation was already completed
+        evaluation_completed = self._is_evaluation_completed(stage_name)
+        if evaluation_completed and self.rank == 0:
+            print(f"✅ Evaluation already completed for {stage_name}, skipping training and evaluation")
+            print(f"📂 Loading existing metrics...")
+            
+            # Load and return existing metrics
+            metrics_file = os.path.join(
+                self.results_dir, self.model_type, stage_name, "results", "metrics.json"
+            )
+            with open(metrics_file, "r") as f:
+                metrics = json.load(f)
+            
+            print(f"📊 Existing results for {stage_name}:")
+            for metric, value in metrics.items():
+                if isinstance(value, (int, float)):
+                    print(f"   {metric}: {value:.4f}")
+                else:
+                    print(f"   {metric}: {value}")
+            
+            return metrics
         
         # Initialize optimizer and scheduler
         optimizer = self._get_optimizer(batch_size, lr_encoder, lr_projector, lr_base)
@@ -730,7 +773,7 @@ class CurriculumTrainer:
         return self._train_stage(
             stage_name="stage2_captioning",
             dataset_class=M4QADataset,
-            num_epochs=15,
+            num_epochs=60,
             lr_encoder=1e-4,
             lr_projector=5e-5,
             lr_base=1e-4,

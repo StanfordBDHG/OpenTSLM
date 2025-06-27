@@ -6,12 +6,17 @@ Loader utilities for the M4 time series dataset with captions.
 This module provides functions to load, merge, and split the processed M4 time series and caption data
 for use in machine learning tasks such as time series caption generation.
 
-Expected data location: time_series_datasets/raw_data/m4/
+Data source: https://github.com/StanfordBDHG/M4TimeSeriesCaptionDataset
+Expected data location: data/M4TimeSeriesCaptionDataset/generated/
 """
 import os
 import json
 import pandas as pd
 import numpy as np
+import subprocess
+import shutil
+import urllib.request
+import zipfile
 from typing import Dict, List, Literal, Optional, Tuple
 from datasets import Dataset
 from sklearn.model_selection import train_test_split
@@ -20,11 +25,79 @@ from sklearn.model_selection import train_test_split
 # Constants
 # ---------------------------
 
-RAW_DATA_DIR = "data/m4"
+RELEASE_URL = "https://github.com/StanfordBDHG/M4TimeSeriesCaptionDataset/releases/download/v0.1/M4TimeSeriesCaptionDatasetv01.zip"
+DATA_DIR = "data/M4TimeSeriesCaptionDataset"
+GENERATED_DATA_DIR = os.path.join(DATA_DIR, "generated")
+
 AVAILABLE_FREQUENCIES = ["Monthly", "Quarterly", "Weekly"]
 
 TEST_FRAC = 0.1
 VAL_FRAC = 0.1
+
+# ---------------------------
+# Data download and setup
+# ---------------------------
+
+def download_and_extract_dataset():
+    """
+    Download the M4TimeSeriesCaptionDataset zip file and extract it.
+    """
+    if os.path.exists(GENERATED_DATA_DIR):
+        print(f"Dataset already exists at {GENERATED_DATA_DIR}")
+        return
+    
+    # Create data directory if it doesn't exist
+    os.makedirs(DATA_DIR, exist_ok=True)
+    
+    # Download the zip file
+    zip_path = os.path.join(DATA_DIR, "M4TimeSeriesCaptionDatasetv01.zip")
+    print(f"Downloading dataset from {RELEASE_URL}...")
+    
+    try:
+        urllib.request.urlretrieve(RELEASE_URL, zip_path)
+        print("Download completed successfully.")
+    except Exception as e:
+        raise RuntimeError(f"Failed to download dataset: {e}")
+    
+    # Extract the zip file
+    print("Extracting dataset...")
+    try:
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(DATA_DIR)
+        print("Extraction completed successfully.")
+    except Exception as e:
+        raise RuntimeError(f"Failed to extract dataset: {e}")
+    
+    # Clean up the zip file
+    try:
+        os.remove(zip_path)
+        print("Cleaned up zip file.")
+    except Exception as e:
+        print(f"Warning: Could not remove zip file: {e}")
+    
+    if not os.path.exists(GENERATED_DATA_DIR):
+        raise FileNotFoundError(f"Generated data directory not found after extraction: {GENERATED_DATA_DIR}")
+
+def ensure_m4_dataset():
+    """
+    Ensure the M4TimeSeriesCaptionDataset is available.
+    If not present, download and extract it from the GitHub release.
+    """
+    if not os.path.exists(GENERATED_DATA_DIR):
+        download_and_extract_dataset()
+
+def get_data_file_path(frequency: str, file_type: str) -> str:
+    """
+    Get the path to a data file in the dataset.
+    
+    Args:
+        frequency: The frequency (Monthly, Quarterly, Weekly)
+        file_type: Either 'series' or 'captions'
+        
+    Returns:
+        Path to the data file
+    """
+    return os.path.join(GENERATED_DATA_DIR, f"m4_{file_type}_{frequency}.csv")
 
 # ---------------------------
 # Core loader
@@ -48,15 +121,18 @@ def load_m4_data(frequency: Literal["Monthly", "Quarterly", "Weekly"]) -> Tuple[
     if frequency not in AVAILABLE_FREQUENCIES:
         raise ValueError(f"Frequency must be one of {AVAILABLE_FREQUENCIES}")
     
+    # Ensure dataset is available
+    ensure_m4_dataset()
+    
     # Load series data
-    series_file = os.path.join(RAW_DATA_DIR, f"m4_series_{frequency}.csv")
+    series_file = get_data_file_path(frequency, "series")
     if not os.path.exists(series_file):
         raise FileNotFoundError(f"Series file not found: {series_file}")
     
     series_df = pd.read_csv(series_file)
     
     # Load captions data
-    captions_file = os.path.join(RAW_DATA_DIR, f"m4_captions_{frequency}.csv")
+    captions_file = get_data_file_path(frequency, "captions")
     if not os.path.exists(captions_file):
         raise FileNotFoundError(f"Captions file not found: {captions_file}")
     
