@@ -437,7 +437,7 @@ class CurriculumTrainer:
         test_loss = 0.0
         
         # Set higher max_tokens for generation during evaluation
-        max_new_tokens = 300
+        max_new_tokens = 30000
         
         with torch.no_grad():
             for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
@@ -531,13 +531,15 @@ class CurriculumTrainer:
 
     def _train_stage(self, stage_name: str, dataset_class, num_epochs: int, 
                     lr_encoder: float, lr_projector: float, lr_base: float, 
-                    metric_func: Callable = None, batch_size: int = None) -> Dict[str, Any]:
+                    metric_func: Callable = None, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
         """Generic training function for any stage."""
         # Use provided batch_size or default to global BATCH_SIZE
         if batch_size is None:
             batch_size = BATCH_SIZE
             
         print(f"\n🚀 Starting {stage_name} Training with {self.model_type}")
+        if eval_only:
+            print("🔍 EVAL-ONLY MODE: Skipping training, only running evaluation")
         print("=" * 60)
         print(f"📊 Stage Configuration:")
         print(f"   Epochs: {num_epochs}")
@@ -550,6 +552,10 @@ class CurriculumTrainer:
         if self.world_size > 1:
             print(f"   Effective batch size: {batch_size * self.world_size}")
         print()
+        
+        # Check if checkpoint exists when in eval_only mode
+        if eval_only and not self._checkpoint_exists(stage_name):
+            raise RuntimeError(f"Eval-only mode requires a checkpoint for {stage_name}, but none found at {os.path.join(self.results_dir, self.model_type, stage_name, 'checkpoints', 'best_model.pt')}")
         
         # Load previous stage model and display metrics
         try:
@@ -652,93 +658,99 @@ class CurriculumTrainer:
             print(f"🆕 Starting fresh training for {stage_name}")
             best_val_loss = float("inf")  # Ensure proper initialization
         
-        # Training loop
-        epochs_no_improve = 0
-        start_epoch = best_epoch + 1 if best_epoch is not None else 1
-        for epoch in range(start_epoch, num_epochs + 1):
-            # Set epoch for distributed sampler
-            if hasattr(train_loader.sampler, 'set_epoch'):
-                train_loader.sampler.set_epoch(epoch)
-            
-            # Training
-            self.model.train()
-            running_loss = 0.0
-            prog = tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs}", disable=self.rank != 0)
-            
-            for batch in prog:
-                optimizer.zero_grad()
-                loss = self._get_model().compute_loss(batch)
-                loss.backward()
-                
-                # Handle gradient clipping for distributed training
-                clip_grad_norm_(self._get_model().parameters(), GRAD_CLIP_NORM)
-                
-                optimizer.step()
-                scheduler.step()
-                
-                running_loss += loss.item()
-                if self.rank == 0:
-                    prog.set_postfix(
-                        loss=f"{loss.item():.4f}", 
-                        lr=f"{scheduler.get_last_lr()[0]:.2e}"
-                    )
-            
-            avg_train_loss = running_loss / len(train_loader)
+        # Skip training loop if eval_only is True
+        if eval_only:
             if self.rank == 0:
-                tqdm.write(f"Epoch {epoch} — train loss: {avg_train_loss:.4f}")
-            
-            # Validation
-            val_loss = 0.0
-            self.model.eval()
-            with torch.no_grad():
-                for batch in val_loader:
-                    val_loss += self._get_model().compute_loss(batch).item()
-            
-            avg_val_loss = val_loss / len(val_loader)
-            
-            # Synchronize validation loss across all ranks
-            if dist.is_initialized():
-                val_loss_tensor = torch.tensor(avg_val_loss, device=self.device)
-                dist.all_reduce(val_loss_tensor, op=dist.ReduceOp.SUM)
-                avg_val_loss = val_loss_tensor.item() / self.world_size
-            
-            if self.rank == 0:
-                tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}")
-                tqdm.write(f"Epoch {epoch} — best  loss: {best_val_loss:.4f}")
-            
-            # Early stopping - all ranks need to make the same decision
-            should_save = avg_val_loss + 1e-4 < best_val_loss
-            if dist.is_initialized():
-                save_tensor = torch.tensor(1 if should_save else 0, device=self.device)
-                dist.all_reduce(save_tensor, op=dist.ReduceOp.SUM)
-                should_save = save_tensor.item() > 0  # If any rank thinks we should save, we save
-            
-            if should_save:
-                best_val_loss = avg_val_loss
-                epochs_no_improve = 0
-                self._save_checkpoint(stage_name, epoch, avg_val_loss, optimizer, scheduler)
-                if self.rank == 0:
-                    tqdm.write("✔️  New best model saved.\n")
-            else:
-                epochs_no_improve += 1
-                if self.rank == 0:
-                    tqdm.write(f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs.\n")
+                print(f"⏭️  Skipping training loop (eval_only mode)")
+                print(f"📂 Using existing checkpoint for evaluation")
+        else:
+            # Training loop
+            epochs_no_improve = 0
+            start_epoch = best_epoch + 1 if best_epoch is not None else 1
+            for epoch in range(start_epoch, num_epochs + 1):
+                # Set epoch for distributed sampler
+                if hasattr(train_loader.sampler, 'set_epoch'):
+                    train_loader.sampler.set_epoch(epoch)
                 
-                # Synchronize early stopping decision across all ranks
-                if epochs_no_improve >= EARLY_STOP_PAT:
+                # Training
+                self.model.train()
+                running_loss = 0.0
+                prog = tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs}", disable=self.rank != 0)
+                
+                for batch in prog:
+                    optimizer.zero_grad()
+                    loss = self._get_model().compute_loss(batch)
+                    loss.backward()
+                    
+                    # Handle gradient clipping for distributed training
+                    clip_grad_norm_(self._get_model().parameters(), GRAD_CLIP_NORM)
+                    
+                    optimizer.step()
+                    scheduler.step()
+                    
+                    running_loss += loss.item()
                     if self.rank == 0:
-                        tqdm.write(f"\nEarly stopping triggered after {epoch} epochs.")
-                        tqdm.write(f"Final stats: best_val_loss={best_val_loss:.4f}, epochs_no_improve={epochs_no_improve}")
-                    break
-            
-            # Synchronize best_val_loss and epochs_no_improve across all ranks
-            if dist.is_initialized():
-                best_loss_tensor = torch.tensor(best_val_loss, device=self.device)
-                epochs_tensor = torch.tensor(epochs_no_improve, device=self.device)
-                dist.broadcast(best_loss_tensor, src=0)
-                dist.broadcast(epochs_tensor, src=0)
-                best_val_loss = best_loss_tensor.item()
-                epochs_no_improve = int(epochs_tensor.item())
+                        prog.set_postfix(
+                            loss=f"{loss.item():.4f}", 
+                            lr=f"{scheduler.get_last_lr()[0]:.2e}"
+                        )
+                
+                avg_train_loss = running_loss / len(train_loader)
+                if self.rank == 0:
+                    tqdm.write(f"Epoch {epoch} — train loss: {avg_train_loss:.4f}")
+                
+                # Validation
+                val_loss = 0.0
+                self.model.eval()
+                with torch.no_grad():
+                    for batch in val_loader:
+                        val_loss += self._get_model().compute_loss(batch).item()
+                
+                avg_val_loss = val_loss / len(val_loader)
+                
+                # Synchronize validation loss across all ranks
+                if dist.is_initialized():
+                    val_loss_tensor = torch.tensor(avg_val_loss, device=self.device)
+                    dist.all_reduce(val_loss_tensor, op=dist.ReduceOp.SUM)
+                    avg_val_loss = val_loss_tensor.item() / self.world_size
+                
+                if self.rank == 0:
+                    tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}")
+                    tqdm.write(f"Epoch {epoch} — best  loss: {best_val_loss:.4f}")
+                
+                # Early stopping - all ranks need to make the same decision
+                should_save = avg_val_loss + 1e-4 < best_val_loss
+                if dist.is_initialized():
+                    save_tensor = torch.tensor(1 if should_save else 0, device=self.device)
+                    dist.all_reduce(save_tensor, op=dist.ReduceOp.SUM)
+                    should_save = save_tensor.item() > 0  # If any rank thinks we should save, we save
+                
+                if should_save:
+                    best_val_loss = avg_val_loss
+                    epochs_no_improve = 0
+                    self._save_checkpoint(stage_name, epoch, avg_val_loss, optimizer, scheduler)
+                    if self.rank == 0:
+                        tqdm.write("✔️  New best model saved.\n")
+                else:
+                    epochs_no_improve += 1
+                    if self.rank == 0:
+                        tqdm.write(f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs.\n")
+                    
+                    # Synchronize early stopping decision across all ranks
+                    if epochs_no_improve >= EARLY_STOP_PAT:
+                        if self.rank == 0:
+                            tqdm.write(f"\nEarly stopping triggered after {epoch} epochs.")
+                            tqdm.write(f"Final stats: best_val_loss={best_val_loss:.4f}, epochs_no_improve={epochs_no_improve}")
+                        break
+                
+                # Synchronize best_val_loss and epochs_no_improve across all ranks
+                if dist.is_initialized():
+                    best_loss_tensor = torch.tensor(best_val_loss, device=self.device)
+                    epochs_tensor = torch.tensor(epochs_no_improve, device=self.device)
+                    dist.broadcast(best_loss_tensor, src=0)
+                    dist.broadcast(epochs_tensor, src=0)
+                    best_val_loss = best_loss_tensor.item()
+                    epochs_no_improve = int(epochs_tensor.item())
         
         # Load best model and evaluate
         best_epoch, _ = self._load_checkpoint(stage_name, optimizer, scheduler)
@@ -756,7 +768,7 @@ class CurriculumTrainer:
         
         return metrics
     
-    def stage1_mcq(self, batch_size: int = None) -> Dict[str, Any]:
+    def stage1_mcq(self, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
         """Stage 1: Multiple Choice Question Answering (TSQA).
         
         Configuration:
@@ -773,10 +785,11 @@ class CurriculumTrainer:
             lr_projector=1e-4,
             lr_base=2e-4,
             metric_func=lambda preds, golds: {"accuracy": self._calculate_accuracy(preds, golds)},
-            batch_size=batch_size
+            batch_size=batch_size,
+            eval_only=eval_only
         )
     
-    def stage2_captioning(self, batch_size: int = None) -> Dict[str, Any]:
+    def stage2_captioning(self, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
         """Stage 2: Caption Generation (M4).
         
         Configuration:
@@ -793,10 +806,11 @@ class CurriculumTrainer:
             lr_projector=1e-4,
             lr_base=2e-4,
             metric_func=None,  # Only test loss for captioning
-            batch_size=batch_size
+            batch_size=batch_size,
+            eval_only=eval_only
         )
     
-    def run_curriculum(self, stages: List[str] = None, batch_size: int = None):
+    def run_curriculum(self, stages: List[str] = None, batch_size: int = None, eval_only: bool = False):
         """Run the complete curriculum learning pipeline."""
         if stages is None:
             stages = CURRICULUM_STAGES
@@ -812,6 +826,8 @@ class CurriculumTrainer:
         
         if self.rank == 0:
             print(f"🎓 Starting Curriculum Learning with {self.model_type}")
+            if eval_only:
+                print("🔍 EVAL-ONLY MODE: Will skip training and only run evaluation")
             print(f"📊 All stages: {', '.join(stages)}")
             print(f"🔄 Incomplete stages: {', '.join(incomplete_stages)}")
             print(f"💻 Device: {self.device}")
@@ -830,11 +846,11 @@ class CurriculumTrainer:
                 dist.barrier()
                 
             if stage == "stage1_mcq":
-                stage_results = self.stage1_mcq(batch_size=batch_size)
+                stage_results = self.stage1_mcq(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage2_captioning":
-                stage_results = self.stage2_captioning(batch_size=batch_size)
+                stage_results = self.stage2_captioning(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
             else:
@@ -948,6 +964,13 @@ class CurriculumTrainer:
             return self.model.module
         return self.model
 
+    def _checkpoint_exists(self, stage: str) -> bool:
+        """Check if a checkpoint exists for a specific stage."""
+        checkpoint_path = os.path.join(
+            self.results_dir, self.model_type, stage, "checkpoints", "best_model.pt"
+        )
+        return os.path.exists(checkpoint_path)
+
 
 def main():
     parser = argparse.ArgumentParser(description="Curriculum Learning for EmbedHealth Models")
@@ -978,11 +1001,19 @@ def main():
         help="Batch size for training (default: use value from model_config.py)"
     )
     
+    # Evaluation arguments
+    parser.add_argument(
+        "--eval_only", 
+        default=False, 
+        action="store_true",
+        help="Skip training and only run evaluation (requires existing checkpoint)"
+    )
+    
     # Model-specific arguments
     parser.add_argument(
         "--llm_id", 
         type=str, 
-        default=None,
+        default="meta-llama/Llama-3.2-1B",
         help="LLM model ID for EmbedHealthFlamingo (e.g., 'google/medgemma-2b', 'meta-llama/Llama-3.2-1B')"
     )
     
@@ -1028,7 +1059,8 @@ def main():
     # Run curriculum
     results = trainer.run_curriculum(
         args.stages, 
-        args.batch_size
+        args.batch_size,
+        args.eval_only
     )
     
     # Print summary
