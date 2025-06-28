@@ -667,6 +667,7 @@ class CurriculumTrainer:
             if self.rank == 0:
                 print(f"⏭️  Skipping training loop (eval_only mode)")
                 print(f"📂 Using existing checkpoint for evaluation")
+            epoch = best_epoch
         else:
             # Training loop
             epochs_no_improve = 0
