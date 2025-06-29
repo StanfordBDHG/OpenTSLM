@@ -2,6 +2,14 @@
 import sys
 import random
 import json
+import base64
+import io
+import matplotlib.pyplot as plt
+from openai import OpenAI
+import pandas as pd
+import os
+
+client = OpenAI()
 
 # Add the parent directory to the path to import from time_series_datasets
 sys.path.append("../../")
@@ -19,9 +27,41 @@ for i in range(len(dataset)):
 unique_labels = list(unique_labels)
 print(f"Unique activity labels: {len(unique_labels)}")
 
-# Function to create binary classification prompt
-def create_binary_prompt(window, correct_label):
-    # Select a random incorrect label
+
+def generate_classification_rationale(feature, time_series_data, label):
+    plt.figure(figsize=(10, 6))
+    plt.plot(time_series_data, marker='o', linestyle='-', markersize=0)
+    plt.grid(True, alpha=0.3)
+    
+    temp_image_path = f"temp_plot.png"
+    plt.savefig(temp_image_path)
+    plt.close()
+    
+    prompt = create_classification_prompt(feature, label)
+
+    with open(temp_image_path, "rb") as image_file:
+        image_data = base64.b64encode(image_file.read()).decode('utf-8')
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are an expert in time series analysis."},
+                {"role": "user", "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_data}", "detail": "high"}}
+                ]}
+            ],
+            temperature=0.5,
+            max_tokens=500,
+            seed=42
+        )
+    
+    return response.choices[0].message.content
+    
+
+
+def create_classification_prompt(feature, correct_label):
+    # Select a random incorrect label for the binary classification
     other_labels = [label for label in unique_labels if label != correct_label]
     incorrect_label = random.choice(other_labels)
     
@@ -29,53 +69,47 @@ def create_binary_prompt(window, correct_label):
     class_options = [correct_label, incorrect_label]
     random.shuffle(class_options)
     
-    # Simply use the first feature as the data description
-    feature_keys = list(window.keys())
-    first_feature = feature_keys[0] if feature_keys else "sensor data"
-    data_description = first_feature
-    
     # Create the prompt with dynamic content
-    prompt = f"""Considering that this is {data_description} of a two-minute window, with classes based on whether data are captured during {class_options[0]} or {class_options[1]} activity, classify the time-series and respond only with the following options
+    prompt = f"""Considering that this is {feature} of a two-minute window, with classes based on whether data are captured during {class_options[0]} or {class_options[1]} activity, classify the time-series and respond only with the following options
 {class_options[0]}
-{class_options[1]}"""
-    
-    return {
-        "prompt": prompt,
-        "options": class_options,
-        "correct_label": correct_label,
-        "correct_index": class_options.index(correct_label),
-        "data_description": data_description
-    }
+{class_options[1]}
+You MUST answer in the following format:
+First think step by step and answer with a rationale for your classification.
+Then, write the final answer: \"Answer: <class>\"
+"""
+    return prompt
 
-# Process windows and create prompts
-print(f"\nTotal number of samples: {len(dataset)}")
-all_prompts = []
 
-# Process a subset of windows for demonstration
-num_samples = min(5, len(dataset))
-for i in range(num_samples):
-    data_point = dataset[i]
-    window = data_point["time_series"]
-    label = data_point["label"]
-    
-    # Create binary classification prompt
-    prompt_data = create_binary_prompt(window, label)
-    all_prompts.append(prompt_data)
-    
-    # Print minimal information about this sample
-    print(f"\nSample {i+1}:")
-    print(f"  Label: {label}")
-    print(f"  Feature used: {prompt_data['data_description']}")
-    print(f"  Options: {prompt_data['options'][0]} vs {prompt_data['options'][1]}")
+def main():
+    COT_FILE = f"pamap2_cot.csv"
 
-# Save prompts to file
-output_file = "pamap2_binary_prompts.json"
-with open(output_file, 'w') as f:
-    json.dump(all_prompts, f, indent=2)
+    relevant_features = ["heartrate"]
 
-print(f"\nSaved {len(all_prompts)} binary classification prompts to {output_file}")
+    # Process a subset of windows for demonstration
+    num_samples = min(1, len(dataset))
+    for i in range(num_samples):
+        data_point = dataset[i]
+        window = data_point["time_series"]
+        label = data_point["label"]
 
-# Print a full example of the first prompt
-if all_prompts:
-    print("\nExample of a complete prompt:")
-    print(all_prompts[0]["prompt"])
+        for feature in relevant_features:
+            response = generate_classification_rationale(feature, window[feature], label)
+
+            rationale = response.split("Answer:")[0].strip()
+            prediction = response.split("Answer:")[-1].strip()
+
+            cot_data = {
+                'time_series': window[feature],
+                'label': label,
+                'prediction': prediction,
+                'rationale': rationale,
+            }
+
+            df = pd.DataFrame([cot_data])
+            df.to_csv(COT_FILE, mode='a', header=not os.path.exists(COT_FILE), index=False)
+
+            break
+        break
+
+if __name__ == "__main__":
+    main()
