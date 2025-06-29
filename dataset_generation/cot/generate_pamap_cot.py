@@ -56,10 +56,8 @@ def generate_classification_rationale(feature, time_series_data, label):
             seed=42
         )
     
-    res = response.choices[0].message.content
-    rationale = res.split("Answer:")[0].strip()
-    prediction = res.split("Answer:")[-1].strip()
-    return {rationale, prediction}
+    rationale = response.choices[0].message.content
+    return prompt, rationale
     
 
 
@@ -76,9 +74,7 @@ def create_classification_prompt(feature, correct_label):
     prompt = f"""Considering that this is {feature} of a two-minute window, with classes based on whether data are captured during {class_options[0]} or {class_options[1]} activity, classify the time-series and respond only with the following options
 {class_options[0]}
 {class_options[1]}
-You MUST answer in the following format:
-First think step by step and answer with a rationale for your classification.
-Then, write the final answer: \"Answer: <class>\"
+Answer with ONLY a rationale for the correct answer, which is {correct_label}:
 """
     return prompt
 
@@ -86,7 +82,7 @@ Then, write the final answer: \"Answer: <class>\"
 def main():
     COT_FILE = f"pamap2_cot.csv"
 
-    relevant_features = ["heartrate"]
+    relevant_features = ["handAcc16_1", "chestAcc16_1", "ankleAcc16_1"]
 
     # Process a subset of windows for demonstration
     num_samples = min(1, len(dataset))
@@ -96,12 +92,12 @@ def main():
         label = data_point["label"]
 
         for feature in relevant_features:
-            rationale, prediction = generate_classification_rationale(feature, window[feature], label)
+            prompt, rationale = generate_classification_rationale(feature, window[feature], label)
 
             cot_data = {
                 'time_series': window[feature],
                 'label': label,
-                'prediction': prediction,
+                'prompt': prompt,
                 'rationale': rationale,
             }
 
