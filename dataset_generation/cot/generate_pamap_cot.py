@@ -56,7 +56,10 @@ def generate_classification_rationale(feature, time_series_data, label):
             seed=42
         )
     
-    return response.choices[0].message.content
+    res = response.choices[0].message.content
+    rationale = res.split("Answer:")[0].strip()
+    prediction = res.split("Answer:")[-1].strip()
+    return {rationale, prediction}
     
 
 
@@ -93,10 +96,7 @@ def main():
         label = data_point["label"]
 
         for feature in relevant_features:
-            response = generate_classification_rationale(feature, window[feature], label)
-
-            rationale = response.split("Answer:")[0].strip()
-            prediction = response.split("Answer:")[-1].strip()
+            rationale, prediction = generate_classification_rationale(feature, window[feature], label)
 
             cot_data = {
                 'time_series': window[feature],
