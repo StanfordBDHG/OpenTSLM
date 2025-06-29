@@ -1,6 +1,7 @@
 import json
 from typing import Literal, List, Optional, Tuple
-
+import random
+import numpy as np
 
 from datasets import Dataset, Value, Sequence, Features, load_dataset
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
@@ -36,49 +37,93 @@ VAL_FRAC = 0.1
 # I have provided you below with an example from the TSQA dataset, which you could adopt.
 
 class EtiologicalReasoningDataset(QADataset):
+    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str):
+        # Generate shuffling indices for options before calling parent constructor
+        self._generate_shuffling_indices()
+        super().__init__(split, EOS_TOKEN)
+    
+    def _generate_shuffling_indices(self):
+        """Generate random positions (0-3) for each sample to shuffle options."""
+        # Load all datasets to get total size
+        dataset = load_etiological_reasoning_dataset()
+        train_data = dataset["train"]
+        val_data = dataset["val"]
+        test_data = dataset["test"]
+        total_size = len(train_data) + len(val_data) + len(test_data)
+        
+        # Generate random positions for each sample
+        np.random.seed(42)  # For reproducibility
+        self.shuffling_indices = np.random.randint(0, 4, size=total_size)
+        self.current_index = 0
+    
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
-
         # This automatically downloads the dataset if it does not exist,
-        # and returns a pandas dataframe.
-        full_er_data = load_etiological_reasoning_dataset()
+        # and returns three separate datasets for train, validation, and test.
+        dataset = load_etiological_reasoning_dataset()
+        return dataset["train"], dataset["val"], dataset["test"]
 
-        # Below is an example of how to load the TSQA dataset.
-        # 1) Load the single built‑in "train" split (≈ 7 k rows)
-        ds_full = load_dataset("ChengsenWang/TSQA", split="train")
-
-        # 2) First carve out the test split
-        train_val, test = ds_full.train_test_split(
-            test_size=TEST_FRAC, seed=42
-        ).values()
-
-        # 3) From the remaining data take validation
-        train, val = train_val.train_test_split(
-            test_size=VAL_FRAC / (1 - TEST_FRAC), seed=42
-        ).values()
-
-        return train, val, test
-
-    # This will be a called for each row
-    # You only need to return the answer as a string.
     def _get_answer(self, row) -> str:
-        return row["Answer"]
+        # Get the target position for this sample
+        target_pos = self.shuffling_indices[self.current_index]
+        self.current_index += 1
+        
+        # Map position to letter (0->A, 1->B, 2->C, 3->D)
+        answer_letter = chr(65 + target_pos)  # 65 is ASCII for 'A'
+        return answer_letter
 
     def _get_pre_prompt(self, row) -> str:
-        return row["Question"]
+        options = row["options"]
+        if len(options) != 4:
+            return str(options)  # Fallback if not exactly 4 options
+        
+        # Get the target position for this sample
+        target_pos = self.shuffling_indices[self.current_index - 1]  # Use same index as _get_answer
+        
+        # Create shuffled options: move correct answer (first option) to target position
+        shuffled_options = options.copy()
+        correct_answer = shuffled_options[0]
+        
+        # Remove correct answer from first position
+        shuffled_options.pop(0)
+        
+        # Insert correct answer at target position
+        shuffled_options.insert(target_pos, correct_answer)
+        
+        # Format as A, B, C, D options
+        formatted_options = []
+        for i, option in enumerate(shuffled_options):
+            letter = chr(65 + i)  # A, B, C, D
+            formatted_options.append(f"{letter}. {option}")
+        
+        # Combine description with options
+        options_text = "\n".join(formatted_options)
+        
+        return f"Options:\n{options_text}"
 
     def _get_post_prompt(self, row) -> str:
-        # return "Answer:"
-        return "Predict the " + row["Task"] + " Answer:"
+        # Format the post prompt to ask for the answer
+        return "What scenario could have produced this time series? Choose A, B, C, or D."
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
-        # TODO standardize normalization over the all datasets
-        series = torch.tensor(json.loads(row["Series"]), dtype=torch.float32)
-
+        # Get the time series data from the 'series' field
+        series_data = row.get("series", [])
+        
+        if not series_data:
+            # Return empty series if no data
+            return [TextTimeSeriesPrompt("No time series data available.", [])]
+        
+        # Convert to tensor for normalization
+        series = torch.tensor(series_data, dtype=torch.float32)
+        
+        # Normalize the time series
         means = series.mean(dim=0, keepdim=True)  # shape: (n_series, 1)
         stds = series.std(dim=0, keepdim=True)  # shape: (n_series, 1)
         series = (series - means) / (stds + 1e-8)  # broadcasts to (n_series, length)
-        # TSQA has always only one time series
-        return [TextTimeSeriesPrompt("This is the time series.", series.tolist())]
+        
+        # Create a description for the time series
+        characteristics = row.get("characteristics", "")
+        description = f"Time series data: {characteristics}" if characteristics else "Time series data"
+        return [TextTimeSeriesPrompt(description, series.tolist())]
 
 
 if __name__ == "__main__":
