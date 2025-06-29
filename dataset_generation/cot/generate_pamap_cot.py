@@ -70,7 +70,6 @@ def create_classification_prompt(feature, correct_label):
     class_options = [correct_label, incorrect_label]
     random.shuffle(class_options)
     
-    # Create the prompt with dynamic content
     prompt = f"""Considering that this is {feature} of a two-minute window, with classes based on whether data are captured during {class_options[0]} or {class_options[1]} activity, classify the time-series and respond only with the following options
 {class_options[0]}
 {class_options[1]}
@@ -84,7 +83,6 @@ def main():
 
     relevant_features = ["handAcc16_1", "chestAcc16_1", "ankleAcc16_1"]
 
-    # Process a subset of windows for demonstration
     num_samples = min(1, len(dataset))
     for i in range(num_samples):
         data_point = dataset[i]
