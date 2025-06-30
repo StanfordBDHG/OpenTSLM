@@ -91,9 +91,9 @@ def main():
 
         for feature in relevant_features:
             prompt, rationale = generate_classification_rationale(feature, window[feature], label)
-
+            
             cot_data = {
-                'time_series': window[feature],
+                'time_series': window[feature].tolist(),
                 'label': label,
                 'prompt': prompt,
                 'rationale': rationale,
