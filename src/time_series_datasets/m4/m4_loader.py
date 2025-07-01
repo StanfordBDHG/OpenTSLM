@@ -27,7 +27,7 @@ from sklearn.model_selection import train_test_split
 
 RELEASE_URL = "https://polybox.ethz.ch/index.php/s/QxLJwrWPBSZm8Y5/download/M4TimeSeriesCaptionDatasetv01.zip"
 DATA_DIR = "data/M4TimeSeriesCaptionDataset"
-GENERATED_DATA_DIR = os.path.join(DATA_DIR, "generated")
+GENERATED_DATA_DIR = os.path.join(DATA_DIR)
 
 AVAILABLE_FREQUENCIES = ["Monthly", "Quarterly", "Weekly"]
 
