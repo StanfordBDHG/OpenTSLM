@@ -143,10 +143,10 @@ class PAMAP2Dataset(Dataset):
 
         # create 2‑minute windows and store them as tensors + labels
         self.time_series, self.labels = self._make_windows(
-            window_size="1T", min_pct=0.5
+            window_size="3s", min_pct=0.5
         )
 
-    def _make_windows(self, window_size="2T", min_pct=0.5):
+    def _make_windows(self, window_size, min_pct=0.5):
         """
         Returns:
           windows: list of numpy arrays of shape (n_features, n_steps)
