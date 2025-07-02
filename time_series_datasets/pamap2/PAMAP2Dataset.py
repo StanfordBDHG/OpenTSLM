@@ -141,7 +141,7 @@ class PAMAP2Dataset(Dataset):
         super().__init__()
         self.df = self._load_data(list_of_files)
 
-        # create 2‑minute windows and store them as tensors + labels
+        # create 3-second windows and store them as tensors + labels
         self.time_series, self.labels = self._make_windows(
             window_size="3s", min_pct=0.5
         )
