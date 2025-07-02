@@ -84,7 +84,7 @@ def create_classification_prompt(feature, correct_label):
     prompt = f"""Considering that this is {feature} of a two-minute window, with classes based on whether data are captured during {class_options[0]} or {class_options[1]} activity, classify the time-series and respond only with the following options
 {class_options[0]}
 {class_options[1]}
-Think step by step and answer with ONLY a rationale for the correct answer \"{correct_label}\":
+Think step by step and answer with ONLY a rationale for the correct answer {correct_label}. You MUST end your response with \"Answer: {correct_label}\":
 """
     return prompt
 
@@ -94,6 +94,7 @@ def main():
 
     relevant_features = {
         "hand_acceleration": ["handAcc16_1", "handAcc16_2", "handAcc16_3"],
+        "heart_rate": ["heartrate"],
     }
 
     num_samples = min(1, len(dataset))
