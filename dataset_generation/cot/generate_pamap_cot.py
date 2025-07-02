@@ -72,10 +72,43 @@ def generate_classification_rationale(feature, time_series_data, label):
     return prompt, rationale
 
 
-def create_classification_prompt(feature, correct_label):
-    # Select a random incorrect label for the binary classification
+def get_dissimilar_label(correct_label):
+    # Direct mapping from each label to a list of dissimilar labels
+    dissimilar_labels_map = {
+        # Stationary group
+        'lying': ['walking', 'walking_upstairs', 'walking_downstairs', 'running', 'cycling', 'nordic_walking', 'ironing', 'vacuum_cleaning', 'rope_jumping'],
+        'sitting': ['walking', 'walking_upstairs', 'walking_downstairs', 'running', 'cycling', 'nordic_walking', 'ironing', 'vacuum_cleaning', 'rope_jumping'],
+        'standing': ['walking', 'walking_upstairs', 'walking_downstairs', 'running', 'cycling', 'nordic_walking', 'ironing', 'vacuum_cleaning', 'rope_jumping'],
+        
+        # Walking group
+        'walking': ['lying', 'sitting', 'standing', 'running', 'cycling', 'nordic_walking', 'ironing', 'vacuum_cleaning', 'rope_jumping'],
+        'walking_upstairs': ['lying', 'sitting', 'standing', 'running', 'cycling', 'nordic_walking', 'ironing', 'vacuum_cleaning', 'rope_jumping'],
+        'walking_downstairs': ['lying', 'sitting', 'standing', 'running', 'cycling', 'nordic_walking', 'ironing', 'vacuum_cleaning', 'rope_jumping'],
+        
+        # Exercise group
+        'running': ['lying', 'sitting', 'standing', 'walking', 'walking_upstairs', 'walking_downstairs', 'ironing', 'vacuum_cleaning', 'rope_jumping'],
+        'cycling': ['lying', 'sitting', 'standing', 'walking', 'walking_upstairs', 'walking_downstairs', 'ironing', 'vacuum_cleaning', 'rope_jumping'],
+        'nordic_walking': ['lying', 'sitting', 'standing', 'walking', 'walking_upstairs', 'walking_downstairs', 'ironing', 'vacuum_cleaning', 'rope_jumping'],
+        
+        # Household group
+        'ironing': ['lying', 'sitting', 'standing', 'walking', 'walking_upstairs', 'walking_downstairs', 'running', 'cycling', 'nordic_walking'],
+        'vacuum_cleaning': ['lying', 'sitting', 'standing', 'walking', 'walking_upstairs', 'walking_downstairs', 'running', 'cycling', 'nordic_walking'],
+        'rope_jumping': ['lying', 'sitting', 'standing', 'walking', 'walking_upstairs', 'walking_downstairs', 'running', 'cycling', 'nordic_walking']
+    }
+    
+    labels = dissimilar_labels_map.get(correct_label, [])
+    
+    if labels:
+        return random.choice(labels)
+    
+    # Fallback if no dissimilar labels are found
     other_labels = [label for label in unique_labels if label != correct_label]
-    incorrect_label = random.choice(other_labels)
+    return random.choice(other_labels)
+
+
+def create_classification_prompt(feature, correct_label):
+    # Select a dissimilar incorrect label for the binary classification
+    incorrect_label = get_dissimilar_label(correct_label)
     
     # Randomly order the two labels
     class_options = [correct_label, incorrect_label]
