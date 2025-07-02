@@ -1,13 +1,10 @@
+from typing import Tuple
 import pandas as pd
-from time_series_datasets.pamap2.pamap2_loader import PAMAP2_DIR, ensure_pamap2_data
+from time_series_datasets.pamap2.pamap2_loader import ensure_pamap2_data
 from torch.utils.data import Dataset
 
 
 class PAMAP2Dataset(Dataset):
-    """
-    Returns (normalized feature tensor, activity label).
-    """
-
     # source: https://github.com/andreasKyratzis/PAMAP2-Physical-Activity-Monitoring-Data-Analysis-and-ML/blob/master/pamap2.ipynb
     def _data_cleaning(self, dataCollection):
         dataCollection = dataCollection.drop(
@@ -37,21 +34,9 @@ class PAMAP2Dataset(Dataset):
 
         return dataCollection
 
-    def _load_data(self):
+    def _load_data(self, list_of_files):
         # Load data
         ensure_pamap2_data()
-
-        list_of_files = [
-            f"{PAMAP2_DIR}/Protocol/subject101.dat",
-            f"{PAMAP2_DIR}/Protocol/subject102.dat",
-            f"{PAMAP2_DIR}/Protocol/subject103.dat",
-            f"{PAMAP2_DIR}/Protocol/subject104.dat",
-            f"{PAMAP2_DIR}/Protocol/subject105.dat",
-            f"{PAMAP2_DIR}/Protocol/subject106.dat",
-            f"{PAMAP2_DIR}/Protocol/subject107.dat",
-            f"{PAMAP2_DIR}/Protocol/subject108.dat",
-            f"{PAMAP2_DIR}/Protocol/subject109.dat",
-        ]
 
         activityIDdict = {
             0: "transient",
@@ -152,15 +137,13 @@ class PAMAP2Dataset(Dataset):
         dataCol["activityID"] = dataCol["activityID"].map(activityIDdict)
         return dataCol
 
-    def __init__(
-        self,
-    ):
+    def __init__(self, list_of_files):
         super().__init__()
-        self.df = self._load_data()
+        self.df = self._load_data(list_of_files)
 
         # create 2‑minute windows and store them as tensors + labels
         self.time_series, self.labels = self._make_windows(
-            window_size="2T", min_pct=0.5
+            window_size="1T", min_pct=0.5
         )
 
     def _make_windows(self, window_size="2T", min_pct=0.5):
@@ -177,7 +160,7 @@ class PAMAP2Dataset(Dataset):
         df = df.set_index("timestamp")
 
         # 2) define which columns are features (everything except label & subject_id)
-        feature_cols = df.columns.drop(["activityID", "subject_id"])
+        feature_cols = df.columns.drop(["activityID"])
 
         windows = []
         labels = []
