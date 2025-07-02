@@ -29,9 +29,21 @@ print(f"Unique activity labels: {len(unique_labels)}")
 
 
 def generate_classification_rationale(feature, time_series_data, label):
-    plt.figure(figsize=(10, 6))
-    plt.plot(time_series_data, marker='o', linestyle='-', markersize=0)
-    plt.grid(True, alpha=0.3)
+    # Check if time_series_data is a list of time series
+    num_series = len(time_series_data)
+    fig, axes = plt.subplots(num_series, 1, figsize=(10, 4 * num_series), sharex=True)
+    
+    # If there's only one series, axes won't be an array
+    if num_series == 1:
+        axes = [axes]
+    
+    # Plot each time series in its own subplot
+    for i, series in enumerate(time_series_data):
+        axes[i].plot(series, marker='o', linestyle='-', markersize=0)
+        axes[i].grid(True, alpha=0.3)
+        axes[i].set_title(f"{feature} - Component {i+1}")
+    
+    plt.tight_layout()
     
     temp_image_path = f"temp_plot.png"
     plt.savefig(temp_image_path)
@@ -58,7 +70,6 @@ def generate_classification_rationale(feature, time_series_data, label):
     
     rationale = response.choices[0].message.content
     return prompt, rationale
-    
 
 
 def create_classification_prompt(feature, correct_label):
@@ -73,7 +84,7 @@ def create_classification_prompt(feature, correct_label):
     prompt = f"""Considering that this is {feature} of a two-minute window, with classes based on whether data are captured during {class_options[0]} or {class_options[1]} activity, classify the time-series and respond only with the following options
 {class_options[0]}
 {class_options[1]}
-Answer with ONLY a rationale for the correct answer, which is {correct_label}:
+Think step by step and answer with ONLY a rationale for the correct answer \"{correct_label}\":
 """
     return prompt
 
@@ -81,7 +92,9 @@ Answer with ONLY a rationale for the correct answer, which is {correct_label}:
 def main():
     COT_FILE = f"pamap2_cot.csv"
 
-    relevant_features = ["handAcc16_1", "chestAcc16_1", "ankleAcc16_1"]
+    relevant_features = {
+        "hand_acceleration": ["handAcc16_1", "handAcc16_2", "handAcc16_3"],
+    }
 
     num_samples = min(1, len(dataset))
     for i in range(num_samples):
@@ -89,11 +102,13 @@ def main():
         window = data_point["time_series"]
         label = data_point["label"]
 
-        for feature in relevant_features:
-            prompt, rationale = generate_classification_rationale(feature, window[feature], label)
+        for feature_name, features in relevant_features.items():
+            multi_series_data = [window[feat] for feat in features]
+            
+            prompt, rationale = generate_classification_rationale(feature_name, multi_series_data, label)
             
             cot_data = {
-                'time_series': window[feature].tolist(),
+                'time_series': str([window[feat].tolist() for feat in features]),
                 'label': label,
                 'prompt': prompt,
                 'rationale': rationale,
