@@ -14,11 +14,11 @@ client = OpenAI()
 # Add the parent directory to the path to import from time_series_datasets
 sys.path.append("../../")
 
-from time_series_datasets.pamap2.PAMAP2Dataset import PAMAP2Dataset
+from time_series_datasets.pamap2.PAMAP2AccelerationDataset import PAMAP2AccelerationDataset
 
 # Load the PAMAP2 dataset
 print("Loading PAMAP2 dataset...")
-dataset = PAMAP2Dataset()
+dataset = PAMAP2AccelerationDataset()
 
 # Get all unique activity labels
 unique_labels = set()
@@ -126,8 +126,8 @@ def main():
     COT_FILE = f"pamap2_cot.csv"
 
     relevant_features = {
-        "hand_acceleration": ["handAcc16_1", "handAcc16_2", "handAcc16_3"],
         "heart_rate": ["heartrate"],
+        "hand_acceleration": ["handAcc16_1", "handAcc16_2", "handAcc16_3"],
     }
 
     num_samples = min(1, len(dataset))
