@@ -48,7 +48,7 @@ class PAMAP2AccQADataset(QADataset):
         return row["label"]
 
     def _get_pre_prompt(self, _row) -> str:
-        return "You are given accelerometer data in all three dimensions, sampled at approximately 50Hz. Your task is to predict the person's activity."
+        return "You are given accelerometer data in all three dimensions, sampled at approximately 100Hz. Your task is to predict the person's activity."
 
     def _get_post_prompt(self, _row) -> str:
         return "Answer:"
@@ -56,9 +56,9 @@ class PAMAP2AccQADataset(QADataset):
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         series = torch.tensor(
             [
-                row["time_series"]["ankleAcc16_1"],
-                row["time_series"]["ankleAcc16_2"],
-                row["time_series"]["ankleAcc16_3"],
+                row["time_series"]["handAcc16_1"],
+                row["time_series"]["handAcc16_2"],
+                row["time_series"]["handAcc16_3"],
             ],
             dtype=torch.float32,
         )
