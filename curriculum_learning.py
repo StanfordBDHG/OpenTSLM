@@ -531,22 +531,23 @@ class CurriculumTrainer:
         # Use provided batch_size or default to global BATCH_SIZE
         if batch_size is None:
             batch_size = BATCH_SIZE
-            
-        print(f"\n🚀 Starting {stage_name} Training with {self.model_type}")
-        if eval_only:
-            print("🔍 EVAL-ONLY MODE: Skipping training, only running evaluation")
-        print("=" * 60)
-        print(f"📊 Stage Configuration:")
-        print(f"   Epochs: {num_epochs}")
-        if self.model_type == "EmbedHealthSP":
-            print(f"   Encoder LR: {lr_encoder:.2e}")
-            print(f"   Projector LR: {lr_projector:.2e}")
-        else:
-            print(f"   Base LR: {lr_base:.2e}")
-        print(f"   Batch size per GPU: {batch_size}")
-        if self.world_size > 1:
-            print(f"   Effective batch size: {batch_size * self.world_size}")
-        print()
+        
+        if self.rank == 0:
+            print(f"\n🚀 Starting {stage_name} Training with {self.model_type}")
+            if eval_only:
+                print("🔍 EVAL-ONLY MODE: Skipping training, only running evaluation")
+            print("=" * 60)
+            print(f"📊 Stage Configuration:")
+            print(f"   Epochs: {num_epochs}")
+            if self.model_type == "EmbedHealthSP":
+                print(f"   Encoder LR: {lr_encoder:.2e}")
+                print(f"   Projector LR: {lr_projector:.2e}")
+            else:
+                print(f"   Base LR: {lr_base:.2e}")
+            print(f"   Batch size per GPU: {batch_size}")
+            if self.world_size > 1:
+                print(f"   Effective batch size: {batch_size * self.world_size}")
+            print()
         
         # Check if checkpoint exists when in eval_only mode
         if eval_only and not self._checkpoint_exists(stage_name):
