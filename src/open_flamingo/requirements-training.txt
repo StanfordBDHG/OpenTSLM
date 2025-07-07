@@ -1,5 +1,0 @@
-torchvision
-braceexpand
-webdataset
-tqdm
-wandb
