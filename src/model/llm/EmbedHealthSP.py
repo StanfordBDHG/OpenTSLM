@@ -6,13 +6,13 @@ from torch.nn.utils.rnn import pad_sequence
 
 from src.model_config import ENCODER_OUTPUT_DIM
 from model.llm.TimeSeriesLLM import TimeSeriesLLM
+from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
+from model.projector.MLPProjector import MLPProjector
 
 
 class EmbedHealthSP(TimeSeriesLLM):
     def __init__(
         self,
-        encoder: nn.Module,
-        projector_class,
         llm_id: str = "meta-llama/Llama-3.2-1B",
         device: str = "cuda",
     ):
@@ -32,13 +32,17 @@ class EmbedHealthSP(TimeSeriesLLM):
         )
         self.llm.resize_token_embeddings(len(self.tokenizer))
 
-        # 3) encoder + projector
-        self.encoder = encoder.to(device)
-        self.projector = projector_class(
+        # 3) encoder + projector (now internal)
+        self.encoder = TransformerCNNEncoder().to(device)
+        self.projector = MLPProjector(
             ENCODER_OUTPUT_DIM, self.llm.config.hidden_size, device=device
         ).to(device)
 
         self.patch_size = 4
+
+        # Freeze the LLM backbone for SP model (internally)
+        for p in self.llm.parameters():
+            p.requires_grad = False
 
     def pad_and_apply_batch(
         self,

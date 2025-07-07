@@ -114,18 +114,11 @@ class CurriculumTrainer:
     def _initialize_model(self):
         """Initialize the specified model type."""
         if self.model_type == "EmbedHealthSP":
-            encoder = TransformerCNNEncoder().to(self.device)
             model = EmbedHealthSP(
-                encoder=encoder, 
-                projector_class=MLPProjector, 
                 llm_id=self.llm_id,
                 device=self.device
             ).to(self.device)
             
-            # Freeze the LLM backbone for SP model
-            for p in model.llm.parameters():
-                p.requires_grad = False
-                
         elif self.model_type == "EmbedHealthFlamingo":
             model = EmbedHealthFlamingo(
                 device=self.device,
