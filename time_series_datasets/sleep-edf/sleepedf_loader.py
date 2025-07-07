@@ -9,7 +9,7 @@ import tempfile
 import shutil
 import numpy as np
 import matplotlib.pyplot as plt
-
+import warnings
 
 # from constants import RAW_DATA_PATH
 
@@ -31,6 +31,12 @@ RECORDS_FILE = os.path.join(SLEEPEDF_DIR, "RECORDS")
 # Helper to ensure data
 # ---------------------------
 
+warnings.filterwarnings(
+    "ignore",
+    message="Channels contain different highpass filters",
+    category=RuntimeWarning,
+    module="mne"
+)
 
 def ensure_sleepedf_data(
     raw_data_path: str = RAW_DATA_PATH,
@@ -137,26 +143,98 @@ class SleepEDFDataset(Dataset):
         self.preload = preload
         self.picks = picks
 
+        self.data = self._load_data()
+        self.time_series, self.labels = self._make_windows()
+
+    def _load_data(self):
+        data = []
+        for rec_path, hyp_path in self.recordings:
+            # 1) read raw EDF
+            with tempfile.NamedTemporaryFile(suffix=".edf") as tmp:
+                shutil.copyfile(rec_path, tmp.name)
+                raw = mne.io.read_raw_edf(
+                    tmp.name, preload=self.preload, verbose=False)
+            # 2) read hypnogram annotations
+            with tempfile.NamedTemporaryFile(suffix=".edf") as tmp:
+                shutil.copyfile(hyp_path, tmp.name)
+                ann = mne.io.read_raw_edf(
+                    tmp.name, preload=self.preload, verbose=False)
+            # 3) optionally pick subset of channels
+            # if self.picks is not None:
+            #     raw = raw.copy().pick_channels(self.picks)
+            data.append((raw, ann))
+        return data
+
+    def _make_windows(self, window_size_sec: int = 3, *, min_pct: float = 0.5):
+        """Segment each `(raw, ann)` tuple into fixed-length windows.
+
+        Args:
+            window_size_sec: Length of each window **in seconds** (default 3 s).
+            min_pct: Minimum fraction (0-1) of samples within the window that
+                must agree with the modal sleep stage for the window to be
+                accepted.
+
+        Returns:
+            windows: list[np.ndarray] — each of shape (n_channels, n_steps)
+            labels:  list[int]       — modal sleep-stage per window
+        """
+        windows: list[np.ndarray] = []
+        labels: list[int] = []
+
+        for raw, ann in self.data:
+            # 1) Get data & sampling information
+            raw_data = raw.get_data()    # (n_features, n_samples)
+            raw_freq = raw.info["sfreq"] # 100 Hz
+
+            ann_data = ann.get_data()    # (1, m_samples)
+            ann_freq = ann.info["sfreq"] # 0.0333 Hz
+
+            # 2) Resample annotations to raw sampling frequency
+            if ann_freq != raw_freq:
+                raw_len = raw_data.shape[1]
+                ann_len = ann_data.shape[1]
+
+                labels_resampled = np.interp(
+                    np.arange(raw_len),
+                    np.linspace(0, raw_len - 1, ann_len),
+                    ann_data[0]
+                ).round().astype(int)
+            else:
+                labels_resampled = ann_data[0].astype(int)
+
+            # 3) Trim to the common length
+            n_samples = min(raw_data.shape[1], labels_resampled.shape[0])
+            raw_data = raw_data[:, :n_samples]
+            labels_resampled = labels_resampled[:n_samples]
+
+            # 4) Slide through contiguous non-overlapping windows
+            window_size = int(window_size_sec * raw_freq)
+            n_windows = n_samples // window_size
+
+            for w in range(n_windows):
+                start = w * window_size
+                end = start + window_size
+                win_raw = raw_data[:, start:end]
+                win_lbl = labels_resampled[start:end]
+
+                # Mode (most common stage) within the window
+                if win_lbl.size == 0:
+                    continue
+                mode = np.bincount(win_lbl).argmax()
+                if (win_lbl == mode).sum() < min_pct * win_lbl.size:
+                    continue
+
+                windows.append(win_raw)
+                labels.append(int(mode))
+
+        return windows, labels
+
+
     def __len__(self):
-        return len(self.recordings)
+        return len(self.time_series)
 
     def __getitem__(self, idx):
-        rec_path, hyp_path = self.recordings[idx]
-        # 1) read raw EDF
-        with tempfile.NamedTemporaryFile(suffix=".edf") as tmp:
-            shutil.copyfile(rec_path, tmp.name)
-            raw = mne.io.read_raw_edf(
-                tmp.name, preload=self.preload, verbose=False)
-        # 2) read hypnogram annotations
-        with tempfile.NamedTemporaryFile(suffix=".edf") as tmp:
-            shutil.copyfile(hyp_path, tmp.name)
-            ann = mne.io.read_raw_edf(
-                tmp.name, preload=self.preload, verbose=False)
-        # 3) optionally pick subset of channels
-        # if self.picks is not None:
-        #     raw = raw.copy().pick_channels(self.picks)
-        return raw, ann
-
+        return {"time_series": self.time_series[idx], "label": self.labels[idx]}
 
 def sleepedf_collate_fn(batch):
     """
@@ -200,29 +278,15 @@ def get_sleepedf_loader(
 
 
 if __name__ == "__main__":
-    loader = get_sleepedf_loader(batch_size=1, shuffle=False)
-    
-    raw, ann = next(iter(loader))
+    # loader = get_sleepedf_loader(batch_size=1, shuffle=False)
+    recs = load_sleepedf_recordings()
+    dataset = SleepEDFDataset(recs, preload=True, picks=None)
+    data_point = next(iter(dataset))
 
-    print(raw[0].get_data())
-    print(ann[0].get_data())
-
-    raw_data = raw[0].get_data()  
-    ann_data = ann[0].get_data()
-
-    print(len(raw_data[0]), len(ann_data[0]))
+    window = data_point['time_series']
+    label = data_point['label']
     
-    raw_time = np.arange(raw_data.shape[1]) / raw[0].info['sfreq']
-    ann_time = np.arange(ann_data.shape[1]) / ann[0].info['sfreq']
-    
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
-    
-    # Plot hypnogram
-    ax1.plot(ann_time, ann_data[0], 'k-')
-    ax1.set_ylabel('Sleep Stage')
-    ax1.set_title('Hypnogram')
-    
-    # Labels for sleep stages
+    # Plot only EEG Fpz-Cz window (first channel)
     stage_labels = {
         0: 'W',    # Wake
         1: 'N1',   # Non-REM stage 1
@@ -233,20 +297,18 @@ if __name__ == "__main__":
         6: 'M',    # Movement
         9: 'Unknown'  # Unknown
     }
-    
-    unique_stages = sorted(np.unique(ann_data[0]))
-    ax1.set_yticks(unique_stages)
-    ax1.set_yticklabels([stage_labels.get(int(stage), str(stage)) for stage in unique_stages])
-    
-    # Plot EEG-Fpz-Cz signal (first channel)
-    ax2.plot(raw_time, raw_data[0], 'b-')
-    ax2.set_xlabel('Time (seconds)')
-    ax2.set_ylabel('Amplitude')
-    
-    if len(raw[0].ch_names) > 0:
-        ax2.set_title(f'Raw Data - {raw[0].ch_names[0]}')
+
+    plt.figure(figsize=(15, 4))
+    plt.plot(window[0], 'b-')
+    plt.xlabel('Time (samples)')
+    plt.ylabel('Amplitude')
+
+    stage_str = stage_labels.get(int(label), str(label))
+    if hasattr(window[0], 'ch_names') and len(window[0].ch_names) > 0:
+        ch_name = window[0].ch_names[0]
     else:
-        ax2.set_title('Raw Data - Main Channel')
-    
+        ch_name = 'Main Channel'
+    plt.title(f'Raw EEG Window - {ch_name} | Stage: {stage_str} ({label})')
+
     plt.tight_layout()
     plt.show()
