@@ -16,6 +16,8 @@ class PromptWithAnswer:
         post_prompt: TextPrompt,
         answer: str,
     ):
+        assert isinstance(pre_prompt, TextPrompt), "Pre prompt must be a TextPrompt."
+        assert isinstance(post_prompt, TextPrompt), "Post prompt must be a TextPrompt."
         assert isinstance(answer, str), "Answer must be a string."
 
         self.pre_prompt = pre_prompt
@@ -31,8 +33,8 @@ class PromptWithAnswer:
     def to_dict(self):
         return {
             "answer": self.answer,
-            "post_prompt": self.post_prompt,
-            "pre_prompt": self.pre_prompt,
+            "post_prompt": self.post_prompt.get_text(),
+            "pre_prompt": self.pre_prompt.get_text(),
             "time_series": self.text_time_series_prompt_time_series,
             "time_series_text": self.text_time_series_prompt_texts,
         }

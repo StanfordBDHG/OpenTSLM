@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 
-from src.model_config import TRANSFORMER_INPUT_DIM, ENCODER_OUTPUT_DIM, PATCH_SIZE
+from model_config import TRANSFORMER_INPUT_DIM, ENCODER_OUTPUT_DIM, PATCH_SIZE
 from model.encoder.TimeSeriesEncoderBase import TimeSeriesEncoderBase
 
 

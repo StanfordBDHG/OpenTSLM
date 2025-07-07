@@ -9,21 +9,22 @@ import torch
 from typing import List, Dict, Tuple
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-from src.model_config import ENCODER_OUTPUT_DIM
+from model_config import ENCODER_OUTPUT_DIM
 from model.llm.TimeSeriesLLM import TimeSeriesLLM
 
 
 class EmbedHealthFlamingo(TimeSeriesLLM):
     def __init__(
         self,
-        device: str = "cuda",
+        device: str,
         llm_id: str = "meta-llama/Llama-3.2-1B",
         cross_attn_every_n_layers: int = 1,
         decoder_layers_attr_name: str = None,
         freeze_lm_embeddings: bool = False,
         **flamingo_kwargs,
     ):
-        super().__init__()
+        super().__init__(device)
+        print(f"Flamingo Using device: {self.device}")
         time_series_encoder = CNNTokenizer().to(device)
 
         text_tokenizer = AutoTokenizer.from_pretrained(

@@ -336,31 +336,33 @@ class CurriculumTrainer:
             if current_idx == 0:
                 # First stage, no previous model to load
                 return None
-            
             previous_stage = CURRICULUM_STAGES[current_idx - 1]
             metrics_file = os.path.join(
                 self.results_dir, self.model_type, previous_stage, "results", "metrics.json"
             )
-            
             if not os.path.exists(metrics_file):
+                # PATCH: If running stage2_captioning and previous stage metrics are missing, skip loading
+                if current_stage == "stage2_captioning":
+                    if self.rank == 0:
+                        print(f"⚠️  Skipping previous stage {previous_stage} because metrics file not found: {metrics_file}")
+                    return None
                 raise RuntimeError(f"Previous stage {previous_stage} metrics file not found: {metrics_file}")
-            
             with open(metrics_file, "r") as f:
                 metrics = json.load(f)
-            
             # Load the model weights from previous stage
             checkpoint_path = os.path.join(
                 self.results_dir, self.model_type, previous_stage, "checkpoints", "best_model.pt"
             )
-            
             if not os.path.exists(checkpoint_path):
+                # PATCH: If running stage2_captioning and previous stage checkpoint is missing, skip loading
+                if current_stage == "stage2_captioning":
+                    if self.rank == 0:
+                        print(f"⚠️  Skipping previous stage {previous_stage} because checkpoint not found: {checkpoint_path}")
+                    return None
                 raise RuntimeError(f"Previous stage {previous_stage} checkpoint not found: {checkpoint_path}")
-            
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
-            
             # Get the underlying model (handles DDP wrapping)
             model = self._get_model()
-            
             if self.model_type == "EmbedHealthSP":
                 model.encoder.load_state_dict(checkpoint["encoder_state"])
                 model.projector.load_state_dict(checkpoint["projector_state"])
@@ -370,7 +372,6 @@ class CurriculumTrainer:
                 if hasattr(self.model, 'module'):
                     # Add 'module.' prefix for DDP
                     model_state = {f'module.{k}': v for k, v in model_state.items()}
-                
                 # Load state dict with strict=False to handle missing keys
                 try:
                     missing_keys, unexpected_keys = self.model.load_state_dict(model_state, strict=False)
@@ -389,14 +390,12 @@ class CurriculumTrainer:
                             print(f"   ... and {len(unexpected_keys) - 5} more keys")
                 except Exception as e:
                     raise RuntimeError(f"Failed to load model state from previous stage {previous_stage}: {e}")
-                
             return {
                 "stage": previous_stage,
                 "metrics": metrics,
                 "epoch": checkpoint.get("epoch", "?"),
                 "val_loss": checkpoint.get("val_loss", "?")
             }
-            
         except Exception as e:
             raise RuntimeError(f"Failed to load previous stage model: {e}")
     
@@ -435,6 +434,9 @@ class CurriculumTrainer:
         
         with torch.no_grad():
             for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
+                # Only keep batches with series-M42150
+                if not any('id' in sample and sample['id'] == 'series-M42150' for sample in batch):
+                    continue
                
                 # Compute loss
                 loss = self._get_model().compute_loss(batch)

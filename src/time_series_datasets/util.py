@@ -1,6 +1,6 @@
 import math
 from typing import List
-from src.model_config import PATCH_SIZE
+from model_config import PATCH_SIZE
 
 import torch.nn.functional as F
 

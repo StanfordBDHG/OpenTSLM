@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Literal, Tuple
 from prompt.prompt_with_answer import PromptWithAnswer
+from prompt.text_prompt import TextPrompt
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from torch.utils.data import Dataset
 
@@ -55,9 +56,9 @@ class QADataset(Dataset, ABC):
             answer += self.EOS_TOKEN
 
         return PromptWithAnswer(
-            self._get_pre_prompt(row).strip(),
+            TextPrompt(self._get_pre_prompt(row).strip()),
             self._get_text_time_series_prompt_list(row),
-            self._get_post_prompt(row).strip(),
+            TextPrompt(self._get_post_prompt(row).strip()),
             answer.strip(),
         ).to_dict()
 
