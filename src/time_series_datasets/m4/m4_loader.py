@@ -45,7 +45,7 @@ def download_and_extract_dataset():
     if os.path.exists(GENERATED_DATA_DIR):
         print(f"Dataset already exists at {GENERATED_DATA_DIR}")
         return
-    
+     
     # Create data directory if it doesn't exist
     os.makedirs(DATA_DIR, exist_ok=True)
     
