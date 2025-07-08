@@ -16,7 +16,20 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from curriculum_learning import CurriculumTrainer
 
-device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Add a helper to sanitize llm_id for directory names (should match curriculum_learning.py)
+def _sanitize_llm_id(llm_id: str) -> str:
+    if not llm_id:
+        return "unknown_llm"
+    name = llm_id.split("/")[-1]
+    name = name.replace(".", "_").replace("-", "_")
+    while "__" in name:
+        name = name.replace("__", "_")
+    return name
+
+LLM_ID = "meta-llama/Llama-3.2-1B"
+LLM_ID_SAFE = _sanitize_llm_id(LLM_ID)
 
 def test_curriculum_trainer_initialization():
     """Test that the CurriculumTrainer can be initialized correctly."""
@@ -24,13 +37,13 @@ def test_curriculum_trainer_initialization():
     
     try:
         # Test with EmbedHealthFlamingo
-        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id="meta-llama/Llama-3.2-1B", device=device)
+        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id=LLM_ID, device=device)
         assert trainer.model_type == "EmbedHealthFlamingo"
         assert trainer.device in ["cuda", "mps", "cpu"]
         print("✅ EmbedHealthFlamingo initialization successful")
         
         # Test with EmbedHealthSP
-        trainer = CurriculumTrainer("EmbedHealthSP", llm_id="meta-llama/Llama-3.2-1B", device=device)
+        trainer = CurriculumTrainer("EmbedHealthSP", llm_id=LLM_ID, device=device)
         assert trainer.model_type == "EmbedHealthSP"
         print("✅ EmbedHealthSP initialization successful")
         
@@ -46,13 +59,17 @@ def test_results_directory_creation():
     print("\n🧪 Testing results directory creation...")
     
     try:
-        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id="meta-llama/Llama-3.2-1B", device=device)
+        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id=LLM_ID, device=device)
         
         # Check that the main results directory exists
         assert os.path.exists("results"), "Main results directory not created"
         
+        # Check that llm_id-specific directory exists
+        llm_dir = os.path.join("results", LLM_ID_SAFE)
+        assert os.path.exists(llm_dir), "LLM directory not created"
+        
         # Check that model-specific directory exists
-        model_dir = os.path.join("results", "EmbedHealthFlamingo")
+        model_dir = os.path.join(llm_dir, "EmbedHealthFlamingo")
         assert os.path.exists(model_dir), "Model directory not created"
         
         # Check that stage directories exist
@@ -81,13 +98,13 @@ def test_optimizer_creation():
     
     try:
         # Test EmbedHealthFlamingo optimizer
-        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id="meta-llama/Llama-3.2-1B", device=device)
+        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id=LLM_ID, device=device)
         optimizer = trainer._get_optimizer()
         assert optimizer is not None, "Flamingo optimizer is None"
         print("✅ EmbedHealthFlamingo optimizer created successfully")
         
         # Test EmbedHealthSP optimizer
-        trainer = CurriculumTrainer("EmbedHealthSP", llm_id="meta-llama/Llama-3.2-1B", device=device)
+        trainer = CurriculumTrainer("EmbedHealthSP", llm_id=LLM_ID, device=device)
         optimizer = trainer._get_optimizer()
         assert optimizer is not None, "SP optimizer is None"
         print("✅ EmbedHealthSP optimizer created successfully")
@@ -104,7 +121,7 @@ def test_accuracy_calculation():
     print("\n🧪 Testing accuracy calculation...")
     
     try:
-        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id="meta-llama/Llama-3.2-1B", device=device)
+        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id=LLM_ID, device=device)
         
         # Test exact matches
         print("🧪 Testing exact matches...")
@@ -146,7 +163,7 @@ def test_checkpoint_operations():
     print("\n🧪 Testing checkpoint operations...")
     
     try:
-        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id="meta-llama/Llama-3.2-1B", device=device)
+        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id=LLM_ID, device=device)
         
         # Create simple mock objects with state_dict method
         class MockOptimizer:
@@ -168,7 +185,7 @@ def test_checkpoint_operations():
         trainer._save_checkpoint("stage1_mcq", 5, 0.123, mock_optimizer, mock_scheduler)
         
         checkpoint_path = os.path.join(
-            "results", "EmbedHealthFlamingo", "stage1_mcq", "checkpoints", "best_model.pt"
+            "results", LLM_ID_SAFE, "EmbedHealthFlamingo", "stage1_mcq", "checkpoints", "best_model.pt"
         )
         assert os.path.exists(checkpoint_path), "Checkpoint file not saved"
         
@@ -191,10 +208,10 @@ def test_previous_stage_loading():
     print("\n🧪 Testing previous stage loading...")
     
     try:
-        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id="meta-llama/Llama-3.2-1B", device=device)
+        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id=LLM_ID, device=device)
         
         # Create mock metrics file for stage1_mcq
-        metrics_dir = os.path.join("results", "EmbedHealthFlamingo", "stage1_mcq", "results")
+        metrics_dir = os.path.join("results", LLM_ID_SAFE, "EmbedHealthFlamingo", "stage1_mcq", "results")
         os.makedirs(metrics_dir, exist_ok=True)
         
         mock_metrics = {
@@ -206,7 +223,7 @@ def test_previous_stage_loading():
             json.dump(mock_metrics, f)
         
         # Create mock checkpoint for stage1_mcq
-        checkpoint_dir = os.path.join("results", "EmbedHealthFlamingo", "stage1_mcq", "checkpoints")
+        checkpoint_dir = os.path.join("results", LLM_ID_SAFE, "EmbedHealthFlamingo", "stage1_mcq", "checkpoints")
         os.makedirs(checkpoint_dir, exist_ok=True)
         
         mock_checkpoint = {
@@ -246,7 +263,7 @@ def test_stage_methods_exist():
     print("\n🧪 Testing stage methods...")
     
     try:
-        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id="meta-llama/Llama-3.2-1B", device=device)
+        trainer = CurriculumTrainer("EmbedHealthFlamingo", llm_id=LLM_ID, device=device)
         
         # Check that stage methods exist
         assert hasattr(trainer, 'stage1_mcq'), "stage1_mcq method not found"
@@ -269,7 +286,7 @@ def test_invalid_model_type():
     
     try:
         # This should raise a ValueError
-        trainer = CurriculumTrainer("InvalidModel", llm_id="meta-llama/Llama-3.2-1B", device=device)
+        trainer = CurriculumTrainer("InvalidModel", llm_id=LLM_ID, device=device)
         print("❌ Should have raised ValueError for invalid model type")
         return False
         
