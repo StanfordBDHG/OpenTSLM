@@ -27,7 +27,7 @@ model.load_from_file("../models/best_model.pt")
 
 
 # 2. Load the M4 series-M42150 from CSV
-csv_path = "../data/m4/m4_series_Monthly.csv"
+csv_path = "../data/M4TimeSeriesCaptionDataset/m4_series_Monthly.csv"
 df = pd.read_csv(csv_path)
 row = df[df['id'] == 'series-M42150'].iloc[0]
 series_str = row['series']
