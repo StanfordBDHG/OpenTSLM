@@ -5,6 +5,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.nn.utils.rnn import pad_sequence
 
 from model_config import ENCODER_OUTPUT_DIM
+from prompt.full_prompt import FullPrompt
 
 class TimeSeriesLLM(nn.Module):
     def __init__(
@@ -30,3 +31,6 @@ class TimeSeriesLLM(nn.Module):
 
     def get_eos_token(self) -> str:
         raise NotImplementedError("Get eos token method should be implemented by the subclass")
+
+    def eval_prompt(self, prompt: FullPrompt) -> str:
+        raise NotImplementedError("Eval prompt method should be implemented by the subclass")

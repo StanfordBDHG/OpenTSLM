@@ -11,7 +11,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from model_config import ENCODER_OUTPUT_DIM
 from model.llm.TimeSeriesLLM import TimeSeriesLLM
-
+from prompt.full_prompt import FullPrompt
+from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
 
 class EmbedHealthFlamingo(TimeSeriesLLM):
     def __init__(
@@ -39,6 +40,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             local_files_only=False,
             trust_remote_code=True,
             cache_dir=None,
+            device_map={"": device},
         )
 
         # add Flamingo special tokens to the tokenizer
@@ -264,9 +266,34 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
 
         # If checkpoint has encoder/llm structure, handle separately
         if "llm" in checkpoint:
-            self.llm.load_state_dict(checkpoint["llm"], strict=False)
+            missing_keys, unexpected_keys = self.llm.load_state_dict(checkpoint["llm"], strict=False)
         else:
             # Try loading directly with non-strict matching
-            self.load_state_dict(checkpoint, strict=False)
+            missing_keys, unexpected_keys = self.load_state_dict(checkpoint, strict=False)
 
+        if missing_keys:
+            print(f"⚠️  Warning: Missing keys when loading checkpoint:")
+            for key in missing_keys[:10]:
+                print(f"   - {key}")
+            if len(missing_keys) > 10:
+                print(f"   ... and {len(missing_keys) - 10} more keys")
+            raise RuntimeError(f"Missing keys when loading checkpoint")
+        if unexpected_keys:
+            print(f"⚠️  Warning: Unexpected keys when loading checkpoint:")
+            for key in unexpected_keys[:10]:
+                print(f"   - {key}")
+            if len(unexpected_keys) > 10:
+                print(f"   ... and {len(unexpected_keys) - 10} more keys")
+            raise RuntimeError(f"Unexpected keys when loading checkpoint")
         print(f"Model loaded from {path}")
+
+    def eval_prompt(self, prompt: FullPrompt, max_new_tokens: int = 30000) -> str:
+        """
+        Evaluate a prompt and return the generated text.
+        """
+                
+        batch = [prompt.to_dict()]
+        self.eval()
+        batch = extend_time_series_to_match_patch_size_and_aggregate(batch)
+        output = self.generate(batch, max_new_tokens=max_new_tokens)
+        return output[0]
