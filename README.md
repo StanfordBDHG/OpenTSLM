@@ -5,6 +5,7 @@
   <img src="assets/eth_cdhi_logo.png" alt="ETH Centre for Digital Health Interventions" height="120">
 </div>
 
+
 ## Installation
 
 1. **Clone the Repository**  
@@ -44,6 +45,9 @@ EmbedHealth uses curriculum learning with progressive training stages:
 1. **Stage 1 (MCQ)**: Multiple choice questions on time series data
 2. **Stage 2 (Captioning)**: Generate detailed captions for time series
 
+> **⚠️ MPS/CUDA Compatibility Warning:**
+> 
+> If you are using Apple's MPS (Metal Performance Shaders) backend (e.g., on Mac with Apple Silicon), you may encounter issues with training or inference. **Checkpoints trained with CUDA (NVIDIA GPUs) may not yield good results or may not be fully compatible when loaded and run on MPS.** For best results, use the same device type (CUDA or MPS) for both training and inference. CUDA is preferred in general.
 ### Quick Start
 ```bash
 # Run full curriculum with EmbedHealthFlamingo

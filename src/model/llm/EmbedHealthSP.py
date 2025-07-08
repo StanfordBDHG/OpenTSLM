@@ -16,8 +16,7 @@ class EmbedHealthSP(TimeSeriesLLM):
         llm_id: str = "meta-llama/Llama-3.2-1B",
         device: str = "cuda",
     ):
-        super().__init__()
-        self.device = device
+        super().__init__(device)
 
         # 1) tokenizer (ensure pad_token exists)
         self.tokenizer = AutoTokenizer.from_pretrained(llm_id, use_fast=True)
