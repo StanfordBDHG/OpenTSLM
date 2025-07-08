@@ -207,7 +207,13 @@ class SleepEDFDataset(Dataset):
             raw_data = raw_data[:, :n_samples]
             labels_resampled = labels_resampled[:n_samples]
 
-            # 4) Slide through contiguous non-overlapping windows
+            # 4) Downsample by 2x (100 Hz → 50 Hz)
+            ds_factor = 2
+            raw_data = raw_data[:, ::ds_factor]
+            labels_resampled = labels_resampled[::ds_factor]
+            raw_freq = raw_freq / ds_factor 
+
+            # 5) Slide through contiguous non-overlapping windows
             window_size = int(window_size_sec * raw_freq)
             n_windows = n_samples // window_size
 
