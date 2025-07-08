@@ -285,6 +285,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 print(f"   - {key}")
             if len(unexpected_keys) > 10:
                 print(f"   ... and {len(unexpected_keys) - 10} more keys")
+        self.to(self.device)
 
     def eval_prompt(self, prompt: FullPrompt, max_new_tokens: int = 30000) -> str:
         """
