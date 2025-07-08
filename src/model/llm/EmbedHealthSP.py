@@ -8,7 +8,8 @@ from src.model_config import ENCODER_OUTPUT_DIM
 from model.llm.TimeSeriesLLM import TimeSeriesLLM
 from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from model.projector.MLPProjector import MLPProjector
-
+from prompt.full_prompt import FullPrompt
+from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
 
 class EmbedHealthSP(TimeSeriesLLM):
     def __init__(
@@ -247,3 +248,14 @@ class EmbedHealthSP(TimeSeriesLLM):
         self.encoder.load_state_dict(ckpt["encoder_state"])
         self.projector.load_state_dict(ckpt["projector_state"])
         print(f"Loaded best model from epoch {ckpt.get('epoch', '?')}")
+
+    def eval_prompt(self, prompt: FullPrompt, max_new_tokens: int = 30000) -> str:
+        """
+        Evaluate a prompt and return the generated text.
+        """
+                
+        batch = [prompt.to_dict()]
+        self.eval()
+        batch = extend_time_series_to_match_patch_size_and_aggregate(batch)
+        output = self.generate(batch, max_new_tokens=max_new_tokens)
+        return output[0]
