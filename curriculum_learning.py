@@ -123,15 +123,15 @@ class CurriculumTrainer:
             
         elif self.model_type == "EmbedHealthFlamingo":
             model = EmbedHealthFlamingo(
-                device=self.device,
                 cross_attn_every_n_layers=1,
                 gradient_checkpointing=self.gradient_checkpointing,
                 llm_id=self.llm_id,
+                device=self.device,
             ).to(self.device)
         else:
             raise ValueError(f"Unknown model type: {self.model_type}")
         
-        # Use DDP for multi-GPU training (simpler and more reliable than FSDP)
+        # Use DDP for multi-GPU training (simpler and than FSDP)
         if self.world_size > 1:
             model = DDP(model, device_ids=[self.local_rank] if torch.cuda.is_available() else None)
             if self.rank == 0:

@@ -256,36 +256,36 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         """
         checkpoint = torch.load(path, map_location=self.device)
 
-        # Handle potential DataParallel prefix
-        if "model_state_dict" in checkpoint:
-            checkpoint = checkpoint["model_state_dict"]
-
-        # Remove 'module.' prefix if present (from DataParallel)
-        if isinstance(checkpoint, dict):
-            checkpoint = {k.replace("module.", ""): v for k, v in checkpoint.items()}
-
-        # If checkpoint has encoder/llm structure, handle separately
         if "llm" in checkpoint:
-            missing_keys, unexpected_keys = self.llm.load_state_dict(checkpoint["llm"], strict=False)
+            model_state = checkpoint["llm"]
+        elif "model_state" in checkpoint:
+            model_state = checkpoint["model_state"]
         else:
-            # Try loading directly with non-strict matching
-            missing_keys, unexpected_keys = self.load_state_dict(checkpoint, strict=False)
+            raise RuntimeError("No recognized model state key in checkpoint.")
 
+        # Handle DDP (DistributedDataParallel) if needed
+        if hasattr(self, 'module'):
+            model_state = {f'module.{k}': v for k, v in model_state.items()}
+
+        # Remove 'model.' prefix if present in checkpoint keys
+        if all(k.startswith('model.') for k in model_state.keys()):
+            model_state = {k.replace('model.', '', 1): v for k, v in model_state.items()}
+        print(model_state)
+
+        # Load state dict with strict=False to handle missing/unexpected keys
+        missing_keys, unexpected_keys = self.load_state_dict(model_state, strict=False)
         if missing_keys:
             print(f"⚠️  Warning: Missing keys when loading checkpoint:")
             for key in missing_keys[:10]:
                 print(f"   - {key}")
             if len(missing_keys) > 10:
                 print(f"   ... and {len(missing_keys) - 10} more keys")
-            raise RuntimeError(f"Missing keys when loading checkpoint")
         if unexpected_keys:
             print(f"⚠️  Warning: Unexpected keys when loading checkpoint:")
             for key in unexpected_keys[:10]:
                 print(f"   - {key}")
             if len(unexpected_keys) > 10:
                 print(f"   ... and {len(unexpected_keys) - 10} more keys")
-            raise RuntimeError(f"Unexpected keys when loading checkpoint")
-        print(f"Model loaded from {path}")
 
     def eval_prompt(self, prompt: FullPrompt, max_new_tokens: int = 30000) -> str:
         """
