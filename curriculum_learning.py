@@ -67,6 +67,18 @@ class CurriculumTrainer:
     All datasets are automatically downloaded and processed.
     """
     
+    def _sanitize_llm_id(self, llm_id: str) -> str:
+        """Sanitize llm_id for use in directory names (e.g., meta-llama/Llama-3.2-1B -> Llama3_2_1B)"""
+        if not llm_id:
+            return "unknown_llm"
+        # Take last part after /, replace . and - with _
+        name = llm_id.split("/")[-1]
+        name = name.replace(".", "_").replace("-", "_")
+        # Optionally, remove duplicate underscores
+        while "__" in name:
+            name = name.replace("__", "_")
+        return name
+
     def __init__(self, model_type: str, device: str = None, gradient_checkpointing: bool = False, 
                  dist_url: str = "env://", dist_backend: str = "nccl", local_rank: int = int(os.environ.get("LOCAL_RANK", 0)),
                  llm_id: str = None):
@@ -87,6 +99,7 @@ class CurriculumTrainer:
         if self.device == "mps":
             print("🚨 Warning: Using MPS, might not be fully compatible with the model. Use CUDA for best results.")
         self.llm_id = llm_id
+        self.llm_id_safe = self._sanitize_llm_id(llm_id)
         
         # Distributed training parameters
         self.gradient_checkpointing = gradient_checkpointing
@@ -101,7 +114,7 @@ class CurriculumTrainer:
             self._init_distributed()
         
         self.model = self._initialize_model()
-        self.results_dir = "results"
+        self.results_dir = os.path.join("results", self.llm_id_safe, self.model_type)
         self._create_results_dir()
         
     def _get_device(self) -> str:
@@ -151,7 +164,8 @@ class CurriculumTrainer:
     def _create_results_dir(self):
         """Create the results directory structure."""
         os.makedirs(self.results_dir, exist_ok=True)
-        model_dir = os.path.join(self.results_dir, self.model_type)
+        # model_dir now includes llm_id_safe
+        model_dir = self.results_dir
         os.makedirs(model_dir, exist_ok=True)
         
         # Create stage directories based on global configuration
@@ -249,7 +263,7 @@ class CurriculumTrainer:
     
     def _save_checkpoint(self, stage: str, epoch: int, val_loss: float, optimizer, scheduler):
         """Save model checkpoint for a specific stage."""
-        checkpoint_dir = os.path.join(self.results_dir, self.model_type, stage, "checkpoints")
+        checkpoint_dir = os.path.join(self.results_dir, stage, "checkpoints")
         
         # Only save on rank 0 for distributed training
         if dist.is_initialized() and self.rank != 0:
@@ -285,9 +299,7 @@ class CurriculumTrainer:
     
     def _load_checkpoint(self, stage: str, optimizer, scheduler):
         """Load model checkpoint for a specific stage."""
-        checkpoint_path = os.path.join(
-            self.results_dir, self.model_type, stage, "checkpoints", "best_model.pt"
-        )
+        checkpoint_path = os.path.join(self.results_dir, stage, "checkpoints", "best_model.pt")
         
         if os.path.exists(checkpoint_path):
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
@@ -339,9 +351,7 @@ class CurriculumTrainer:
                 # First stage, no previous model to load
                 return None
             previous_stage = CURRICULUM_STAGES[current_idx - 1]
-            metrics_file = os.path.join(
-                self.results_dir, self.model_type, previous_stage, "results", "metrics.json"
-            )
+            metrics_file = os.path.join(self.results_dir, previous_stage, "results", "metrics.json")
             if not os.path.exists(metrics_file):
                 # PATCH: If running stage2_captioning and previous stage metrics are missing, skip loading
                 if current_stage == "stage2_captioning":
@@ -352,9 +362,7 @@ class CurriculumTrainer:
             with open(metrics_file, "r") as f:
                 metrics = json.load(f)
             # Load the model weights from previous stage
-            checkpoint_path = os.path.join(
-                self.results_dir, self.model_type, previous_stage, "checkpoints", "best_model.pt"
-            )
+            checkpoint_path = os.path.join(self.results_dir, previous_stage, "checkpoints", "best_model.pt")
             if not os.path.exists(checkpoint_path):
                 # PATCH: If running stage2_captioning and previous stage checkpoint is missing, skip loading
                 if current_stage == "stage2_captioning":
@@ -474,17 +482,13 @@ class CurriculumTrainer:
         
         # Save results only on rank 0
         if self.rank == 0:
-            results_file = os.path.join(
-                self.results_dir, self.model_type, stage, "results", "test_predictions.jsonl"
-            )
+            results_file = os.path.join(self.results_dir, stage_name, "results", "test_predictions.jsonl")
             with open(results_file, "w", encoding="utf-8") as f:
                 for row in results:
                     f.write(json.dumps(row, ensure_ascii=False) + "\n")
             
             # Save metrics
-            metrics_file = os.path.join(
-                self.results_dir, self.model_type, stage, "results", "metrics.json"
-            )
+            metrics_file = os.path.join(self.results_dir, stage_name, "results", "metrics.json")
             with open(metrics_file, "w") as f:
                 json.dump(metrics, f, indent=2)
             
@@ -506,12 +510,8 @@ class CurriculumTrainer:
     
     def _is_evaluation_completed(self, stage: str) -> bool:
         """Check if evaluation was completed for a stage by looking for test predictions file."""
-        test_predictions_file = os.path.join(
-            self.results_dir, self.model_type, stage, "results", "test_predictions.jsonl"
-        )
-        metrics_file = os.path.join(
-            self.results_dir, self.model_type, stage, "results", "metrics.json"
-        )
+        test_predictions_file = os.path.join(self.results_dir, stage, "results", "test_predictions.jsonl")
+        metrics_file = os.path.join(self.results_dir, stage, "results", "metrics.json")
         
         # Check if both files exist
         if not os.path.exists(test_predictions_file) or not os.path.exists(metrics_file):
@@ -552,7 +552,7 @@ class CurriculumTrainer:
         
         # Check if checkpoint exists when in eval_only mode
         if eval_only and not self._checkpoint_exists(stage_name):
-            raise RuntimeError(f"Eval-only mode requires a checkpoint for {stage_name}, but none found at {os.path.join(self.results_dir, self.model_type, stage_name, 'checkpoints', 'best_model.pt')}")
+            raise RuntimeError(f"Eval-only mode requires a checkpoint for {stage_name}, but none found at {os.path.join(self.results_dir, stage_name, 'checkpoints', 'best_model.pt')}")
         
         # Load previous stage model and display metrics
         try:
@@ -591,9 +591,7 @@ class CurriculumTrainer:
             print(f"📂 Loading existing metrics...")
             
             # Load and return existing metrics
-            metrics_file = os.path.join(
-                self.results_dir, self.model_type, stage_name, "results", "metrics.json"
-            )
+            metrics_file = os.path.join(self.results_dir, stage_name, "results", "metrics.json")
             with open(metrics_file, "r") as f:
                 metrics = json.load(f)
             
@@ -862,14 +860,12 @@ class CurriculumTrainer:
         
         # Save overall results only on rank 0
         if self.rank == 0:
-            overall_results_file = os.path.join(
-                self.results_dir, self.model_type, "curriculum_results.json"
-            )
+            overall_results_file = os.path.join(self.results_dir, "curriculum_results.json")
             with open(overall_results_file, "w") as f:
                 json.dump(results, f, indent=2)
             
             print(f"\n🎉 Curriculum Learning Complete!")
-            print(f"📁 All results saved to: {self.results_dir}/{self.model_type}/")
+            print(f"📁 All results saved to: {self.results_dir}/")
             print(f"📊 Overall results: {overall_results_file}")
         
         return results
@@ -912,9 +908,7 @@ class CurriculumTrainer:
 
     def _is_stage_completed(self, stage: str) -> bool:
         """Check if a stage is completed by verifying both training and evaluation were successful."""
-        metrics_file = os.path.join(
-            self.results_dir, self.model_type, stage, "results", "metrics.json"
-        )
+        metrics_file = os.path.join(self.results_dir, stage, "results", "metrics.json")
         
         if not os.path.exists(metrics_file):
             return False
@@ -932,9 +926,7 @@ class CurriculumTrainer:
                 return False
             
             # Check if test predictions file exists
-            test_predictions_file = os.path.join(
-                self.results_dir, self.model_type, stage, "results", "test_predictions.jsonl"
-            )
+            test_predictions_file = os.path.join(self.results_dir, stage, "results", "test_predictions.jsonl")
             if not os.path.exists(test_predictions_file):
                 return False
             
@@ -948,9 +940,7 @@ class CurriculumTrainer:
         metrics["completed"] = True
         metrics["completion_epoch"] = metrics.get("epoch", "?")
         
-        metrics_file = os.path.join(
-            self.results_dir, self.model_type, stage, "results", "metrics.json"
-        )
+        metrics_file = os.path.join(self.results_dir, stage, "results", "metrics.json")
         with open(metrics_file, "w") as f:
             json.dump(metrics, f, indent=2)
         
@@ -965,9 +955,7 @@ class CurriculumTrainer:
 
     def _checkpoint_exists(self, stage: str) -> bool:
         """Check if a checkpoint exists for a specific stage."""
-        checkpoint_path = os.path.join(
-            self.results_dir, self.model_type, stage, "checkpoints", "best_model.pt"
-        )
+        checkpoint_path = os.path.join(self.results_dir, stage, "checkpoints", "best_model.pt")
         return os.path.exists(checkpoint_path)
 
 
