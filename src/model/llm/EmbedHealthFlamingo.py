@@ -270,7 +270,6 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         # Remove 'model.' prefix if present in checkpoint keys
         if all(k.startswith('model.') for k in model_state.keys()):
             model_state = {k.replace('model.', '', 1): v for k, v in model_state.items()}
-        print(model_state)
 
         # Load state dict with strict=False to handle missing/unexpected keys
         missing_keys, unexpected_keys = self.load_state_dict(model_state, strict=False)
