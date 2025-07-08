@@ -51,10 +51,10 @@ EmbedHealth uses curriculum learning with progressive training stages:
 ### Quick Start
 ```bash
 # Run full curriculum with EmbedHealthFlamingo
-python curriculum_learning.py --model EmbedHealthFlamingo
+python curriculum_learning.py --model EmbedHealthSP
 
 # Run full curriculum with EmbedHealthSP
-python curriculum_learning.py --model EmbedHealthSP
+python curriculum_learning.py --model EmbedHealthFlamingo
 
 # Run only MCQ stage
 python curriculum_learning.py --model EmbedHealthFlamingo --stages stage1_mcq
@@ -64,6 +64,9 @@ python curriculum_learning.py --model EmbedHealthFlamingo --stages stage2_captio
 
 # Specify device
 python curriculum_learning.py --model EmbedHealthFlamingo --device cuda
+
+# Run only evaluation
+python curriculum_learning.py --model EmbedHealthFlamingo --eval_only
 ```
 
 ### Command Line Arguments
@@ -71,6 +74,7 @@ python curriculum_learning.py --model EmbedHealthFlamingo --device cuda
 - `--model`: Model type (`EmbedHealthSP` or `EmbedHealthFlamingo`)
 - `--stages`: Stages to run (`stage1_mcq`, `stage2_captioning`, or both)
 - `--device`: Device to use (`cuda`, `mps`, `cpu`)
+- `--eval_only`: Run evaluation only (requires an existing checkpoint for the stage)
 
 ## 📁 Results Structure
 

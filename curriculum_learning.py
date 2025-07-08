@@ -84,6 +84,8 @@ class CurriculumTrainer:
         """
         self.model_type = model_type
         self.device = device or self._get_device()
+        if self.device == "mps":
+            print("🚨 Warning: Using MPS, might not be fully compatible with the model. Use CUDA for best results.")
         self.llm_id = llm_id
         
         # Distributed training parameters
@@ -434,10 +436,7 @@ class CurriculumTrainer:
         
         with torch.no_grad():
             for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
-                # Only keep batches with series-M42150
-                if not any('id' in sample and sample['id'] == 'series-M42150' for sample in batch):
-                    continue
-               
+             
                 # Compute loss
                 loss = self._get_model().compute_loss(batch)
                 test_loss += loss.item()
