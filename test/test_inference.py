@@ -15,7 +15,7 @@ from time_series_datasets.util import extend_time_series_to_match_patch_size_and
 
 # 1. Load the model
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-device = "cpu"
+
 print(f"Using device: {device}")
 model = EmbedHealthFlamingo(
     device=device,
