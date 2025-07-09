@@ -11,9 +11,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import warnings
 
-# from constants import RAW_DATA_PATH
 
-RAW_DATA_PATH = "./data"
+
+import sys
+import os.path
+print(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "src"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "src"))
+
+from time_series_datasets.constants import RAW_DATA as RAW_DATA_PATH
+from tqdm.auto import tqdm
 
 # ---------------------------
 # Constants
@@ -22,10 +28,6 @@ RAW_DATA_PATH = "./data"
 SLEEPEDF_URL = "https://physionet.org/static/published-projects/sleep-edf/sleep-edf-database-1.0.0.zip"
 ZIP_NAME = "sleep-edf-database-1.0.0.zip"
 DATA_DIR_NAME = "sleep-edf-database-1.0.0"
-
-ZIP_PATH = os.path.join(RAW_DATA_PATH, ZIP_NAME)
-SLEEPEDF_DIR = os.path.join(RAW_DATA_PATH, DATA_DIR_NAME)
-RECORDS_FILE = os.path.join(SLEEPEDF_DIR, "RECORDS")
 
 # ---------------------------
 # Helper to ensure data
@@ -49,20 +51,25 @@ def ensure_sleepedf_data(
     """
     os.makedirs(raw_data_path, exist_ok=True)
 
-    # If already extracted, nothing to do
-    if os.path.isdir(SLEEPEDF_DIR):
-        return
-
+    sleepedf_dir = os.path.join(raw_data_path, DATA_DIR_NAME)
     zip_path = os.path.join(raw_data_path, zip_name)
+
+    # If already extracted, nothing to do
+    if os.path.isdir(sleepedf_dir):
+        return
 
     # 1) Download
     if not os.path.isfile(zip_path):
         print(f"Downloading Sleep-EDF from {url} …")
         resp = requests.get(url, stream=True)
         resp.raise_for_status()
-        with open(zip_path, "wb") as f:
+        total = int(resp.headers.get('content-length', 0))
+        with open(zip_path, "wb") as f, tqdm(
+            total=total, unit='B', unit_scale=True, desc="Downloading Sleep-EDF ZIP"
+        ) as pbar:
             for chunk in resp.iter_content(8192):
                 f.write(chunk)
+                pbar.update(len(chunk))
 
     # 2) Extract
     print(f"Extracting {zip_path} …")
@@ -83,14 +90,16 @@ def load_sleepedf_recordings(
     Returns a list of (rec_path, hyp_path) for all recordings.
     """
     ensure_sleepedf_data(raw_data_path)
+    sleepedf_dir = os.path.join(raw_data_path, DATA_DIR_NAME)
+    records_file = os.path.join(sleepedf_dir, "RECORDS")
     recs = []
     # Read the RECORDS file and group .rec and .hyp files by their base name
-    print(RECORDS_FILE)
+    print(records_file)
     
     # Create a dictionary to store file paths by base name
     files_by_basename = {}
     
-    with open(RECORDS_FILE, "r") as f:
+    with open(records_file, "r") as f:
         for line in f:
             filename = line.strip()
             if not filename:
@@ -106,9 +115,9 @@ def load_sleepedf_recordings(
                 
                 # Store the full path based on extension
                 if ext == 'rec':
-                    files_by_basename[basename]['rec'] = os.path.join(SLEEPEDF_DIR, filename)
+                    files_by_basename[basename]['rec'] = os.path.join(sleepedf_dir, filename)
                 elif ext == 'hyp':
-                    files_by_basename[basename]['hyp'] = os.path.join(SLEEPEDF_DIR, filename)
+                    files_by_basename[basename]['hyp'] = os.path.join(sleepedf_dir, filename)
     
     # Create pairs of (rec_path, hyp_path) for each recording
     for _, paths in files_by_basename.items():
