@@ -4,6 +4,7 @@ import re
 import sys
 from typing import Type
 
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -15,47 +16,34 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from time_series_datasets.pamap2 import PAMAP2Dataset
 from time_series_datasets.TSQADataset import TSQADataset
 
-def format_time_series_for_text(time_series_data, time_series_text):
-    """
-    Convert time series data to a text representation that the language model can understand.
-    """
-    # Convert the time series to a readable format
-    if isinstance(time_series_data[0], list):
-        # Handle multiple time series (though TSQA typically has one)
-        formatted_series = []
-        for i, series in enumerate(time_series_data):
-            series_str = ", ".join([f"{val:.4f}" for val in series[:50]])  # Limit length
-            if len(series) > 50:
-                series_str += "..."
-            formatted_series.append(f"Series {i+1}: [{series_str}]")
-        return "\n".join(formatted_series)
-    else:
-        # Single time series
-        series_str = ", ".join([f"{val:.4f}" for val in time_series_data[:50]])
-        if len(time_series_data) > 50:
-            series_str += "..."
-        return f"[{series_str}]"
 
 def create_input_text(sample):
     """
-    Create the full input text for the model from a TSQA sample.
+    Create the full input text for the model from a Dataset sample.
     """
-    pre_prompt = sample['pre_prompt']
-    post_prompt = sample['post_prompt']
-    time_series_text = sample['time_series_text'][0] if sample['time_series_text'] else ""
-    time_series_data = sample['time_series'][0] if sample['time_series'] else []
+
+    try:
+        formatted_time_series = np.array2string(np.array(sample['time_series']), separator=', ', formatter={'all': lambda x: f"{x:.1f}"}, threshold=np.inf, max_line_width=np.inf)
+    except Exception:
+        try:
+            formatted_time_series = "[" + ", ".join(f"{float(x):.1f}" for x in sample['time_series']) + "]"
+        except Exception:
+            formatted_time_series = "[" + ", ".join(sample['time_series']) + "]"
     
-    # Format the time series data
-    formatted_series = format_time_series_for_text(time_series_data, time_series_text)
-    
-    # Combine all parts for text-only input (since we don't have images)
-    input_text = f"{pre_prompt}\n\n{time_series_text}\n{formatted_series}\n\n{post_prompt}"
-    
-    return input_text
+    return (
+            sample['pre_prompt']
+            + "\n["
+            + ", ".join(f"\"{x}\"" for x in sample['time_series_text'])
+            + "]\n"
+            + formatted_time_series
+            + "\n"
+            + sample['post_prompt']
+        )
 
 MODEL_IDS: list[str] = [
-    "google/gemma-3n-e2b",
-    #"google/gemma-3n-e2b-it",
+    #"google/gemma-3n-e2b",
+    "google/gemma-3n-e2b-it",
+    #"meta-llama/Llama-3.1-8B-Instruct"
 ]
 
 DATASETS: list[Type[Dataset]] = [
@@ -133,7 +121,7 @@ def evaluate_model_on_dataset(model_name: str, dataset_class: Type[Dataset]):
             # Generate prediction using pipeline
             outputs = pipe(
                 input_text,
-                max_new_tokens=50,
+                max_new_tokens=100,
                 return_full_text=False,
             )
             
