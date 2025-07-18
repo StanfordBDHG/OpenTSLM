@@ -4,7 +4,7 @@ from typing import List, Tuple
 import numpy as np
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from time_series_datasets.QADataset import QADataset
-from time_series_datasets.pamap2.PAMAP2Dataset import PAMAP2Dataset
+from time_series_datasets.pamap2.PAMAP2Dataset import PAMAP2Dataset, ACTIVITIY_ID_DICT
 from time_series_datasets.pamap2.pamap2_loader import PAMAP2_DIR
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
@@ -50,7 +50,8 @@ class PAMAP2AccQADataset(QADataset):
         return row["label"]
 
     def _get_pre_prompt(self, _row) -> str:
-        return "You are given accelerometer data in all three dimensions, sampled at approximately 100Hz. Your task is to predict the person's activity."
+        activities = ", ".join(ACTIVITIY_ID_DICT.values())
+        return "You are given accelerometer data in all three dimensions, sampled at approximately 100Hz. Your task is to predict the person's activity. The following activities are possible: " + activities
 
     def _get_post_prompt(self, _row) -> str:
         return "Answer:"
