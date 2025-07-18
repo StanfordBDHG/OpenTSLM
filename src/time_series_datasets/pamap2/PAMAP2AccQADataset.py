@@ -1,5 +1,7 @@
 from datasets import Dataset
 from typing import List, Tuple
+
+import numpy as np
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from time_series_datasets.QADataset import QADataset
 from time_series_datasets.pamap2.PAMAP2Dataset import PAMAP2Dataset
@@ -55,18 +57,18 @@ class PAMAP2AccQADataset(QADataset):
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         series = torch.tensor(
-            [
+            np.array([
                 row["time_series"]["handAcc16_1"],
                 row["time_series"]["handAcc16_2"],
                 row["time_series"]["handAcc16_3"],
-            ],
+            ]),
             dtype=torch.float32,
         )
 
         # Downsampling by 2x
         # Since the PAMAP dataset has 100Hz it results in around 50 Hz which should be fine for further processing
         series = series[:, ::2]
-        print(series.shape)
+        #print(series.shape)
 
         means = series.mean(dim=0, keepdim=True)  # shape: (n_series, 1)
         stds = series.std(dim=0, keepdim=True)  # shape: (n_series, 1)
