@@ -53,6 +53,18 @@ class PAMAP2CoTQADataset(QADataset):
         Returns:
             Pre-prompt text
         """
+
+        text = """
+        You are given accelerometer data in all three dimensions. Your task is to classify the activity based on analysis of the data.
+
+        Instructions:
+        - Begin by analyzing the time series without assuming a specific label.
+        - Think step-by-step about what the observed patterns suggest regarding movement intensity and behavior.
+        - Write your rationale as a single, natural paragraph — do not use bullet points, numbered steps, or section headings.
+        - Do **not** assume any answer at the beginning — analyze as if you do not yet know which class is correct.
+        - Do **not** mention either class label until the final sentence.
+        """
+
         return "You are given accelerometer data in all three dimensions. Your task is to analyze this data and provide a chain-of-thought reasoning to determine the person's activity."
 
     def _get_post_prompt(self, _row) -> str:
@@ -69,13 +81,7 @@ class PAMAP2CoTQADataset(QADataset):
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         """
-        Convert the time series data into a list of TextTimeSeriesPrompt objects.
-        
-        Args:
-            row: Dataset row containing x_axis, y_axis, and z_axis data
-            
-        Returns:
-            List of TextTimeSeriesPrompt objects
+        Convert the time series data into a list of TextTimeSeriesPrompt objects, including mean and std in the text.
         """
         # Extract the time series data from the row
         series = torch.tensor(
@@ -86,18 +92,17 @@ class PAMAP2CoTQADataset(QADataset):
             ],
             dtype=torch.float32,
         )
-        
+
         # Normalize the data
         means = series.mean(dim=1, keepdim=True)
         stds = series.std(dim=1, keepdim=True)
-        series = (series - means) / (stds + 1e-8)
-        
-        return [
-            TextTimeSeriesPrompt(time_series_label, time_series)
-            for time_series_label, time_series in zip(
-                TIME_SERIES_LABELS, series.tolist()
-            )
-        ]
+        series_norm = (series - means) / (stds + 1e-8)
+
+        prompts = []
+        for i, (time_series_label, time_series, mean, std) in enumerate(zip(TIME_SERIES_LABELS, series_norm.tolist(), means.squeeze().tolist(), stds.squeeze().tolist())):
+            text_prompt = f"{time_series_label}, it has mean {mean:.4f} and std {std:.4f}:"
+            prompts.append(TextTimeSeriesPrompt(text_prompt, time_series))
+        return prompts
 
 
 if __name__ == "__main__":

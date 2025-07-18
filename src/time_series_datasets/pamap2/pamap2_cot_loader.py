@@ -3,14 +3,48 @@ import pandas as pd
 from datasets import Dataset
 from typing import Tuple, Dict
 import ast
+import urllib.request
+import zipfile
+import shutil
+from time_series_datasets.constants import RAW_DATA
 
 
-DATA_DIR = "./data/"
-COT_CSV = os.path.join(DATA_DIR, "pamap2_cot.csv")
+PAMAP_DATA_DIR = os.path.join(RAW_DATA, "pamap")
+COT_CSV = os.path.join(PAMAP_DATA_DIR, "pamap2_cot.csv")
+PAMAP_RELEASE_URL = "https://polybox.ethz.ch/index.php/s/mKJc8aX4nggScfs/download"
 
 
 TEST_FRAC = 0.1
 VAL_FRAC = 0.1
+
+
+def download_and_extract_pamap2():
+    """
+    Download the PAMAP2 CoT CSV into data/pamap/ if not already present.
+    """
+    if os.path.exists(PAMAP_DATA_DIR) and os.path.exists(COT_CSV):
+        print(f"PAMAP2 CoT dataset already exists at {COT_CSV}")
+        return
+
+    os.makedirs(PAMAP_DATA_DIR, exist_ok=True)
+    print(f"Downloading PAMAP2 CoT dataset from {PAMAP_RELEASE_URL}...")
+    try:
+        urllib.request.urlretrieve(PAMAP_RELEASE_URL, COT_CSV)
+        print("Download completed successfully.")
+    except Exception as e:
+        raise RuntimeError(f"Failed to download PAMAP2 CoT dataset: {e}")
+
+    if not os.path.exists(COT_CSV):
+        raise FileNotFoundError(f"pamap2_cot.csv not found after download in {PAMAP_DATA_DIR}")
+
+
+def ensure_pamap2_cot_dataset():
+    """
+    Ensure the PAMAP2 CoT dataset is available in data/pamap/.
+    Download and extract if necessary.
+    """
+    if not os.path.exists(COT_CSV):
+        download_and_extract_pamap2()
 
 
 def load_pamap2_cot_splits(seed: int = 42) -> Tuple[Dataset, Dataset, Dataset]:
@@ -23,6 +57,8 @@ def load_pamap2_cot_splits(seed: int = 42) -> Tuple[Dataset, Dataset, Dataset]:
     Returns:
         Tuple of (train, validation, test) datasets
     """
+    ensure_pamap2_cot_dataset()
+    
     if not os.path.exists(COT_CSV):
         raise FileNotFoundError(f"CoT CSV not found: {COT_CSV}")
         
