@@ -3,6 +3,28 @@ import pandas as pd
 from time_series_datasets.pamap2.pamap2_loader import ensure_pamap2_data
 from torch.utils.data import Dataset
 
+ACTIVITIY_ID_DICT = {
+    0: "transient",
+    1: "lying",
+    2: "sitting",
+    3: "standing",
+    4: "walking",
+    5: "running",
+    6: "cycling",
+    7: "nordic walking",
+    9: "watching TV",
+    10: "computer work",
+    11: "car driving",
+    12: "ascending stairs",
+    13: "descending stairs",
+    16: "vacuum cleaning",
+    17: "ironing",
+    18: "folding laundry",
+    19: "house cleaning",
+    20: "playing soccer",
+    24: "rope jumping",
+}
+
 
 class PAMAP2Dataset(Dataset):
     # source: https://github.com/andreasKyratzis/PAMAP2-Physical-Activity-Monitoring-Data-Analysis-and-ML/blob/master/pamap2.ipynb
@@ -37,28 +59,6 @@ class PAMAP2Dataset(Dataset):
     def _load_data(self, list_of_files):
         # Load data
         ensure_pamap2_data()
-
-        activityIDdict = {
-            0: "transient",
-            1: "lying",
-            2: "sitting",
-            3: "standing",
-            4: "walking",
-            5: "running",
-            6: "cycling",
-            7: "nordic walking",
-            9: "watching TV",
-            10: "computer work",
-            11: "car driving",
-            12: "ascending stairs",
-            13: "descending stairs",
-            16: "vacuum cleaning",
-            17: "ironing",
-            18: "folding laundry",
-            19: "house cleaning",
-            20: "playing soccer",
-            24: "rope jumping",
-        }
 
         colNames = ["timestamp", "activityID", "heartrate"]
         IMUhand = [
@@ -134,7 +134,7 @@ class PAMAP2Dataset(Dataset):
         dataCol.reset_index(drop=True, inplace=True)
         for i in range(0, 4):
             dataCol.loc[i, "heartrate"] = 100
-        dataCol["activityID"] = dataCol["activityID"].map(activityIDdict)
+        dataCol["activityID"] = dataCol["activityID"].map(ACTIVITIY_ID_DICT)
         return dataCol
 
     def __init__(self, list_of_files):
