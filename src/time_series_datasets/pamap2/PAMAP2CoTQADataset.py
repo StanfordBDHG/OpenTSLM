@@ -1,5 +1,5 @@
 from datasets import Dataset
-from typing import List, Tuple
+from typing import List, Tuple, Literal
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -22,6 +22,10 @@ TIME_SERIES_LABELS = [
 
 
 class PAMAP2CoTQADataset(QADataset):
+    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, min_series_length: int = 50):
+        self.min_series_length = min_series_length
+        super().__init__(split, EOS_TOKEN)
+    
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         """
         Load the PAMAP2 CoT dataset splits using the pamap2_cot_loader.
@@ -29,7 +33,7 @@ class PAMAP2CoTQADataset(QADataset):
         Returns:
             Tuple of (train, validation, test) datasets
         """
-        return load_pamap2_cot_splits()
+        return load_pamap2_cot_splits(min_series_length=self.min_series_length)
 
     def _get_answer(self, row) -> str:
         """

@@ -48,12 +48,13 @@ def ensure_pamap2_cot_dataset():
         download_and_extract_pamap2()
 
 
-def load_pamap2_cot_splits(seed: int = 42) -> Tuple[Dataset, Dataset, Dataset]:
+def load_pamap2_cot_splits(seed: int = 42, min_series_length: int = 50) -> Tuple[Dataset, Dataset, Dataset]:
     """
     Load the PAMAP2 CoT dataset and split it into train, validation, and test sets.
     
     Args:
         seed: Random seed for reproducible splits
+        min_series_length: Minimum length for time series (shorter series will be excluded)
         
     Returns:
         Tuple of (train, validation, test) datasets
@@ -92,6 +93,25 @@ def load_pamap2_cot_splits(seed: int = 42) -> Tuple[Dataset, Dataset, Dataset]:
         df['y_axis'] = df['y_axis'].apply(parse_series)
     if 'z_axis' in df.columns:
         df['z_axis'] = df['z_axis'].apply(parse_series)
+    
+    # Filter out samples with series that are too short
+    print(f"📊 Original dataset size: {len(df)}")
+    
+    # Check series lengths and filter
+    valid_indices = []
+    for idx, row in df.iterrows():
+        x_len = len(row['x_axis']) if 'x_axis' in row else 0
+        y_len = len(row['y_axis']) if 'y_axis' in row else 0
+        z_len = len(row['z_axis']) if 'z_axis' in row else 0
+        
+        # Check if all series meet minimum length requirement
+        if x_len >= min_series_length and y_len >= min_series_length and z_len >= min_series_length:
+            valid_indices.append(idx)
+        else:
+            print(f"⚠️  Excluding sample {idx}: x_len={x_len}, y_len={y_len}, z_len={z_len} (min required: {min_series_length})")
+    
+    df = df.iloc[valid_indices].reset_index(drop=True)
+    print(f"📊 Filtered dataset size: {len(df)} (excluded {len(pd.read_csv(COT_CSV)) - len(df)} samples)")
     
     full_dataset = Dataset.from_pandas(df)
     
