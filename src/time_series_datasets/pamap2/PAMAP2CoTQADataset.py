@@ -121,6 +121,7 @@ class PAMAP2CoTQADataset(QADataset):
         if torch.isnan(series_norm).any() or torch.isinf(series_norm).any():
             print(f"❌ NaN/Inf detected after normalization")
             print(f"Original series: {series}")
+            print(f"Original series shape: {series.shape}")
             print(f"Means: {means}")
             print(f"Stds: {stds}")
             print(f"Normalized series: {series_norm}")
