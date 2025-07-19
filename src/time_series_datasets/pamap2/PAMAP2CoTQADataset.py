@@ -105,6 +105,7 @@ class PAMAP2CoTQADataset(QADataset):
             print(f"Series values: {series}")
             print(f"NaN positions: {torch.isnan(series).nonzero()}")
             print(f"Inf positions: {torch.isinf(series).nonzero()}")
+            print(f"Row index: {row['index']}")
             exit(1)
 
         # Normalize the data with better numerical stability
@@ -122,11 +123,13 @@ class PAMAP2CoTQADataset(QADataset):
             print(f"❌ NaN/Inf detected after normalization")
             print(f"Original series: {series}")
             print(f"Original series shape: {series.shape}")
+            print(f"Row data: {row}")
             print(f"Means: {means}")
             print(f"Stds: {stds}")
             print(f"Normalized series: {series_norm}")
             print(f"NaN positions: {torch.isnan(series_norm).nonzero()}")
             print(f"Inf positions: {torch.isinf(series_norm).nonzero()}")
+            print(f"Row index: {row['index']}")
             exit(1)
 
         prompts = []
