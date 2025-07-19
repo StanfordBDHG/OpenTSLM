@@ -129,7 +129,6 @@ class PAMAP2CoTQADataset(QADataset):
             print(f"Normalized series: {series_norm}")
             print(f"NaN positions: {torch.isnan(series_norm).nonzero()}")
             print(f"Inf positions: {torch.isinf(series_norm).nonzero()}")
-            print(f"Row index: {row['index']}")
             exit(1)
 
         prompts = []
