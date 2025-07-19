@@ -70,15 +70,21 @@ def load_pamap2_cot_splits(seed: int = 42) -> Tuple[Dataset, Dataset, Dataset]:
             series = ast.literal_eval(s)
             # Validate the parsed series
             if not isinstance(series, list):
-                return []
+                print(f"❌ Invalid series type: {type(series)}")
+                print(f"Raw data: {s[:200]}...")
+                exit(1)
             # Check for NaN or infinite values
-            if any(not isinstance(x, (int, float)) or math.isnan(x) or math.isinf(x) for x in series):
-                print(f"Warning: Invalid values detected in series, using empty list")
-                exit(0)
-                return []
+            for i, x in enumerate(series):
+                if not isinstance(x, (int, float)) or math.isnan(x) or math.isinf(x):
+                    print(f"❌ Invalid value detected at index {i}: {x} (type: {type(x)})")
+                    print(f"Full series: {series}")
+                    print(f"Raw data: {s[:200]}...")
+                    exit(1)
             return series
-        except (ValueError, SyntaxError):
-            return []
+        except (ValueError, SyntaxError) as e:
+            print(f"❌ Failed to parse series: {e}")
+            print(f"Raw data: {s[:200]}...")
+            exit(1)
     
     if 'x_axis' in df.columns:
         df['x_axis'] = df['x_axis'].apply(parse_series)

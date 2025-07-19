@@ -99,9 +99,13 @@ class PAMAP2CoTQADataset(QADataset):
 
         # Check for invalid data
         if torch.isnan(series).any() or torch.isinf(series).any():
-            print(f"Warning: Invalid data detected in PAMAP2 sample")
-            # Replace NaN/Inf with zeros
-            series = torch.nan_to_num(series, nan=0.0, posinf=0.0, neginf=0.0)
+            print(f"❌ Invalid data detected in PAMAP2 sample")
+            print(f"Row data: {row}")
+            print(f"Series shape: {series.shape}")
+            print(f"Series values: {series}")
+            print(f"NaN positions: {torch.isnan(series).nonzero()}")
+            print(f"Inf positions: {torch.isinf(series).nonzero()}")
+            exit(1)
 
         # Normalize the data with better numerical stability
         means = series.mean(dim=1, keepdim=True)
@@ -115,8 +119,14 @@ class PAMAP2CoTQADataset(QADataset):
         
         # Check for NaN/Inf after normalization
         if torch.isnan(series_norm).any() or torch.isinf(series_norm).any():
-            print(f"Warning: NaN/Inf detected after normalization, using original data")
-            series_norm = series  # Fallback to original data
+            print(f"❌ NaN/Inf detected after normalization")
+            print(f"Original series: {series}")
+            print(f"Means: {means}")
+            print(f"Stds: {stds}")
+            print(f"Normalized series: {series_norm}")
+            print(f"NaN positions: {torch.isnan(series_norm).nonzero()}")
+            print(f"Inf positions: {torch.isinf(series_norm).nonzero()}")
+            exit(1)
 
         prompts = []
         for i, (time_series_label, time_series, mean, std) in enumerate(zip(TIME_SERIES_LABELS, series_norm.tolist(), means.squeeze().tolist(), stds.squeeze().tolist())):
