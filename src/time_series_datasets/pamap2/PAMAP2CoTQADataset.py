@@ -61,11 +61,15 @@ class PAMAP2CoTQADataset(QADataset):
         - Begin by analyzing the time series without assuming a specific label.
         - Think step-by-step about what the observed patterns suggest regarding movement intensity and behavior.
         - Write your rationale as a single, natural paragraph — do not use bullet points, numbered steps, or section headings.
-        - Do **not** assume any answer at the beginning — analyze as if you do not yet know which class is correct.
-        - Do **not** mention either class label until the final sentence.
+        - Do **not** mention any class label until the final sentence.
+
+        Possible activity labels are:
+        lying, sitting, standing, walking, running, cycling, nordic walking, watching TV, computer work, car driving, ascending stairs, descending stairs, vacuum cleaning, ironing, folding laundry, house cleaning, playing soccer, rope jumping.
+        
+        - Make sure that your last word is the answer. You MUST end your response with "Answer: ".
         """
 
-        return "You are given accelerometer data in all three dimensions. Your task is to analyze this data and provide a chain-of-thought reasoning to determine the person's activity."
+        return text
 
     def _get_post_prompt(self, _row) -> str:
         """
