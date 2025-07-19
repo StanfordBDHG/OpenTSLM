@@ -7,6 +7,7 @@ import urllib.request
 import zipfile
 import shutil
 from time_series_datasets.constants import RAW_DATA
+import math
 
 
 PAMAP_DATA_DIR = os.path.join(RAW_DATA, "pamap")
@@ -66,7 +67,16 @@ def load_pamap2_cot_splits(seed: int = 42) -> Tuple[Dataset, Dataset, Dataset]:
     
     def parse_series(s):
         try:
-            return ast.literal_eval(s)
+            series = ast.literal_eval(s)
+            # Validate the parsed series
+            if not isinstance(series, list):
+                return []
+            # Check for NaN or infinite values
+            if any(not isinstance(x, (int, float)) or math.isnan(x) or math.isinf(x) for x in series):
+                print(f"Warning: Invalid values detected in series, using empty list")
+                exit(0)
+                return []
+            return series
         except (ValueError, SyntaxError):
             return []
     

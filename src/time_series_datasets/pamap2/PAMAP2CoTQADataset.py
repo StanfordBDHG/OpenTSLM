@@ -97,10 +97,26 @@ class PAMAP2CoTQADataset(QADataset):
             dtype=torch.float32,
         )
 
-        # Normalize the data
+        # Check for invalid data
+        if torch.isnan(series).any() or torch.isinf(series).any():
+            print(f"Warning: Invalid data detected in PAMAP2 sample")
+            # Replace NaN/Inf with zeros
+            series = torch.nan_to_num(series, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # Normalize the data with better numerical stability
         means = series.mean(dim=1, keepdim=True)
         stds = series.std(dim=1, keepdim=True)
-        series_norm = (series - means) / (stds + 1e-8)
+        
+        # Handle zero or very small standard deviations
+        min_std = 1e-6  # Increased from 1e-8 for better stability
+        stds = torch.clamp(stds, min=min_std)
+        
+        series_norm = (series - means) / stds
+        
+        # Check for NaN/Inf after normalization
+        if torch.isnan(series_norm).any() or torch.isinf(series_norm).any():
+            print(f"Warning: NaN/Inf detected after normalization, using original data")
+            series_norm = series  # Fallback to original data
 
         prompts = []
         for i, (time_series_label, time_series, mean, std) in enumerate(zip(TIME_SERIES_LABELS, series_norm.tolist(), means.squeeze().tolist(), stds.squeeze().tolist())):
