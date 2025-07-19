@@ -813,7 +813,7 @@ class CurriculumTrainer:
         """Stage CoT: Chain-of-Thought Reasoning (PAMAP2).
         
         Configuration:
-        - Epochs: 30
+        - Epochs: 100
         - EmbedHealthSP: encoder_lr=2e-4, projector_lr=1e-4
         - EmbedHealthFlamingo: base_lr=2e-4
         - Metric: Test loss only (chain-of-thought reasoning)

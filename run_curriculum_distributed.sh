@@ -21,7 +21,7 @@ echo "   Effective batch size: $((BATCH_SIZE * NUM_GPUS))"
 echo "   Learning rates and epochs are defined per stage in the code"
 echo "   Stage 1 (MCQ): 30 epochs, LR varies by model"
 echo "   Stage 2 (Captioning): 60 epochs, LR varies by model"
-echo "   Stage 3 (CoT Reasoning): 30 epochs, LR varies by model"
+echo "   Stage 3 (CoT Reasoning): 100 epochs, LR varies by model"
 echo ""
 
 # Check if CUDA is available
