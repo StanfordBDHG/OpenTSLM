@@ -36,8 +36,9 @@ from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
 from model.llm.EmbedHealthSP import EmbedHealthSP
 from model.projector.MLPProjector import MLPProjector
 import datetime
+from logger import get_logger, set_global_verbose
 
-from src.model_config import (
+from model_config import (
     BATCH_SIZE,
     EARLY_STOP_PAT,
     GRAD_CLIP_NORM,
@@ -1057,7 +1058,19 @@ def main():
         help="Local GPU rank"
     )
     
+    # Logging arguments
+    parser.add_argument(
+        "--verbose", 
+        default=False, 
+        action="store_true",
+        help="Enable verbose logging"
+    )
+    
     args = parser.parse_args()
+    
+    # Set up global logging
+    set_global_verbose(args.verbose)
+    logger = get_logger(verbose=args.verbose)
     
     # Initialize trainer
     trainer = CurriculumTrainer(
@@ -1078,15 +1091,15 @@ def main():
     )
     
     # Print summary
-    print("\n📈 Final Results Summary:")
-    print("=" * 40)
+    logger.info("Final Results Summary:")
+    logger.info("=" * 40)
     for stage, metrics in results.items():
-        print(f"\n{stage.upper()}:")
+        logger.info(f"{stage.upper()}:")
         for metric, value in metrics.items():
             if isinstance(value, (int, float)):
-                print(f"  {metric}: {value:.4f}")
+                logger.info(f"  {metric}: {value:.4f}")
             else:
-                print(f"  {metric}: {value}")
+                logger.info(f"  {metric}: {value}")
 
 
 if __name__ == "__main__":

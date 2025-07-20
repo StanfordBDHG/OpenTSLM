@@ -8,6 +8,8 @@ import zipfile
 import shutil
 from time_series_datasets.constants import RAW_DATA
 import math
+import logging
+from logger import get_logger
 
 
 PAMAP_DATA_DIR = os.path.join(RAW_DATA, "pamap")
@@ -60,6 +62,8 @@ def load_pamap2_cot_splits(seed: int = 42, min_series_length: int = 50) -> Tuple
     Returns:
         Tuple of (train, validation, test) datasets
     """
+    logger = get_logger()
+    
     ensure_pamap2_cot_dataset()
     
     if not os.path.exists(COT_CSV):
@@ -72,20 +76,20 @@ def load_pamap2_cot_splits(seed: int = 42, min_series_length: int = 50) -> Tuple
             series = ast.literal_eval(s)
             # Validate the parsed series
             if not isinstance(series, list):
-                print(f"❌ Invalid series type: {type(series)}")
-                print(f"Raw data: {s[:200]}...")
+                logger.error(f"Invalid series type: {type(series)}")
+                logger.error(f"Raw data: {s[:200]}...")
                 exit(1)
             # Check for NaN or infinite values
             for i, x in enumerate(series):
                 if not isinstance(x, (int, float)) or math.isnan(x) or math.isinf(x):
-                    print(f"❌ Invalid value detected at index {i}: {x} (type: {type(x)})")
-                    print(f"Full series: {series}")
-                    print(f"Raw data: {s[:200]}...")
+                    logger.error(f"Invalid value detected at index {i}: {x} (type: {type(x)})")
+                    logger.error(f"Full series: {series}")
+                    logger.error(f"Raw data: {s[:200]}...")
                     exit(1)
             return series
         except (ValueError, SyntaxError) as e:
-            print(f"❌ Failed to parse series: {e}")
-            print(f"Raw data: {s[:200]}...")
+            logger.error(f"Failed to parse series: {e}")
+            logger.error(f"Raw data: {s[:200]}...")
             exit(1)
     
     if 'x_axis' in df.columns:
@@ -96,10 +100,11 @@ def load_pamap2_cot_splits(seed: int = 42, min_series_length: int = 50) -> Tuple
         df['z_axis'] = df['z_axis'].apply(parse_series)
     
     # Filter out samples with series that are too short
-    print(f"📊 Original dataset size: {len(df)}")
+    logger.info(f"Original dataset size: {len(df)}")
     
     # Check series lengths and filter
     valid_indices = []
+    excluded_count = 0
     for idx, row in df.iterrows():
         x_len = len(row['x_axis']) if 'x_axis' in row else 0
         y_len = len(row['y_axis']) if 'y_axis' in row else 0
@@ -109,26 +114,27 @@ def load_pamap2_cot_splits(seed: int = 42, min_series_length: int = 50) -> Tuple
         if x_len >= min_series_length and y_len >= min_series_length and z_len >= min_series_length:
             valid_indices.append(idx)
         else:
-            print(f"⚠️  Excluding sample {idx}: x_len={x_len}, y_len={y_len}, z_len={z_len} (min required: {min_series_length})")
+            excluded_count += 1
+            logger.debug(f"Excluding sample {idx}: x_len={x_len}, y_len={y_len}, z_len={z_len} (min required: {min_series_length})")
     
     df = df.iloc[valid_indices].reset_index(drop=True)
-    print(f"📊 Filtered dataset size: {len(df)} (excluded {len(pd.read_csv(COT_CSV)) - len(df)} samples)")
+    logger.info(f"Filtered dataset size: {len(df)} (excluded {excluded_count} samples)")
     
     # Analyze class distribution before splitting
-    print(f"\n📈 Class distribution before splitting:")
+    logger.info("Class distribution before splitting:")
     class_counts = df['label'].value_counts()
-    print(f"Total classes: {len(class_counts)}")
+    logger.info(f"Total classes: {len(class_counts)}")
     for label, count in class_counts.items():
-        print(f"  {label}: {count} samples")
+        logger.debug(f"  {label}: {count} samples")
     
     # Check for classes with very few samples
     min_samples_per_class = 3  # Minimum samples needed per class for stratified splitting
     rare_classes = class_counts[class_counts < min_samples_per_class]
     if len(rare_classes) > 0:
-        print(f"\n⚠️  Warning: Classes with fewer than {min_samples_per_class} samples:")
+        logger.warning(f"Classes with fewer than {min_samples_per_class} samples:")
         for label, count in rare_classes.items():
-            print(f"  {label}: {count} samples")
-        print(f"These classes may not be represented in all splits.")
+            logger.warning(f"  {label}: {count} samples")
+        logger.warning("These classes may not be represented in all splits.")
     
     # Perform stratified splitting
     from sklearn.model_selection import train_test_split
@@ -156,28 +162,28 @@ def load_pamap2_cot_splits(seed: int = 42, min_series_length: int = 50) -> Tuple
     test_dataset = Dataset.from_pandas(test_df)
     
     # Print detailed split information
-    print(f"\n📊 Pamap2CoT stratified split results:")
-    print(f"  Train: {len(train_df)} samples")
-    print(f"  Validation: {len(val_df)} samples") 
-    print(f"  Test: {len(test_df)} samples")
+    logger.success("Pamap2CoT stratified split results:")
+    logger.info(f"  Train: {len(train_df)} samples")
+    logger.info(f"  Validation: {len(val_df)} samples") 
+    logger.info(f"  Test: {len(test_df)} samples")
     
     # Print detailed per-class distribution for each split
-    print(f"\n📈 Per-class sample distribution:")
+    logger.info("Per-class sample distribution:")
     for split_name, split_df in [("TRAIN", train_df), ("VALIDATION", val_df), ("TEST", test_df)]:
-        print(f"\n{split_name} SET ({len(split_df)} total samples):")
+        logger.info(f"{split_name} SET ({len(split_df)} total samples):")
         split_class_counts = split_df['label'].value_counts().sort_index()
         for label, count in split_class_counts.items():
             percentage = (count / len(split_df)) * 100
-            print(f"  {label:20s}: {count:3d} samples ({percentage:5.1f}%)")
+            logger.info(f"  {label:20s}: {count:3d} samples ({percentage:5.1f}%)")
     
     # Verify class representation in each split
-    print(f"\n✅ Class representation verification:")
+    logger.info("Class representation verification:")
     for split_name, split_df in [("Train", train_df), ("Validation", val_df), ("Test", test_df)]:
         split_classes = split_df['label'].value_counts()
-        print(f"  {split_name}: {len(split_classes)} classes represented")
+        logger.info(f"  {split_name}: {len(split_classes)} classes represented")
         if len(split_classes) < len(class_counts):
             missing_classes = set(class_counts.index) - set(split_classes.index)
-            print(f"    Missing classes: {missing_classes}")
+            logger.warning(f"    Missing classes: {missing_classes}")
     
     return train_dataset, val_dataset, test_dataset
 
@@ -211,15 +217,24 @@ def print_dataset_info(dataset: Dataset, name: str):
 
 
 if __name__ == "__main__":
-    train_ds, val_ds, test_ds = load_pamap2_cot_splits()
+    print("=== PAMAP2CoT Dataset Loading Demo ===\n")
     
-    print_dataset_info(train_ds, "Train")
-    print_dataset_info(val_ds, "Validation")
-    print_dataset_info(test_ds, "Test")
+    # Demo with verbose mode
+    print("1. Loading with verbose mode (detailed output):")
+    train_ds, val_ds, test_ds = load_pamap2_cot_splits(verbose=True)
     
+    print("\n" + "="*50 + "\n")
+    
+    # Demo without verbose mode
+    print("2. Loading without verbose mode (minimal output):")
+    train_ds, val_ds, test_ds = load_pamap2_cot_splits(verbose=False)
+    
+    print("\n" + "="*50 + "\n")
+    
+    # Show sample data
     if len(train_ds) > 0:
+        print("3. Sample data from training set:")
         sample = train_ds[0]
-        print("\nSample data:")
         for key, value in sample.items():
             if key in ['x_axis', 'y_axis', 'z_axis']:
                 print(f"{key}: {value[:5]}... (truncated)")
