@@ -1,4 +1,5 @@
 import re
+import sys
 from typing import Dict, Any
 
 from common_evaluator import CommonEvaluator
@@ -44,17 +45,12 @@ def evaluate_tsqa(ground_truth: str, prediction: str) -> Dict[str, Any]:
 def main():
     """Main function to run TSQA evaluation."""
     
-    # Define models to evaluate
-    model_names = [
-        "meta-llama/Llama-3.2-1B",
-        "meta-llama/Llama-3.2-3B",
-        "google/gemma-2b",
-        "google/gemma-2-2b",
-        "google/gemma-3-4b-pt",
-        "google/gemma-3-4b-it",
-        # "google/gemma-3n-e2b",
-        # "google/gemma-3n-e2b-it",
-    ]
+    if len(sys.argv) != 2:
+        print("Usage: python evaluate_tsqa.py <model_name>")
+        print("Example: python evaluate_tsqa.py meta-llama/Llama-3.2-1B")
+        sys.exit(1)
+    
+    model_name = sys.argv[1]
     
     # Define datasets to evaluate on
     dataset_classes = [TSQADataset]
@@ -69,10 +65,11 @@ def main():
     
     # Run evaluation
     results_df = evaluator.evaluate_multiple_models(
-        model_names=model_names,
+        model_names=[model_name],
         dataset_classes=dataset_classes,
         evaluation_functions=evaluation_functions,
-        max_samples=None,  # Limit for faster testing, set to None for full evaluation
+        max_samples=2,  # Limit for faster testing, set to None for full evaluation
+        max_new_tokens=40,
     )
     
     print("\n" + "="*80)

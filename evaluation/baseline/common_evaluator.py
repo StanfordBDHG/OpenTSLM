@@ -60,7 +60,6 @@ class CommonEvaluator:
             "task": "text-generation",
             "device": self.device,
             "temperature": 0.1,
-            "max_new_tokens": 10000,
         }
         
         # Update with provided kwargs
@@ -156,6 +155,9 @@ class CommonEvaluator:
         print("\nRunning inference...")
         print("=" * 80)
         
+        # Get max_new_tokens for generation (default 1000)
+        max_new_tokens = pipeline_kwargs.pop('max_new_tokens', 1000)
+        
         # Process each sample
         for idx in tqdm(range(dataset_size), desc="Processing samples"):
             try:
@@ -174,7 +176,7 @@ class CommonEvaluator:
                 # Generate prediction
                 outputs = pipe(
                     input_text,
-                    max_new_tokens=10000,
+                    max_new_tokens=max_new_tokens,
                     return_full_text=False,
                 )
                 
@@ -350,13 +352,21 @@ class CommonEvaluator:
         all_results = []
         
         # Generate filename once at the beginning
-        timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
         import os
         current_dir = os.path.dirname(os.path.abspath(__file__))
         results_dir = os.path.join(current_dir, "..", "results", "baseline")
         os.makedirs(results_dir, exist_ok=True)
-        df_filename = os.path.join(results_dir, f"evaluation_results_{timestamp}.csv")
+        df_filename = os.path.join(results_dir, "evaluation_results.csv")
         print(f"Results will be saved to: {df_filename}")
+        
+        # Load existing results if file exists
+        existing_df = None
+        if os.path.exists(df_filename):
+            try:
+                existing_df = pd.read_csv(df_filename)
+                print(f"Found existing results file with {len(existing_df)} entries")
+            except Exception as e:
+                print(f"Warning: Could not read existing results file: {e}")
         
         for model_name in model_names:
             for dataset_class in dataset_classes:
@@ -365,6 +375,16 @@ class CommonEvaluator:
                 if dataset_name not in evaluation_functions:
                     print(f"Warning: No evaluation function found for {dataset_name}")
                     continue
+                
+                # Check if this model-dataset combination already exists in results
+                if existing_df is not None:
+                    existing_result = existing_df[
+                        (existing_df['model'] == model_name) & 
+                        (existing_df['dataset'] == dataset_name)
+                    ]
+                    if not existing_result.empty:
+                        print(f"⏭️  Skipping {model_name} on {dataset_name} (already evaluated)")
+                        continue
                 
                 evaluation_function = evaluation_functions[dataset_name]
                 
@@ -400,9 +420,15 @@ class CommonEvaluator:
                     
                     all_results.append(row)
                     
-                    # Save DataFrame after each model-dataset evaluation
-                    df = pd.DataFrame(all_results)
-                    df.to_csv(df_filename, index=False)
+                    # Combine with existing results and save
+                    current_df = pd.DataFrame(all_results)
+                    if existing_df is not None:
+                        # Append new results
+                        final_df = pd.concat([existing_df, current_df], ignore_index=True)
+                    else:
+                        final_df = current_df
+                    
+                    final_df.to_csv(df_filename, index=False)
                     print(f"✅ Results updated: {df_filename}")
                     
                 except Exception as e:
@@ -414,9 +440,13 @@ class CommonEvaluator:
                     })
                     
                     # Save DataFrame even after errors
-                    df = pd.DataFrame(all_results)
-                    df.to_csv(df_filename, index=False)
+                    current_df = pd.DataFrame(all_results)
+                    if existing_df is not None:
+                        final_df = pd.concat([existing_df, current_df], ignore_index=True)
+                    else:
+                        final_df = current_df
+                    final_df.to_csv(df_filename, index=False)
                     print(f"⚠️  Results updated (with error): {df_filename}")
         
         print(f"\nFinal results saved to: {df_filename}")
-        return df 
+        return final_df 

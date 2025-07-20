@@ -1,4 +1,5 @@
 import re
+import sys
 from typing import Dict, Any
 
 from common_evaluator import CommonEvaluator
@@ -40,23 +41,20 @@ def evaluate_pamap_acc(ground_truth: str, prediction: str) -> Dict[str, Any]:
 
 def main():
     """Main function to run PAMAP evaluation."""
-    model_names = [
-        "meta-llama/Llama-3.2-1B",
-        "meta-llama/Llama-3.2-3B",
-        "google/gemma-2b",
-        "google/gemma-2-2b",
-        "google/gemma-3-4b-pt",
-        "google/gemma-3-4b-it",
-        # "google/gemma-3n-e2b",
-        # "google/gemma-3n-e2b-it",
-    ]
+    if len(sys.argv) != 2:
+        print("Usage: python evaluate_pamap.py <model_name>")
+        print("Example: python evaluate_pamap.py meta-llama/Llama-3.2-1B")
+        sys.exit(1)
+    
+    model_name = sys.argv[1]
+    
     dataset_classes = [PAMAP2AccQADataset]
     evaluation_functions = {
         "PAMAP2AccQADataset": evaluate_pamap_acc,
     }
     evaluator = CommonEvaluator()
     results_df = evaluator.evaluate_multiple_models(
-        model_names=model_names,
+        model_names=[model_name],
         dataset_classes=dataset_classes,
         evaluation_functions=evaluation_functions,
         max_samples=None,  # Limit for faster testing, set to None for full evaluation
