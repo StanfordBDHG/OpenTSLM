@@ -51,6 +51,7 @@ def ensure_pamap2_cot_dataset():
 def load_pamap2_cot_splits(seed: int = 42, min_series_length: int = 50) -> Tuple[Dataset, Dataset, Dataset]:
     """
     Load the PAMAP2 CoT dataset and split it into train, validation, and test sets.
+    Uses stratified splitting to ensure all classes are represented in each split.
     
     Args:
         seed: Random seed for reproducible splits
@@ -113,13 +114,72 @@ def load_pamap2_cot_splits(seed: int = 42, min_series_length: int = 50) -> Tuple
     df = df.iloc[valid_indices].reset_index(drop=True)
     print(f"📊 Filtered dataset size: {len(df)} (excluded {len(pd.read_csv(COT_CSV)) - len(df)} samples)")
     
-    full_dataset = Dataset.from_pandas(df)
+    # Analyze class distribution before splitting
+    print(f"\n📈 Class distribution before splitting:")
+    class_counts = df['label'].value_counts()
+    print(f"Total classes: {len(class_counts)}")
+    for label, count in class_counts.items():
+        print(f"  {label}: {count} samples")
     
-    train_val, test = full_dataset.train_test_split(test_size=TEST_FRAC, seed=seed).values()
+    # Check for classes with very few samples
+    min_samples_per_class = 3  # Minimum samples needed per class for stratified splitting
+    rare_classes = class_counts[class_counts < min_samples_per_class]
+    if len(rare_classes) > 0:
+        print(f"\n⚠️  Warning: Classes with fewer than {min_samples_per_class} samples:")
+        for label, count in rare_classes.items():
+            print(f"  {label}: {count} samples")
+        print(f"These classes may not be represented in all splits.")
+    
+    # Perform stratified splitting
+    from sklearn.model_selection import train_test_split
+    
+    # First split: train+val vs test
+    train_val_df, test_df = train_test_split(
+        df, 
+        test_size=TEST_FRAC, 
+        random_state=seed, 
+        stratify=df['label']
+    )
+    
+    # Second split: train vs val
     val_frac_adj = VAL_FRAC / (1.0 - TEST_FRAC)
-    train, val = train_val.train_test_split(test_size=val_frac_adj, seed=seed+1).values()
+    train_df, val_df = train_test_split(
+        train_val_df, 
+        test_size=val_frac_adj, 
+        random_state=seed+1, 
+        stratify=train_val_df['label']
+    )
     
-    return train, val, test
+    # Convert to datasets
+    train_dataset = Dataset.from_pandas(train_df)
+    val_dataset = Dataset.from_pandas(val_df)
+    test_dataset = Dataset.from_pandas(test_df)
+    
+    # Print detailed split information
+    print(f"\n📊 Pamap2CoT stratified split results:")
+    print(f"  Train: {len(train_df)} samples")
+    print(f"  Validation: {len(val_df)} samples") 
+    print(f"  Test: {len(test_df)} samples")
+    
+    # Print detailed per-class distribution for each split
+    print(f"\n📈 Per-class sample distribution:")
+    for split_name, split_df in [("TRAIN", train_df), ("VALIDATION", val_df), ("TEST", test_df)]:
+        print(f"\n{split_name} SET ({len(split_df)} total samples):")
+        split_class_counts = split_df['label'].value_counts().sort_index()
+        for label, count in split_class_counts.items():
+            percentage = (count / len(split_df)) * 100
+            print(f"  {label:20s}: {count:3d} samples ({percentage:5.1f}%)")
+    
+    # Verify class representation in each split
+    print(f"\n✅ Class representation verification:")
+    for split_name, split_df in [("Train", train_df), ("Validation", val_df), ("Test", test_df)]:
+        split_classes = split_df['label'].value_counts()
+        print(f"  {split_name}: {len(split_classes)} classes represented")
+        if len(split_classes) < len(class_counts):
+            missing_classes = set(class_counts.index) - set(split_classes.index)
+            print(f"    Missing classes: {missing_classes}")
+    
+    return train_dataset, val_dataset, test_dataset
 
 
 def get_label_distribution(dataset: Dataset) -> Dict[str, int]:
