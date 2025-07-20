@@ -1,5 +1,5 @@
 from datasets import Dataset
-from typing import List, Tuple
+from typing import List, Tuple, Literal
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -22,6 +22,10 @@ TIME_SERIES_LABELS = [
 
 
 class PAMAP2CoTQADataset(QADataset):
+    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, min_series_length: int = 50):
+        self.min_series_length = min_series_length
+        super().__init__(split, EOS_TOKEN)
+    
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         """
         Load the PAMAP2 CoT dataset splits using the pamap2_cot_loader.
@@ -29,7 +33,7 @@ class PAMAP2CoTQADataset(QADataset):
         Returns:
             Tuple of (train, validation, test) datasets
         """
-        return load_pamap2_cot_splits()
+        return load_pamap2_cot_splits(min_series_length=self.min_series_length)
 
     def _get_answer(self, row) -> str:
         """
@@ -61,11 +65,15 @@ class PAMAP2CoTQADataset(QADataset):
         - Begin by analyzing the time series without assuming a specific label.
         - Think step-by-step about what the observed patterns suggest regarding movement intensity and behavior.
         - Write your rationale as a single, natural paragraph — do not use bullet points, numbered steps, or section headings.
-        - Do **not** assume any answer at the beginning — analyze as if you do not yet know which class is correct.
-        - Do **not** mention either class label until the final sentence.
+        - Do **not** mention any class label until the final sentence.
+
+        Possible activity labels are:
+        lying, sitting, standing, walking, running, cycling, nordic walking, watching TV, computer work, car driving, ascending stairs, descending stairs, vacuum cleaning, ironing, folding laundry, house cleaning, playing soccer, rope jumping.
+        
+        - Make sure that your last word is the answer. You MUST end your response with "Answer: ".
         """
 
-        return "You are given accelerometer data in all three dimensions. Your task is to analyze this data and provide a chain-of-thought reasoning to determine the person's activity."
+        return text
 
     def _get_post_prompt(self, _row) -> str:
         """
@@ -93,10 +101,39 @@ class PAMAP2CoTQADataset(QADataset):
             dtype=torch.float32,
         )
 
-        # Normalize the data
+        # Check for invalid data
+        if torch.isnan(series).any() or torch.isinf(series).any():
+            print(f"❌ Invalid data detected in PAMAP2 sample")
+            print(f"Row data: {row}")
+            print(f"Series shape: {series.shape}")
+            print(f"Series values: {series}")
+            print(f"NaN positions: {torch.isnan(series).nonzero()}")
+            print(f"Inf positions: {torch.isinf(series).nonzero()}")
+            print(f"Row index: {row['index']}")
+            exit(1)
+
+        # Normalize the data with better numerical stability
         means = series.mean(dim=1, keepdim=True)
         stds = series.std(dim=1, keepdim=True)
-        series_norm = (series - means) / (stds + 1e-8)
+        
+        # Handle zero or very small standard deviations
+        min_std = 1e-6  # Increased from 1e-8 for better stability
+        stds = torch.clamp(stds, min=min_std)
+        
+        series_norm = (series - means) / stds
+        
+        # Check for NaN/Inf after normalization
+        if torch.isnan(series_norm).any() or torch.isinf(series_norm).any():
+            print(f"❌ NaN/Inf detected after normalization")
+            print(f"Original series: {series}")
+            print(f"Original series shape: {series.shape}")
+            print(f"Row data: {row}")
+            print(f"Means: {means}")
+            print(f"Stds: {stds}")
+            print(f"Normalized series: {series_norm}")
+            print(f"NaN positions: {torch.isnan(series_norm).nonzero()}")
+            print(f"Inf positions: {torch.isinf(series_norm).nonzero()}")
+            exit(1)
 
         prompts = []
         for i, (time_series_label, time_series, mean, std) in enumerate(zip(TIME_SERIES_LABELS, series_norm.tolist(), means.squeeze().tolist(), stds.squeeze().tolist())):
