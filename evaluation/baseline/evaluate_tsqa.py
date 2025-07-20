@@ -72,7 +72,7 @@ def main():
         model_names=model_names,
         dataset_classes=dataset_classes,
         evaluation_functions=evaluation_functions,
-        max_samples=50,  # Limit for faster testing, set to None for full evaluation
+        max_samples=None,  # Limit for faster testing, set to None for full evaluation
     )
     
     print("\n" + "="*80)

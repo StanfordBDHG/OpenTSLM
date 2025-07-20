@@ -76,9 +76,9 @@ class PAMAP2AccQADataset(QADataset):
         series = series[:, ::2]
         #print(series.shape)
 
-        means = series.mean(dim=0, keepdim=True)  # shape: (n_series, 1)
-        stds = series.std(dim=0, keepdim=True)  # shape: (n_series, 1)
-        series = (series - means) / (stds + 1e-8)  # broadcasts to (n_series, length)
+        #means = series.mean(dim=0, keepdim=True)  # shape: (n_series, 1)
+        #stds = series.std(dim=0, keepdim=True)  # shape: (n_series, 1)
+        #series = (series - means) / (stds + 1e-8)  # broadcasts to (n_series, length)
 
         return [
             TextTimeSeriesPrompt(time_series_label, time_series)
