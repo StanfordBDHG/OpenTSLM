@@ -8,6 +8,7 @@ import argparse
 from typing import List, Optional, Dict, Any, Callable
 from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.m4.M4QADataset import M4QADataset
+from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
@@ -35,8 +36,9 @@ from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
 from model.llm.EmbedHealthSP import EmbedHealthSP
 from model.projector.MLPProjector import MLPProjector
 import datetime
+from logger import get_logger, set_global_verbose
 
-from src.model_config import (
+from model_config import (
     BATCH_SIZE,
     EARLY_STOP_PAT,
     GRAD_CLIP_NORM,
@@ -50,7 +52,7 @@ from src.model_config import (
 
 
 # Global stage configuration - users can modify this to mix and match stages
-CURRICULUM_STAGES = ["stage1_mcq", "stage2_captioning"]
+CURRICULUM_STAGES = ["stage1_mcq", "stage2_captioning", "stage3_cot"]
 
 
 class CurriculumTrainer:
@@ -62,6 +64,7 @@ class CurriculumTrainer:
     We train across different stages:
     - stage1_mcq: Trains the model on a time-series MCQ dataset (TSQA)
     - stage2_captioning: Trains the model on a time-series captioning dataset (M4 time series captioning)
+    - stage3_cot: Trains the model on a chain-of-thought reasoning dataset (PAMAP2 CoT)
 
     If you run this script, you should be able to reproduce our results from the paper.
     All datasets are automatically downloaded and processed.
@@ -807,6 +810,27 @@ class CurriculumTrainer:
             eval_only=eval_only
         )
     
+    def stage3_cot(self, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
+        """Stage CoT: Chain-of-Thought Reasoning (PAMAP2).
+        
+        Configuration:
+        - Epochs: 100
+        - EmbedHealthSP: encoder_lr=2e-4, projector_lr=1e-4
+        - EmbedHealthFlamingo: base_lr=2e-4
+        - Metric: Test loss only (chain-of-thought reasoning)
+        """
+        return self._train_stage(
+            stage_name="stage3_cot",
+            dataset_class=PAMAP2CoTQADataset,
+            num_epochs=100,
+            lr_encoder=2e-4,
+            lr_projector=1e-4,
+            lr_base=2e-4,
+            metric_func=None,  # Only test loss for chain-of-thought reasoning
+            batch_size=batch_size,
+            eval_only=eval_only
+        )
+    
     def run_curriculum(self, stages: List[str] = None, batch_size: int = None, eval_only: bool = False):
         """Run the complete curriculum learning pipeline."""
         if stages is None:
@@ -848,6 +872,10 @@ class CurriculumTrainer:
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage2_captioning":
                 stage_results = self.stage2_captioning(batch_size=batch_size, eval_only=eval_only)
+                results[stage] = stage_results
+                self._mark_stage_completed(stage, stage_results)
+            elif stage == "stage3_cot":
+                stage_results = self.stage3_cot(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
             else:
@@ -1030,7 +1058,19 @@ def main():
         help="Local GPU rank"
     )
     
+    # Logging arguments
+    parser.add_argument(
+        "--verbose", 
+        default=False, 
+        action="store_true",
+        help="Enable verbose logging"
+    )
+    
     args = parser.parse_args()
+    
+    # Set up global logging
+    set_global_verbose(args.verbose)
+    logger = get_logger(verbose=args.verbose)
     
     # Initialize trainer
     trainer = CurriculumTrainer(
@@ -1051,15 +1091,15 @@ def main():
     )
     
     # Print summary
-    print("\n📈 Final Results Summary:")
-    print("=" * 40)
+    logger.info("Final Results Summary:")
+    logger.info("=" * 40)
     for stage, metrics in results.items():
-        print(f"\n{stage.upper()}:")
+        logger.info(f"{stage.upper()}:")
         for metric, value in metrics.items():
             if isinstance(value, (int, float)):
-                print(f"  {metric}: {value:.4f}")
+                logger.info(f"  {metric}: {value:.4f}")
             else:
-                print(f"  {metric}: {value}")
+                logger.info(f"  {metric}: {value}")
 
 
 if __name__ == "__main__":
