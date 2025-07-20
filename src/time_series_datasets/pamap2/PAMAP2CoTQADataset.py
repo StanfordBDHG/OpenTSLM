@@ -22,7 +22,7 @@ TIME_SERIES_LABELS = [
 
 
 class PAMAP2CoTQADataset(QADataset):
-    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, min_series_length: int = 50):
+    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, min_series_length: int = 150):
         self.min_series_length = min_series_length
         super().__init__(split, EOS_TOKEN)
     
