@@ -70,7 +70,7 @@ class PAMAP2CoTQADataset(QADataset):
         Possible activity labels are:
         lying, sitting, standing, walking, running, cycling, nordic walking, watching TV, computer work, car driving, ascending stairs, descending stairs, vacuum cleaning, ironing, folding laundry, house cleaning, playing soccer, rope jumping.
         
-        - Make sure that your last word is the answer. You MUST end your response with "Answer: ".
+        - Make sure that your last word is the answer. You MUST end your response with "Answer: "
         """
 
         return text

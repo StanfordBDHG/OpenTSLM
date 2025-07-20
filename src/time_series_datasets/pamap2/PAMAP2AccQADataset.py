@@ -50,12 +50,17 @@ class PAMAP2AccQADataset(QADataset):
         return row["label"]
 
     def _get_pre_prompt(self, _row) -> str:
-        activities = ", ".join(ACTIVITIY_ID_DICT.values())
-        return "You are given accelerometer data in all three dimensions, sampled at approximately 100Hz. Your task is to predict the person's activity. The following activities are possible: " + activities
+        return "You are given accelerometer data in all three dimensions, sampled at approximately 100Hz. Your task is to predict the person's activity."
 
     def _get_post_prompt(self, _row) -> str:
-        return "Answer:"
-
+        activities = ", ".join(ACTIVITIY_ID_DICT.values())
+        text = f"""
+        Answer ONLY with the activity label.
+        The following activities are possible: {activities}
+        You MUST end your response with 'Answer: <class label>.'
+        """
+        return text
+       
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         series = torch.tensor(
             np.array([

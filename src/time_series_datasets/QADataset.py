@@ -3,6 +3,7 @@ from functools import partial
 from typing import Callable, List, Literal, Tuple
 
 import numpy as np
+import sys
 from prompt.prompt_with_answer import PromptWithAnswer
 from prompt.text_prompt import TextPrompt
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
@@ -35,11 +36,8 @@ class QADataset(Dataset, ABC):
         if not hasattr(self.__class__, "loaded"):
             train, val, test = self._load_splits()
 
-            format_function = (
-                partial(self._format_sample_str, time_series_format_function)
-                if format_sample_str
-                else self._format_sample
-            )
+            format_function = partial(self._format_sample_str, time_series_format_function) if format_sample_str else self._format_sample
+           
             self.__class__._train_dataset = list(map(format_function, train))
             self.__class__._validation_dataset = list(map(format_function, val))
             self.__class__._test_dataset = list(map(format_function, test))
@@ -95,19 +93,16 @@ class QADataset(Dataset, ABC):
     ):
         def fallback_timeseries_formatter(time_series: np.ndarray) -> str:
             # Fallback formatter for time series data
-            try:
-                return np.array2string(
-                    time_series,
-                    separator=", ",
-                    formatter={"all": lambda x: f"{x:.1f}"},
-                    threshold=np.inf,  # type: ignore
-                    max_line_width=np.inf,  # type: ignore
-                )
-            except Exception:
-                try:
-                    return "[" + ", ".join(f"{float(x):.1f}" for x in time_series) + "]"
-                except Exception:
-                    return "[" + ", ".join(time_series) + "]"
+        
+            return np.array2string(
+                time_series,
+                separator=" ",
+                formatter={"all": lambda x: f'"{x:.2f}"'.replace(".", "")},
+                threshold=sys.maxsize,
+                max_line_width=sys.maxsize,
+            ).removeprefix("[").removesuffix("]")
+
+               
 
         if not time_series_format_function:
             time_series_format_function = fallback_timeseries_formatter
