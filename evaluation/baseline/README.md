@@ -182,3 +182,25 @@ if idx < 10:  # Print more samples for debugging
 2. **Batch Processing**: For multiple models, consider running them in parallel
 3. **Sample Limiting**: Use `max_samples` for quick testing before full evaluation
 4. **Model Caching**: Models are loaded once per evaluation run 
+
+## Using OpenAI Models (ChatGPT, GPT-4, etc.)
+
+You can now evaluate OpenAI models (e.g., ChatGPT, GPT-4) using the same evaluation scripts. To do so:
+
+1. **Set your OpenAI API key** (required):
+   
+   ```bash
+   export OPENAI_API_KEY=sk-...
+   ```
+
+2. **Run the evaluation script with an OpenAI model name prefixed by `openai-`**:
+   
+   ```bash
+   python evaluate_tsqa.py openai-gpt-4
+   python evaluate_pamap.py openai-gpt-3.5-turbo
+   ```
+   This will use the OpenAI API instead of a local HuggingFace model.
+
+3. **Notes:**
+   - The model name after `openai-` should match the OpenAI API model name (e.g., `gpt-4`, `gpt-3.5-turbo`).
+   - You can adjust `max_new_tokens` and other parameters as usual. 

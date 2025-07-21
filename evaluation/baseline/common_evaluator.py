@@ -17,6 +17,8 @@ sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 )
 
+# Import OpenAIPipeline
+from openai_pipeline import OpenAIPipeline
 
 class CommonEvaluator:
     """
@@ -43,31 +45,26 @@ class CommonEvaluator:
     
     def load_model(self, model_name: str, **pipeline_kwargs) -> pipeline:
         """
-        Load a model using transformers pipeline.
-        
-        Args:
-            model_name: Name of the model to load
-            **pipeline_kwargs: Additional arguments for the pipeline
-            
-        Returns:
-            Loaded pipeline
+        Load a model using transformers pipeline or OpenAI API.
         """
+        
+
+        if model_name.startswith("openai-"):
+            # Use OpenAI API
+            openai_model = model_name.replace("openai-", "")
+            return OpenAIPipeline(model_name=openai_model, **pipeline_kwargs)
+
         print(f"Loading model: {model_name}")
         print(f"Using device: {self.device}")
-        
         # Default pipeline arguments
         default_kwargs = {
             "task": "text-generation",
             "device": self.device,
             "temperature": 0.1,
         }
-        
-        # Update with provided kwargs
         default_kwargs.update(pipeline_kwargs)
-        
         pipe = pipeline(model=model_name, **default_kwargs)
         print(f"Model loaded successfully: {model_name}")
-        
         return pipe
     
 
@@ -249,7 +246,7 @@ class CommonEvaluator:
             
             return final_results
         else:
-            print("No successful inferences completed!")
+            print("❌ No successful inferences completed!")
             return {
                 "model_name": model_name,
                 "dataset_name": dataset_class.__name__,
