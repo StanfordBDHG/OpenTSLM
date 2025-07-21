@@ -14,7 +14,7 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers.pipelines import pipeline
 import matplotlib.pyplot as plt
-
+from time import sleep
 
 # Add src to path
 sys.path.insert(
@@ -37,6 +37,12 @@ class CommonEvaluator:
             device: Device to use for inference ('cuda', 'mps', 'cpu', or None for auto)
         """
         self.device = device or self._get_best_device()
+
+        if self.device == "mps":
+            print("⚠️ Warning!! MPS is available but not recommended for evaluation. Many LLMs do not produce reasonable output!")
+            print("⚠️ Warning!! MPS is available but not recommended for evaluation. Many LLMs do not produce reasonable output!")
+            print("⚠️ Better use CPU or CUDA for evaluation.")
+            sleep(10)
         
     def _get_best_device(self) -> str:
         """Get the best available device."""
