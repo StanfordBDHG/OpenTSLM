@@ -20,9 +20,13 @@ class OpenAIPipeline:
         Send a single-user-message chat completion request and return the generated text in HuggingFace pipeline format.
         """
 
-        content = [{"type": "text", "text": prompt}]
         if plot_data:
-            content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{plot_data}", "detail": "high"}})
+            content = [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{plot_data}", "detail": "high"}}
+            ]
+        else:
+            content = [{"type": "text", "text": prompt}]
 
         resp = self.client.chat.completions.create(
             model=self.model_name,

@@ -489,13 +489,13 @@ class CommonEvaluator:
             if match:
                 # Extract the data and convert to a list of integers
                 data_str = match.group(1).strip()
+                data_str = data_str.replace(' ', '')
                 data = [int(val.strip()) for val in data_str.split(',') if val.strip()]
                 time_series_data.append(data)
         
         # Create the plot
         num_series = len(time_series_data)
-        fig, axes = plt.subplots(num_series, 1, figsize=(10, 4 * num_series), sharex=True)
-        
+        fig, axes = plt.subplots(num_series, 1, figsize=(10, 4 * num_series), sharex=True)        
         # If there's only one series, axes won't be an array
         if num_series == 1:
             axes = [axes]
@@ -503,7 +503,7 @@ class CommonEvaluator:
         # Plot each time series in its own subplot
         axis_names = {0: 'X-axis', 1: 'Y-axis', 2: 'Z-axis'}
         for i, series in enumerate(time_series_data):
-            axes[i].plot(series, marker='o', linestyle='-', markersize=3)
+            axes[i].plot(series, marker='o', linestyle='-', markersize=0)
             axes[i].grid(True, alpha=0.3)
             axes[i].set_title(f"Accelerometer - {axis_names.get(i)}")
         
