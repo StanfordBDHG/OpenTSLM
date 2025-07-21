@@ -57,7 +57,7 @@ class PAMAP2AccQADataset(QADataset):
         text = f"""
         Answer ONLY with the activity label.
         The following activities are possible: {activities}
-        You MUST end your response with 'Answer: <class label>.'
+        You MUST end your response with 'Answer: <class label>'
         """
         return text
        

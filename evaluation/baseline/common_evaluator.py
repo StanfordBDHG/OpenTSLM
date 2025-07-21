@@ -47,13 +47,11 @@ class CommonEvaluator:
         """
         Load a model using transformers pipeline or OpenAI API.
         """
-        
-
+        self.current_model_name = model_name  # Track the current model name for formatter selection
         if model_name.startswith("openai-"):
             # Use OpenAI API
             openai_model = model_name.replace("openai-", "")
             return OpenAIPipeline(model_name=openai_model, **pipeline_kwargs)
-
         print(f"Loading model: {model_name}")
         print(f"Using device: {self.device}")
         # Default pipeline arguments
@@ -73,27 +71,35 @@ class CommonEvaluator:
                     format_sample_str: bool = True, **dataset_kwargs) -> Dataset:
         """
         Load a dataset with proper formatting.
-        
-        Args:
-            dataset_class: Dataset class to instantiate
-            split: Dataset split to load
-            format_sample_str: Whether to format samples as strings
-            **dataset_kwargs: Additional arguments for dataset initialization
-            
-        Returns:
-            Loaded dataset
         """
         print(f"Loading dataset: {dataset_class.__name__}")
         
-        # Import the gruver formatter
-        from gruver_llmtime_tokenizer import gruver_et_al_formatter
-        
+        # Import the gruver formatters
+        from gruver_llmtime_tokenizer import gpt_formatter, llama_formatter
+
+        # Choose formatter based on model type
+        model_name = getattr(self, 'current_model_name', None)
+        if model_name is None and 'model_name' in dataset_kwargs:
+            model_name = dataset_kwargs['model_name']
+        if model_name is not None:
+            if model_name.startswith("openai-") or "gpt" in model_name.lower():
+                formatter = gpt_formatter
+                print(f"Using GPT formatter for model: {model_name}")
+            elif "llama" in model_name.lower():
+                formatter = llama_formatter
+                print(f"Using Llama formatter for model: {model_name}")
+            else:
+                print("Defaulting to Llama formatter for model: {model_name}")
+                formatter = llama_formatter
+        else:
+            formatter = llama_formatter
+
         # Default dataset arguments
         default_kwargs = {
             "split": split,
             "EOS_TOKEN": "",
             "format_sample_str": format_sample_str,
-            "time_series_format_function": gruver_et_al_formatter,
+            "time_series_format_function": formatter,
         }
         
         # Update with provided kwargs

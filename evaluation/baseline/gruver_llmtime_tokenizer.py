@@ -156,23 +156,16 @@ def deserialize_str(bit_str: str, settings: SerializerSettings, ignore_last: boo
     )
     return nums
 
-
-# First, build a settings object
-settings = SerializerSettings(
-    base=10,
-    prec=3,
-    signed=True,
-    fixed_length=False,
-    max_val=1e7,
-    time_sep=' ,',
-    bit_sep=' ',
-    plus_sign='',
-    minus_sign=' -',
-    decimal_point='',
-    missing_str=' Nan',
-)
+gpt_settings = SerializerSettings(base=10, prec=3, signed=True, time_sep=', ', bit_sep='', minus_sign='-')
+llama = SerializerSettings(base=10, prec=3, signed=True, half_bin_correction=True)
 
 # Then wrap serialize_arr so it only takes the array
-def gruver_et_al_formatter(arr: np.ndarray) -> str:
-    formatted = serialize_arr(arr, settings)
-    return formatted
+def gpt_formatter(arr: np.ndarray) -> str:
+    return serialize_arr(arr, gpt_settings)
+
+def llama_formatter(arr: np.ndarray) -> str:
+    return serialize_arr(arr, llama)
+
+# Backward compatibility: default to llama_formatter
+# (or you can set to gpt_formatter if you prefer)
+gruver_et_al_formatter = llama_formatter

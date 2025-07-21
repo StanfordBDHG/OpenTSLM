@@ -14,14 +14,15 @@ class OpenAIPipeline:
         self.model_name = model_name
         self.temperature = temperature
 
-    def __call__(self, prompt: str, max_new_tokens: int = 1000, return_full_text: bool = False) -> str:
+    def __call__(self, prompt: str, max_new_tokens: int = 1000, return_full_text: bool = False):
         """
-        Send a single-user-message chat completion request and return the generated text.
+        Send a single-user-message chat completion request and return the generated text in HuggingFace pipeline format.
         """
         resp = self.client.chat.completions.create(
             model=self.model_name,
             messages=[{"role": "user", "content": prompt}],
             temperature=self.temperature,
+            max_tokens=max_new_tokens,
         )
-        # the new SDK returns a ChatCompletion object
-        return resp.choices[0].message.content.strip()
+        # Return in HuggingFace pipeline format
+        return [{"generated_text": resp.choices[0].message.content.strip()}]
