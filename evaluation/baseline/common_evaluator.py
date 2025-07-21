@@ -436,7 +436,7 @@ class CommonEvaluator:
                     all_results.append({
                         "model": model_name,
                         "dataset": dataset_name,
-                        "error": str(e),
+                        "status": "Failed",
                     })
                     
                     # Save DataFrame even after errors
