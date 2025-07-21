@@ -156,7 +156,7 @@ def deserialize_str(bit_str: str, settings: SerializerSettings, ignore_last: boo
     )
     return nums
 
-gpt_settings = SerializerSettings(base=10, prec=3, signed=True, time_sep=', ', bit_sep='', minus_sign='-')
+gpt_settings = SerializerSettings(base=10, prec=3, signed=True, time_sep=', ', bit_sep=' ', minus_sign='-')
 llama = SerializerSettings(base=10, prec=3, signed=True, half_bin_correction=True)
 
 # Then wrap serialize_arr so it only takes the array
