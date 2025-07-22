@@ -157,19 +157,27 @@ def load_pamap2_cot_splits(seed: int = 42, min_series_length: int = 50) -> Tuple
     )
     
     # Convert to datasets
-    train_dataset = Dataset.from_pandas(train_df)
+    # Oversample the training set to balance classes
+    max_class_count = train_df['label'].value_counts().max()
+    train_df_balanced = (
+        train_df.groupby('label', group_keys=False)
+        .apply(lambda x: x.sample(max_class_count, replace=True, random_state=seed))
+        .reset_index(drop=True)
+    )
+
+    train_dataset = Dataset.from_pandas(train_df_balanced)
     val_dataset = Dataset.from_pandas(val_df)
     test_dataset = Dataset.from_pandas(test_df)
     
     # Print detailed split information
     logger.success("Pamap2CoT stratified split results:")
-    logger.info(f"  Train: {len(train_df)} samples")
+    logger.info(f"  Train: {len(train_df_balanced)} samples")
     logger.info(f"  Validation: {len(val_df)} samples") 
     logger.info(f"  Test: {len(test_df)} samples")
     
     # Print detailed per-class distribution for each split
     logger.info("Per-class sample distribution:")
-    for split_name, split_df in [("TRAIN", train_df), ("VALIDATION", val_df), ("TEST", test_df)]:
+    for split_name, split_df in [("TRAIN", train_df_balanced), ("VALIDATION", val_df), ("TEST", test_df)]:
         logger.info(f"{split_name} SET ({len(split_df)} total samples):")
         split_class_counts = split_df['label'].value_counts().sort_index()
         for label, count in split_class_counts.items():
@@ -178,7 +186,7 @@ def load_pamap2_cot_splits(seed: int = 42, min_series_length: int = 50) -> Tuple
     
     # Verify class representation in each split
     logger.info("Class representation verification:")
-    for split_name, split_df in [("Train", train_df), ("Validation", val_df), ("Test", test_df)]:
+    for split_name, split_df in [("Train", train_df_balanced), ("Validation", val_df), ("Test", test_df)]:
         split_classes = split_df['label'].value_counts()
         logger.info(f"  {split_name}: {len(split_classes)} classes represented")
         if len(split_classes) < len(class_counts):
