@@ -852,15 +852,7 @@ class CurriculumTrainer:
         """
         from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
         sampler = None
-        if not (self.world_size > 1):
-            train_dataset = PAMAP2CoTQADataset("train", EOS_TOKEN=self._get_model().get_eos_token())
-            labels = [row["label"] for row in train_dataset]
-            num_classes = len(set(labels))
-            if batch_size is None:
-                batch_size = BATCH_SIZE
-            if batch_size % num_classes != 0:
-                raise ValueError(f"Batch size ({batch_size}) must be divisible by number of classes ({num_classes}) for BalancedBatchSampler.")
-            sampler = BalancedBatchSampler(labels, batch_size)
+        
         return self._train_stage(
             stage_name="stage3_cot",
             dataset_class=PAMAP2CoTQADataset,
