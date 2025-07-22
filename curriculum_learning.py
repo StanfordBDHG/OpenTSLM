@@ -697,8 +697,18 @@ class CurriculumTrainer:
                 self.model.train()
                 running_loss = 0.0
                 prog = tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs}", disable=self.rank != 0)
-                
-                for batch in prog:
+                for i, batch in enumerate(prog):
+                    # DEBUG PRINT: Only for the first batch of the first epoch
+                    if epoch == start_epoch and i == 0:
+                        print(f"[DEBUG] Batch {i} - batch size: {len(batch)}")
+                        if isinstance(batch, list) and isinstance(batch[0], dict):
+                            for k, v in batch[0].items():
+                                if hasattr(v, 'shape'):
+                                    print(f"[DEBUG] Sample key '{k}' shape: {v.shape}")
+                                elif isinstance(v, list):
+                                    print(f"[DEBUG] Sample key '{k}' list length: {len(v)}")
+                        import torch
+                        print(torch.cuda.memory_summary() if torch.cuda.is_available() else "No CUDA")
                     optimizer.zero_grad()
                     loss = self._get_model().compute_loss(batch)
                     loss.backward()
