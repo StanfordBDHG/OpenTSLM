@@ -1,7 +1,9 @@
 import json
 import os
+import io
 import re
 import sys
+import base64
 from typing import Type, Callable, Dict, List, Any, Optional
 from abc import ABC, abstractmethod
 
@@ -11,6 +13,7 @@ import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers.pipelines import pipeline
+import matplotlib.pyplot as plt
 from time import sleep
 
 # Add src to path
@@ -123,6 +126,7 @@ class CommonEvaluator:
         dataset_class: Type[Dataset],
         evaluation_function: Callable[[str, str], Dict[str, Any]],
         max_samples: Optional[int] = None,
+        use_plot: bool = False,
         **pipeline_kwargs
     ) -> Dict[str, Any]:
         """
@@ -172,7 +176,14 @@ class CommonEvaluator:
         for idx in tqdm(range(dataset_size), desc="Processing samples"):
             try:
                 sample = dataset[idx]
-                
+                plot_data = None
+
+                # Clean up prompt for TSQADataset (if needed)
+                if use_plot and hasattr(sample, 'get') and sample.get('prompt'):
+                    plot_data = self.get_plot_from_prompt(sample["prompt"])
+                    pattern = r'The following is the accelerometer data on the [xyz]-axis\n([\-0-9, ]+)'
+                    sample["prompt"] = re.sub(pattern, '', sample["prompt"])
+
                 # Clean up prompt for TSQADataset (if needed)
                 if hasattr(sample, 'get') and sample.get('prompt'):
                     pattern = r"This is the time series, it has mean (-?\d+\.\d{4}) and std (-?\d+\.\d{4})\."
@@ -188,6 +199,7 @@ class CommonEvaluator:
                     input_text,
                     max_new_tokens=max_new_tokens,
                     return_full_text=False,
+                    plot_data=plot_data
                 )
                 
                 # Extract generated text
@@ -210,7 +222,7 @@ class CommonEvaluator:
                     results.append(result)
                     
                     # Print progress for first few samples
-                    if idx < 3:
+                    if idx < 10:
                         print(f"\nSAMPLE {idx + 1}:")
                         print(f"PROMPT: {input_text}...")
                         print(f"TARGET: {target_answer}")
@@ -408,6 +420,7 @@ class CommonEvaluator:
                         dataset_class=dataset_class,
                         evaluation_function=evaluation_function,
                         max_samples=max_samples,
+                        use_plot=True,
                         **pipeline_kwargs
                     )
                     
@@ -460,3 +473,46 @@ class CommonEvaluator:
         
         print(f"\nFinal results saved to: {df_filename}")
         return final_df 
+
+    def get_plot_from_prompt(self, prompt: str):
+        """
+        Parse time series data from the prompt and return a base64 image.
+        """
+        # Parse the time series data from the prompt
+        time_series_data = []
+        
+        # Extract data for each axis using regex
+        axes = ['x-axis', 'y-axis', 'z-axis']
+        for axis in axes:
+            pattern = f"accelerometer data on the {axis}\\n([\\-0-9, ]+)"
+            match = re.search(pattern, prompt.lower())
+            if match:
+                # Extract the data and convert to a list of integers
+                data_str = match.group(1).strip()
+                data_str = data_str.replace(' ', '')
+                data = [int(val.strip()) for val in data_str.split(',') if val.strip()]
+                time_series_data.append(data)
+        
+        # Create the plot
+        num_series = len(time_series_data)
+        fig, axes = plt.subplots(num_series, 1, figsize=(10, 4 * num_series), sharex=True)        
+        # If there's only one series, axes won't be an array
+        if num_series == 1:
+            axes = [axes]
+        
+        # Plot each time series in its own subplot
+        axis_names = {0: 'X-axis', 1: 'Y-axis', 2: 'Z-axis'}
+        for i, series in enumerate(time_series_data):
+            axes[i].plot(series, marker='o', linestyle='-', markersize=0)
+            axes[i].grid(True, alpha=0.3)
+            axes[i].set_title(f"Accelerometer - {axis_names.get(i)}")
+        
+        plt.tight_layout()
+
+        # Convert plot to base64 image
+        img_buffer = io.BytesIO()
+        plt.savefig(img_buffer, format='png', bbox_inches='tight', dpi=100)
+        plt.close()
+        img_buffer.seek(0)
+        image_data = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+        return image_data

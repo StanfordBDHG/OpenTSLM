@@ -20,6 +20,21 @@ TIME_SERIS_LABELS = [
     "The following is the accelerometer data on the z-axis",
 ]
 
+MAIN_ACTITIVIES = [
+    "lying",
+    "sitting",
+    "standing",
+    "walking",
+    "ascending stairs",
+    "descending stairs",
+    "running",
+    "cycling",
+    "nordic walking",
+    "ironing",
+    "vacuum cleaning",
+    "rope jumping",
+]
+
 
 class PAMAP2AccQADataset(QADataset):
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
@@ -53,7 +68,7 @@ class PAMAP2AccQADataset(QADataset):
         return "You are given accelerometer data in all three dimensions, sampled at approximately 100Hz. Your task is to predict the person's activity."
 
     def _get_post_prompt(self, _row) -> str:
-        activities = ", ".join(ACTIVITIY_ID_DICT.values())
+        activities = ", ".join(MAIN_ACTITIVIES)
         text = f"""
         Answer ONLY with the activity label.
         The following activities are possible: {activities}
