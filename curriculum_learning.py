@@ -840,9 +840,9 @@ class CurriculumTrainer:
         - EmbedHealthFlamingo: base_lr=2e-4
         - Metric: Test loss only (chain-of-thought reasoning)
         """
+        from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
         sampler = None
         if not (self.world_size > 1):
-            # Use BalancedBatchSampler for PAMAP2CoTQADataset training set
             train_dataset = PAMAP2CoTQADataset("train", EOS_TOKEN=self._get_model().get_eos_token())
             labels = [row["label"] for row in train_dataset]
             num_classes = len(set(labels))

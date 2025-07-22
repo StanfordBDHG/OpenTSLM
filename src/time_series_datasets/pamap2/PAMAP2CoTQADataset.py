@@ -145,6 +145,37 @@ class PAMAP2CoTQADataset(QADataset):
             prompts.append(TextTimeSeriesPrompt(text_prompt, time_series))
         return prompts
 
+    @staticmethod
+    def get_labels() -> List[str]:
+        """
+        Return the list of all possible activity labels for the PAMAP2CoTQADataset.
+        """
+        return [
+            "lying",
+            "sitting",
+            "standing",
+            "walking",
+            "running",
+            "cycling",
+            "nordic walking",
+            "watching TV",
+            "computer work",
+            "car driving",
+            "ascending stairs",
+            "descending stairs",
+            "vacuum cleaning",
+            "ironing",
+            "folding laundry",
+            "house cleaning",
+            "playing soccer",
+            "rope jumping",
+        ]
+
+
+    def _format_sample(self, row):
+        sample = super()._format_sample(row)
+        sample["label"] = row["label"]
+        return sample
 
 if __name__ == "__main__":
     dataset = PAMAP2CoTQADataset(split="train", EOS_TOKEN="")
