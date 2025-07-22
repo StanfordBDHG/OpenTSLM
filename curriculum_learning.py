@@ -864,7 +864,7 @@ class CurriculumTrainer:
         return self._train_stage(
             stage_name="stage3_cot",
             dataset_class=PAMAP2CoTQADataset,
-            num_epochs=100,
+            num_epochs=25,
             lr_encoder=2e-4,
             lr_projector=1e-4,
             lr_base=2e-4,
