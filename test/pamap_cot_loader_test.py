@@ -10,7 +10,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', "src"))
 
 # Import and set up global logger with verbose mode
 from logger import get_logger, set_global_verbose
-
+from time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSampler
 class TestPAMAP2CoTLoader(unittest.TestCase):
     """
     Unit tests for the PAMAP2 CoT loader functions.
@@ -162,6 +162,58 @@ class TestPAMAP2CoTQADataset(unittest.TestCase):
             self.logger.info(f"First 10 values: {ts[:10]}")
             self.logger.info(f"Last 10 values: {ts[-10:]}")
         self.logger.info("="*80)
+
+class TestBalancedBatchSampler(unittest.TestCase):
+    def test_balanced_batches(self):
+        """
+        Test that BalancedBatchSampler produces batches where each class is equally represented.
+        This test creates an imbalanced label list (10 'a', 4 'b', 6 'c') and sets batch_size=6 (2 samples per class per batch).
+        For each batch yielded by the sampler, we check that every class appears exactly 2 times.
+        This ensures the sampler yields perfectly balanced mini-batches, even when the dataset is imbalanced.
+        """
+        # Create a toy label list with imbalance
+        labels = ['a'] * 10 + ['b'] * 4 + ['c'] * 6
+        batch_size = 6  # 3 classes, so 2 samples per class per batch
+        sampler = BalancedBatchSampler(labels, batch_size)
+        for batch in sampler:
+            batch_labels = [labels[idx] for idx in batch]
+            counts = {l: batch_labels.count(l) for l in set(batch_labels)}
+            print(f"Batch labels: {batch_labels}")
+            print(f"Class counts in batch: {counts}")
+            # Each class should appear exactly 2 times per batch
+            for count in counts.values():
+                self.assertEqual(count, 2, f"Expected 2 samples per class per batch, got {count}")
+
+    def test_balanced_batches_pamap2cot(self):
+        """
+        Test that BalancedBatchSampler produces balanced batches on the real PAMAP2CoTQADataset training split.
+        Prints batch labels and class counts for each batch.
+        """
+        from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
+        from time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSampler
+        # Helper to extract label from answer string
+        def extract_label_from_answer(answer: str) -> str:
+            # Assumes answer ends with 'Answer: <label>' or 'Answer: <label>.'
+            if 'Answer:' in answer:
+                label = answer.split('Answer:')[-1].strip()
+                # Remove trailing period if present
+                if label.endswith('.'):
+                    label = label[:-1]
+                return label.strip()
+            return ''
+        # Load the real dataset
+        dataset = PAMAP2CoTQADataset(split="train", EOS_TOKEN="")
+        labels = [extract_label_from_answer(row["answer"]) for row in dataset]
+        num_classes = len(set(labels))
+        batch_size = num_classes * 2  # 2 samples per class per batch
+        sampler = BalancedBatchSampler(labels, batch_size)
+        for i, batch in enumerate(sampler):
+            batch_labels = [labels[idx] for idx in batch]
+            counts = {l: batch_labels.count(l) for l in set(batch_labels)}
+            print(f"Batch {i} labels: {batch_labels}")
+            print(f"Batch {i} class counts: {counts}")
+            for l, count in counts.items():
+                self.assertEqual(count, 2, f"Expected 2 samples for class {l} per batch, got {count}")
 
 if __name__ == "__main__":
     unittest.main() 

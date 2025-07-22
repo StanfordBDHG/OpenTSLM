@@ -49,6 +49,7 @@ from model_config import (
     WARMUP_FRAC,
     WEIGHT_DECAY,
 )
+from time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSampler
 
 
 # Global stage configuration - users can modify this to mix and match stages
@@ -530,7 +531,7 @@ class CurriculumTrainer:
 
     def _train_stage(self, stage_name: str, dataset_class, num_epochs: int, 
                     lr_encoder: float, lr_projector: float, lr_base: float, 
-                    metric_func: Callable = None, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
+                    metric_func: Callable = None, batch_size: int = None, eval_only: bool = False, sampler=None) -> Dict[str, Any]:
         """Generic training function for any stage."""
         # Use provided batch_size or default to global BATCH_SIZE
         if batch_size is None:
@@ -611,13 +612,33 @@ class CurriculumTrainer:
         optimizer = self._get_optimizer(batch_size, lr_encoder, lr_projector, lr_base)
         
         # Create data loaders
-        train_loader = self._merge_data_loaders(
-            [dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())],
-            shuffle=True,
-            batch_size=batch_size,
-            patch_size=PATCH_SIZE,
-            distribute_data=self.world_size > 1
-        )
+        if sampler is not None:
+            if self.world_size > 1:
+                get_logger().warning("BalancedBatchSampler was provided, but distributed training (DDP) is enabled. BalancedBatchSampler will NOT be used. Data will be sharded using DistributedSampler instead. Typically for stage3_cot it is better to use BalancedBatchSampler, if dataset is imbalanced.")
+                train_loader = self._merge_data_loaders(
+                    [dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())],
+                    shuffle=True,
+                    batch_size=batch_size,
+                    patch_size=PATCH_SIZE,
+                    distribute_data=True
+                )
+            else:
+                train_dataset = dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())
+                train_loader = DataLoader(
+                    train_dataset,
+                    batch_sampler=sampler,
+                    collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
+                        batch, patch_size=PATCH_SIZE
+                    ),
+                )
+        else:
+            train_loader = self._merge_data_loaders(
+                [dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())],
+                shuffle=True,
+                batch_size=batch_size,
+                patch_size=PATCH_SIZE,
+                distribute_data=self.world_size > 1
+            )
         
         val_loader = self._merge_data_loaders(
             [dataset_class("validation", EOS_TOKEN=self._get_model().get_eos_token())],
@@ -819,6 +840,17 @@ class CurriculumTrainer:
         - EmbedHealthFlamingo: base_lr=2e-4
         - Metric: Test loss only (chain-of-thought reasoning)
         """
+        sampler = None
+        if not (self.world_size > 1):
+            # Use BalancedBatchSampler for PAMAP2CoTQADataset training set
+            train_dataset = PAMAP2CoTQADataset("train", EOS_TOKEN=self._get_model().get_eos_token())
+            labels = [row["label"] for row in train_dataset]
+            num_classes = len(set(labels))
+            if batch_size is None:
+                batch_size = BATCH_SIZE
+            if batch_size % num_classes != 0:
+                raise ValueError(f"Batch size ({batch_size}) must be divisible by number of classes ({num_classes}) for BalancedBatchSampler.")
+            sampler = BalancedBatchSampler(labels, batch_size)
         return self._train_stage(
             stage_name="stage3_cot",
             dataset_class=PAMAP2CoTQADataset,
@@ -828,7 +860,8 @@ class CurriculumTrainer:
             lr_base=2e-4,
             metric_func=None,  # Only test loss for chain-of-thought reasoning
             batch_size=batch_size,
-            eval_only=eval_only
+            eval_only=eval_only,
+            sampler=sampler
         )
     
     def run_curriculum(self, stages: List[str] = None, batch_size: int = None, eval_only: bool = False):

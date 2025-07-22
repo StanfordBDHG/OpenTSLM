@@ -12,6 +12,10 @@ from tqdm.auto import tqdm
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
+from collections import defaultdict
+import numpy as np
+from torch.utils.data import Sampler
+from time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSampler
 
 
 TIME_SERIES_LABELS = [
@@ -149,10 +153,17 @@ if __name__ == "__main__":
 
     print(f"Dataset sizes: Train: {len(dataset)}, Validation: {len(dataset_val)}, Test: {len(dataset_test)}")
 
+    # Use BalancedBatchSampler for the training set
+    labels = [row["label"] for row in dataset]
+    num_classes = len(set(labels))
+    batch_size = 4  # You can change this, but it must be divisible by num_classes
+    if batch_size % num_classes != 0:
+        raise ValueError(f"Batch size ({batch_size}) must be divisible by number of classes ({num_classes})")
+    sampler = BalancedBatchSampler(labels, batch_size)
+
     dataloader = DataLoader(
         dataset,
-        batch_size=4,
-        shuffle=True,
+        batch_sampler=sampler,
         collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
             batch, patch_size=4
         ),
