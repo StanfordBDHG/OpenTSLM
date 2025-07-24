@@ -239,6 +239,18 @@ class CurriculumTrainer:
         """Create a merged data loader from multiple datasets."""
         merged_ds = ConcatDataset(datasets)
         
+
+
+        return DataLoader(
+                merged_ds,
+                shuffle=shuffle,
+                batch_size=batch_size,
+                collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
+                    batch, patch_size=patch_size
+                ),
+            )
+    
+        # Dont use sampler for now.
         # Use distributed sampler if distributed training is enabled
         if distribute_data and dist.is_initialized():
             sampler = DistributedSampler(
