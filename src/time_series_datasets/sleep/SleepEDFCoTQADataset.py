@@ -47,6 +47,8 @@ class SleepEDFCoTQADataset(QADataset):
         std = max(std, min_std)
         series_norm = (series - mean) / std
         text_prompt = f"The following is the EEG time series, it has mean {mean:.4f} and std {std:.4f}:"
+        print(series_norm.tolist())
+        exit(0)
         return [TextTimeSeriesPrompt(text_prompt, series_norm.tolist())]
 
     @staticmethod
