@@ -202,7 +202,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = current_dir / "test_predictions.jsonl"
+    input_file = current_dir / "sp_gemma_predictions.jsonl"
     clean_output = current_dir / "test_predictions_pamap.clean.jsonl"
     
     parse_rtf_jsonl(input_file, clean_output)

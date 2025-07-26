@@ -175,6 +175,9 @@ class PAMAP2CoTQADataset(QADataset):
     def _format_sample(self, row):
         sample = super()._format_sample(row)
         sample["label"] = row["label"]
+        sample["x_axis"] = row["x_axis"]
+        sample["y_axis"] = row["y_axis"]
+        sample["z_axis"] = row["z_axis"]
         return sample
 
 if __name__ == "__main__":
