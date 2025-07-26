@@ -20,13 +20,7 @@ def extend_time_series_to_match_patch_size_and_aggregate(
         ts_list = element["time_series"]
 
         # 2) convert each to a torch.Tensor (float)
-        ts_tensors = []
-        for i, ts in enumerate(ts_list):
-            tensor = torch.as_tensor(ts, dtype=torch.float32)
-            if tensor.ndim == 0:
-                print(f"ERROR: Scalar tensor found at index {i}, shape: {tensor.shape}, value: {tensor}")
-                raise ValueError(f"Scalar tensor found at index {i}")
-            ts_tensors.append(tensor)
+        ts_tensors = [torch.as_tensor(ts, dtype=torch.float32) for ts in ts_list]
 
         # 3) find the longest series length
         max_len = max([ts.size(0) for ts in ts_tensors])
