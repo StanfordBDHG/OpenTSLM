@@ -65,12 +65,14 @@ def load_sleepedf_cot_splits(seed: int = 42) -> Tuple[Dataset, Dataset, Dataset]
     def parse_series(s):
         try:
             parsed = ast.literal_eval(s)
-            # If it's a 2D array with shape (1, N), squeeze out the first axis
-            parsed = parsed[0]
-            assert len(parsed) == 1500, f"Expected 1500 elements, got {len(parsed)}"
-            return parsed
-        except (ValueError, SyntaxError):
-            return []
+            # Extract the first element (the actual time series)
+            if isinstance(parsed, list) and len(parsed) == 1 and isinstance(parsed[0], list):
+                assert len(parsed[0]) == 1500, f"Expected 1500 elements, got {len(parsed[0])}"
+                return parsed[0]
+            else:
+                raise ValueError(f"Expected format [[...]], got: {parsed[:10] if isinstance(parsed, list) else type(parsed)}")
+        except (ValueError, SyntaxError) as e:
+            raise ValueError(f"Failed to parse time series: {e}")
     if 'time_series' in df.columns:
         print("Parsing SleepEDF CoT data (this may take a while)...")
         df['time_series'] = [parse_series(s) for s in tqdm(df['time_series'], desc='Parsing SleepEDF CoT data')]
