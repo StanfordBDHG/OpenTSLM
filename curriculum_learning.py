@@ -9,6 +9,7 @@ from typing import List, Optional, Dict, Any, Callable
 from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.m4.M4QADataset import M4QADataset
 from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
+from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
@@ -53,7 +54,7 @@ from time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSample
 
 
 # Global stage configuration - users can modify this to mix and match stages
-CURRICULUM_STAGES = ["stage1_mcq", "stage2_captioning", "stage3_cot"]
+CURRICULUM_STAGES = ["stage1_mcq", "stage2_captioning", "stage3_cot", "stage4_sleep_cot"]
 
 
 class CurriculumTrainer:
@@ -886,6 +887,30 @@ class CurriculumTrainer:
             sampler=sampler
         )
     
+    def stage4_sleep_cot(self, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
+        """Stage CoT: Chain-of-Thought Reasoning (SleepEDF).
+        
+        Configuration:
+        - Epochs: 100
+        - EmbedHealthSP: encoder_lr=2e-4, projector_lr=1e-4
+        - EmbedHealthFlamingo: base_lr=2e-4
+        - Metric: Test loss only (chain-of-thought reasoning)
+        """
+        sampler = None
+        
+        return self._train_stage(
+            stage_name="stage4_sleep_cot",
+            dataset_class=SleepEDFCoTQADataset,
+            num_epochs=60,
+            lr_encoder=2e-4,
+            lr_projector=1e-4,
+            lr_base=2e-4,
+            metric_func=None,  # Only test loss for chain-of-thought reasoning
+            batch_size=batch_size,
+            eval_only=eval_only,
+            sampler=sampler
+        )
+    
     def run_curriculum(self, stages: List[str] = None, batch_size: int = None, eval_only: bool = False):
         """Run the complete curriculum learning pipeline."""
         if stages is None:
@@ -931,6 +956,10 @@ class CurriculumTrainer:
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage3_cot":
                 stage_results = self.stage3_cot(batch_size=batch_size, eval_only=eval_only)
+                results[stage] = stage_results
+                self._mark_stage_completed(stage, stage_results)
+            elif stage == "stage4_sleep_cot":
+                stage_results = self.stage4_sleep_cot(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
             else:
