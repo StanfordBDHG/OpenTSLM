@@ -41,10 +41,8 @@ class SleepEDFCoTQADataset(QADataset):
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         series = np.array(row["time_series"], dtype=np.float32)
-        print("DEBUG: series shape:", series.shape, "type:", type(row["time_series"]), "first elem:", row["time_series"][:5])
         mean = float(np.mean(series))
         std = float(np.std(series))
-        exit(0)
         min_std = 1e-6
         std = max(std, min_std)
         series_norm = (series - mean) / std

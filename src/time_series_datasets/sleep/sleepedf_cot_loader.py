@@ -64,7 +64,11 @@ def load_sleepedf_cot_splits(seed: int = 42) -> Tuple[Dataset, Dataset, Dataset]
     df = pd.read_csv(COT_CSV)
     def parse_series(s):
         try:
-            return ast.literal_eval(s)
+            parsed = ast.literal_eval(s)
+            # If it's a 2D array with shape (1, N), squeeze out the first axis
+            parsed = parsed[0]
+            assert len(parsed) == 15000, f"Expected 15000 elements, got {len(parsed)}"
+            return parsed
         except (ValueError, SyntaxError):
             return []
     if 'time_series' in df.columns:
