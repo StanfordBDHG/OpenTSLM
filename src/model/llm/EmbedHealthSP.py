@@ -10,7 +10,7 @@ from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from model.projector.MLPProjector import MLPProjector
 from prompt.full_prompt import FullPrompt
 from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
-
+ 
 class EmbedHealthSP(TimeSeriesLLM):
     def __init__(
         self,
