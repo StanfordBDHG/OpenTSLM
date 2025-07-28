@@ -244,7 +244,7 @@ class EmbedHealthSP(TimeSeriesLLM):
         )
 
     def load_from_file(self, path: str):
-        ckpt = torch.load("best_encoder.pt", map_location=self.device)
+        ckpt = torch.load(path, map_location=self.device)
         self.encoder.load_state_dict(ckpt["encoder_state"])
         self.projector.load_state_dict(ckpt["projector_state"])
         print(f"Loaded best model from epoch {ckpt.get('epoch', '?')}")
