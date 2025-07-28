@@ -167,8 +167,8 @@ def extract_structured_data(rtf_content):
     min_length = min(len(generated_matches), len(gold_matches))
     
     for i in range(min_length):
-        model_prediction = extract_answer(generated_matches[i])
-        ground_truth = extract_answer(gold_matches[i])
+        model_prediction = extract_answer(generated_matches[i]).replace("<eos>", "")
+        ground_truth = extract_answer(gold_matches[i]).replace("<eos>", "")
         
         # Calculate accuracy (exact match)
         accuracy = model_prediction == ground_truth
@@ -203,6 +203,6 @@ def extract_answer(text):
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
     input_file = current_dir / "sp_gemma_predictions.jsonl"
-    clean_output = current_dir / "test_predictions_pamap.clean.jsonl"
+    clean_output = current_dir / "sp_gemma_predictions.clean.jsonl"
     
     parse_rtf_jsonl(input_file, clean_output)

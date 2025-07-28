@@ -5,7 +5,7 @@ import json
 import re
 from pathlib import Path
 from collections import Counter
-
+from tqdm import tqdm
 def calculate_f1_score(prediction, ground_truth):
     """Calculate F1 score for classification labels"""
     # Normalize labels for comparison (lowercase, strip whitespace)
@@ -137,6 +137,7 @@ def parse_sleep_cot_jsonl(input_file, output_file=None):
             print(f"\nPer-Class F1 Scores:")
             for class_name, scores in f1_stats['class_f1_scores'].items():
                 print(f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
+                pass
         
         with open(output_file, 'w', encoding='utf-8') as f:
             for item in extracted_data:
@@ -153,7 +154,7 @@ def extract_structured_data(input_file):
     data_points = []
     
     with open(input_file, 'r', encoding='utf-8') as f:
-        for line_num, line in enumerate(f, 1):
+        for line_num, line in tqdm(enumerate(f, 1)):
             try:
                 # Parse JSON line
                 data = json.loads(line.strip())
@@ -185,7 +186,6 @@ def extract_structured_data(input_file):
                     "line_number": line_num
                 }
                 data_points.append(data_point)
-                
             except json.JSONDecodeError as e:
                 print(f"Error parsing line {line_num}: {e}")
                 continue
@@ -209,7 +209,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = current_dir / "flamingo_predictions.jsonl"
-    clean_output = current_dir / "flamingo_predictions.clean.jsonl"
+    input_file = current_dir / "llama_sp_predictions.jsonl"
+    clean_output = current_dir / "llama_sp_predictions.clean.jsonl"
     
     parse_sleep_cot_jsonl(input_file, clean_output)
