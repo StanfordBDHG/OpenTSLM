@@ -4,7 +4,7 @@ from typing import List, Dict, Tuple
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.nn.utils.rnn import pad_sequence
 
-from src.model_config import ENCODER_OUTPUT_DIM
+from model_config import ENCODER_OUTPUT_DIM
 from model.llm.TimeSeriesLLM import TimeSeriesLLM
 from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from model.projector.MLPProjector import MLPProjector
