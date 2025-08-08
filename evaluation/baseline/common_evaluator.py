@@ -420,7 +420,7 @@ class CommonEvaluator:
                         dataset_class=dataset_class,
                         evaluation_function=evaluation_function,
                         max_samples=max_samples,
-                        use_plot=True,
+                        use_plot=False,
                         **pipeline_kwargs
                     )
                     

@@ -57,7 +57,8 @@ def main():
         model_names=[model_name],
         dataset_classes=dataset_classes,
         evaluation_functions=evaluation_functions,
-        max_samples=None,  # Limit for faster testing, set to None for full evaluation
+        max_samples=None,  # Limit for faster testing, set to None for full evaluation,
+        max_new_tokens=400,
     )
     print("\n" + "="*80)
     print("FINAL RESULTS SUMMARY")

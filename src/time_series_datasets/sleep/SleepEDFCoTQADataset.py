@@ -9,8 +9,8 @@ from time_series_datasets.sleep.sleepedf_cot_loader import load_sleepedf_cot_spl
 import numpy as np
 
 class SleepEDFCoTQADataset(QADataset):
-    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str):
-        super().__init__(split, EOS_TOKEN)
+    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, format_sample_str: bool = False, time_series_format_function=None):
+        super().__init__(split, EOS_TOKEN, format_sample_str, time_series_format_function)
 
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         return load_sleepedf_cot_splits()
@@ -29,15 +29,15 @@ class SleepEDFCoTQADataset(QADataset):
         - Only reveal the correct class at the very end.
         - Never state that you are uncertain or unable to classify the data. You must always provide a rationale and a final answer.
 
-        Possible sleep stages are:
-        Wake, Non-REM stage 1, Non-REM stage 2, Non-REM stage 3, REM sleep, Movement
-
-        - Make sure that your last word is the answer. You MUST end your response with "Answer: "
+        
         """
         return text
 
     def _get_post_prompt(self, _row) -> str:
-        return "Rationale:"
+        return """Possible sleep stages are:
+        Wake, Non-REM stage 1, Non-REM stage 2, Non-REM stage 3, REM sleep, Movement
+
+        - Please now write your rationale. Make sure that your last word is the answer. You MUST end your response with "Answer: """
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         series = np.array(row["time_series"], dtype=np.float32)
