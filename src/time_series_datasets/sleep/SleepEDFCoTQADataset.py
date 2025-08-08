@@ -58,6 +58,7 @@ class SleepEDFCoTQADataset(QADataset):
     def _format_sample(self, row):
         sample = super()._format_sample(row)
         sample["label"] = row["label"]
+        sample["original_data"] = row["time_series"]
         return sample
 
 if __name__ == "__main__":

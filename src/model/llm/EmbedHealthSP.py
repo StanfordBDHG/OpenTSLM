@@ -4,13 +4,13 @@ from typing import List, Dict, Tuple
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.nn.utils.rnn import pad_sequence
 
-from src.model_config import ENCODER_OUTPUT_DIM
+from model_config import ENCODER_OUTPUT_DIM
 from model.llm.TimeSeriesLLM import TimeSeriesLLM
 from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from model.projector.MLPProjector import MLPProjector
 from prompt.full_prompt import FullPrompt
 from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
-
+ 
 class EmbedHealthSP(TimeSeriesLLM):
     def __init__(
         self,
@@ -244,7 +244,7 @@ class EmbedHealthSP(TimeSeriesLLM):
         )
 
     def load_from_file(self, path: str):
-        ckpt = torch.load("best_encoder.pt", map_location=self.device)
+        ckpt = torch.load(path, map_location=self.device)
         self.encoder.load_state_dict(ckpt["encoder_state"])
         self.projector.load_state_dict(ckpt["projector_state"])
         print(f"Loaded best model from epoch {ckpt.get('epoch', '?')}")

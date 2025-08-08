@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Parser for converting RTF-formatted JSONL files to clean format."""
+"""Parser for converting sleep COT JSONL files to clean format."""
 
 import json
 import re
 from pathlib import Path
 from collections import Counter
-
+from tqdm import tqdm
 def calculate_f1_score(prediction, ground_truth):
     """Calculate F1 score for classification labels"""
     # Normalize labels for comparison (lowercase, strip whitespace)
@@ -103,21 +103,16 @@ def calculate_accuracy_stats(data_points):
         "accuracy_percentage": accuracy_percentage
     }
 
-
-
-def parse_rtf_jsonl(input_file, output_file=None):
-    """Parse RTF-formatted JSONL file and extract JSON objects."""
+def parse_sleep_cot_jsonl(input_file, output_file=None):
+    """Parse sleep COT JSONL file and extract JSON objects."""
     if output_file is None:
         input_path = Path(input_file)
-        output_file = str(input_path.parent / f"{input_path.stem.split('.')[0]}.clean.jsonl")
+        output_file = str(input_path.parent / f"{input_path.stem}.clean.jsonl")
     
     print(f"Parsing {input_file}")
     print(f"Output will be saved to {output_file}")
     
-    with open(input_file, 'rb') as f:
-        rtf_content = f.read().decode('utf-8', errors='ignore')
-    
-    extracted_data = extract_structured_data(rtf_content)
+    extracted_data = extract_structured_data(input_file)
     
     if extracted_data:
         print(f"Extracted {len(extracted_data)} data points")
@@ -142,6 +137,7 @@ def parse_rtf_jsonl(input_file, output_file=None):
             print(f"\nPer-Class F1 Scores:")
             for class_name, scores in f1_stats['class_f1_scores'].items():
                 print(f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
+                pass
         
         with open(output_file, 'w', encoding='utf-8') as f:
             for item in extracted_data:
@@ -153,41 +149,49 @@ def parse_rtf_jsonl(input_file, output_file=None):
         print("No data could be extracted from the file.")
         return []
 
-def extract_structured_data(rtf_content):
-    """Extract structured data from RTF content"""
+def extract_structured_data(input_file):
+    """Extract structured data from JSONL file"""
     data_points = []
     
-    # Find key components
-    generated_pattern = r'generated":\s*"(.*?)"'
-    generated_matches = re.findall(generated_pattern, rtf_content)
-    
-    gold_pattern = r'gold":\s*"(.*?)"'
-    gold_matches = re.findall(gold_pattern, rtf_content)
-    
-    min_length = min(len(generated_matches), len(gold_matches))
-    
-    for i in range(min_length):
-        model_prediction = extract_answer(generated_matches[i]).replace("<eos>", "")
-        ground_truth = extract_answer(gold_matches[i]).replace("<eos>", "")
-        
-        # Calculate accuracy (exact match)
-        accuracy = model_prediction == ground_truth
-        
-        # Calculate F1 score
-        f1_result = calculate_f1_score(model_prediction, ground_truth)
-        
-        data_point = {
-            "generated": generated_matches[i],
-            "model_prediction": model_prediction,
-            "ground_truth": ground_truth,
-            "accuracy": accuracy,
-            "f1_score": f1_result['f1_score'],
-            "precision": f1_result['precision'],
-            "recall": f1_result['recall'],
-            "prediction_normalized": f1_result['prediction_normalized'],
-            "ground_truth_normalized": f1_result['ground_truth_normalized']
-        }
-        data_points.append(data_point)
+    with open(input_file, 'r', encoding='utf-8') as f:
+        for line_num, line in tqdm(enumerate(f, 1)):
+            try:
+                # Parse JSON line
+                data = json.loads(line.strip())
+                
+                # Extract generated and gold fields
+                generated_text = data.get('generated', '')
+                gold_text = data.get('gold', '')
+                
+                # Extract answers from both fields
+                model_prediction = extract_answer(generated_text)
+                ground_truth = extract_answer(gold_text)
+                
+                # Calculate accuracy (exact match)
+                accuracy = model_prediction == ground_truth
+                
+                # Calculate F1 score
+                f1_result = calculate_f1_score(model_prediction, ground_truth)
+                
+                data_point = {
+                    "generated": generated_text,
+                    "model_prediction": model_prediction,
+                    "ground_truth": ground_truth,
+                    "accuracy": accuracy,
+                    "f1_score": f1_result['f1_score'],
+                    "precision": f1_result['precision'],
+                    "recall": f1_result['recall'],
+                    "prediction_normalized": f1_result['prediction_normalized'],
+                    "ground_truth_normalized": f1_result['ground_truth_normalized'],
+                    "line_number": line_num
+                }
+                data_points.append(data_point)
+            except json.JSONDecodeError as e:
+                print(f"Error parsing line {line_num}: {e}")
+                continue
+            except Exception as e:
+                print(f"Unexpected error on line {line_num}: {e}")
+                continue
     
     return data_points
 
@@ -197,12 +201,15 @@ def extract_answer(text):
         return text
     
     answer = text.split("Answer: ")[-1].strip()
+    # Remove any end-of-text tokens
     answer = re.sub(r'<\|.*?\|>$', '', answer).strip()
+    # Remove trailing periods and normalize
+    answer = re.sub(r'\.$', '', answer).strip()
     return answer
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = current_dir / "sp_gemma_predictions.jsonl"
-    clean_output = current_dir / "sp_gemma_predictions.clean.jsonl"
+    input_file = current_dir / "llama_sp_predictions.jsonl"
+    clean_output = current_dir / "llama_sp_predictions.clean.jsonl"
     
-    parse_rtf_jsonl(input_file, clean_output)
+    parse_sleep_cot_jsonl(input_file, clean_output)
