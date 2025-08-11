@@ -1,9 +1,10 @@
+from dataclasses import dataclass
 import glob
 import json
 import os
 import re
 import sys
-from typing import Dict, List, Type
+from typing import Any, Dict, List, Type
 
 import numpy as np
 import torch
@@ -16,9 +17,11 @@ from transformers import (
     Trainer,
     TrainingArguments,
     pipeline,
-    DataCollatorForLanguageModeling,
 )
+from transformers.pipelines.pt_utils import KeyDataset
 from datasets import Dataset as HFDataset
+
+from common_evaluator import CommonEvaluator
 
 # Ensure project src is on path (this script is under evaluation/baseline/)
 sys.path.insert(
@@ -50,9 +53,8 @@ PER_DEVICE_TRAIN_BATCH_SIZE = 1
 GRAD_ACC_STEPS = 8
 WEIGHT_DECAY = 0.0
 WARMUP_RATIO = 0.03
-MAX_SEQ_LEN = 1024 * 16
-TRAIN_SAMPLES_LIMIT = 10  # 512  # 0 or negative = no limit
-EVAL_SAMPLES_LIMIT = 50  # number of test samples to evaluate; 0 => all
+TRAIN_SAMPLES_LIMIT = 0  # 0 or negative = no limit
+EVAL_SAMPLES_LIMIT = 0  # number of test samples to evaluate; 0 => all
 
 # LoRA config (defaults)
 LORA_R = 16
@@ -61,7 +63,8 @@ LORA_DROPOUT = 0.0  # 0.05
 
 # Generation/eval settings
 GEN_TEMPERATURE = 0.1
-GEN_MAX_NEW_TOKENS = 100
+GEN_MAX_NEW_TOKENS = 50
+EVAL_BATCH_SIZE = 8  # Batch size for evaluation to improve GPU efficiency
 
 
 FORCE_RETRAIN = True  # Set to True to force retraining even if output exists
@@ -90,115 +93,161 @@ def normalize_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "-", name.lower())
 
 
-def ts_format_function(arr: np.ndarray) -> str:
-    """
-    Match the baseline's time series formatting, to keep consistency between training and evaluation.
-    """
-    return (
-        np.array2string(
-            arr,
-            separator=" ",
-            formatter={"all": lambda x: f'"{x:.2f}"'.replace(".", "")},
-            threshold=sys.maxsize,
-            max_line_width=sys.maxsize,
-        )
-        .removeprefix("[")
-        .removesuffix("]")
-    )
-
-
-def prepare_train_dataset(tokenizer, dataset_class, max_length=MAX_SEQ_LEN):
+def prepare_train_dataset(
+    common_evaluator: CommonEvaluator, tokenizer, dataset_class
+) -> HFDataset:
     """
     Prepare your dataset for prompt-answer fine-tuning.
     Dataset format: [{"prompt": "question", "answer": "response"}, ...]
     """
-    # Load your data
-    # Use same formatting approach as baseline
-    train_ds = dataset_class(
-        "train",
-        "",
-        format_sample_str=True,
-        time_series_format_function=ts_format_function,
+    dataset_file = os.path.join(
+        os.path.dirname(__file__),
+        "datasets",
+        f"hf_train_dataset_{dataset_class.__name__}",
     )
-    items = list(train_ds)
-    if TRAIN_SAMPLES_LIMIT > 0:
-        items = items[:TRAIN_SAMPLES_LIMIT]
+    if os.path.exists(dataset_file):
+        print(f"Loading cached dataset from disk: {dataset_file}")
+        tokenized_dataset = HFDataset.load_from_disk(dataset_file)
+    else:
+        # Load your data
+        # Use same formatting approach as baseline
 
-    # Convert to Hugging Face dataset
-    dataset = HFDataset.from_list(items)
+        train_ds = common_evaluator.load_dataset(
+            dataset_class=dataset_class,
+            split="train",
+            format_sample_str=True,
+        )
 
-    def tokenize_function(examples):
-        batch_size = len(examples["prompt"])
-        input_ids_list = []
-        attention_mask_list = []
-        labels_list = []
+        items = list(train_ds)
 
-        for i in range(batch_size):
-            prompt = examples["prompt"][i]
-            answer = examples["answer"][i]
+        # Convert to Hugging Face dataset
+        dataset = HFDataset.from_list(items)
 
-            # Create the full conversation
-            # You can customize this format based on your needs
-            full_text = f"{prompt}\n{answer}"
+        # compute max_tokens in training dataset
+        def compute_length(batch):
+            prompts = batch["prompt"]
+            answers = batch["answer"]
+            eos = tokenizer.eos_token or ""
+            full_texts = [p + "\n" + a + eos for p, a in zip(prompts, answers)]
+            tokens = tokenizer(full_texts, add_special_tokens=False)["input_ids"]
+            return {"token_length": list(map(len, tokens))}
 
-            # Tokenize prompt and full text separately to get lengths
-            prompt_tokens = tokenizer(
-                prompt + "\n",  # Include newline in prompt
-                truncation=False,
-                padding=False,
-                return_tensors=None,
-            )
+        # Map across dataset
+        token_lens = dataset.map(
+            compute_length,
+            batched=True,
+            num_proc=2,
+            batch_size=1000,
+            remove_columns=dataset.column_names,
+        )
 
-            full_tokens = tokenizer(
-                full_text,
+        # Find max token length in
+        max_tokens = max(token_lens["token_length"])
+        print(f"Maximum token length in dataset: {max_tokens}")
+
+        def tokenize_function(batch):
+            prompts = batch["prompt"]
+            answers = batch["answer"]
+
+            # Build full texts (we append eos to answers to mark their end)
+            eos = tokenizer.eos_token or ""
+            full_texts = [p + "\n" + a + eos for p, a in zip(prompts, answers)]
+
+            # Tokenize full texts in one batched call -> uses fast tokenizer path
+            full_enc = tokenizer(
+                full_texts,
+                padding="max_length",  # pad to max_length (consistent tensor sizes)
                 truncation=True,
-                padding=False,
-                max_length=max_length,
-                return_tensors=None,
+                max_length=max_tokens,
+                add_special_tokens=False,
             )
 
-            input_ids = full_tokens["input_ids"]
-            attention_mask = full_tokens["attention_mask"]
+            # Tokenize prompts alone (no padding) to compute prompt lengths
+            prompt_enc = tokenizer(
+                [p + "\n" for p in prompts],
+                padding=False,
+                truncation=True,
+                max_length=max_tokens,
+                add_special_tokens=False,
+            )
+            prompt_lengths = [len(x) for x in prompt_enc["input_ids"]]
 
-            # Create labels: -100 for prompt tokens (ignore in loss), actual tokens for answer
-            labels = input_ids.copy()
-            prompt_length = (
-                len(prompt_tokens["input_ids"]) - 1
-            )  # -1 because we don't want to ignore the newline
+            # Return the tokenized/padded arrays and prompt length
+            return {
+                "input_ids": full_enc["input_ids"],
+                "attention_mask": full_enc["attention_mask"],
+                "prompt_length": prompt_lengths,
+            }
 
-            # Set prompt tokens to -100 (ignored in loss computation)
-            for j in range(min(prompt_length, len(labels))):
-                labels[j] = -100
+        # Tokenize dataset
+        tokenized_dataset = dataset.map(
+            tokenize_function,
+            num_proc=2,
+            batched=True,
+            remove_columns=dataset.column_names,
+        )
+        tokenized_dataset.save_to_disk(dataset_file)
 
-            input_ids_list.append(input_ids)
-            attention_mask_list.append(attention_mask)
-            labels_list.append(labels)
-
-        return {
-            "input_ids": input_ids_list,
-            "attention_mask": attention_mask_list,
-            "labels": labels_list,
-        }
-
-    # Tokenize dataset
-    tokenized_dataset = dataset.map(
-        tokenize_function, batched=True, remove_columns=dataset.column_names
-    )
+    if TRAIN_SAMPLES_LIMIT > 0:
+        tokenized_dataset = tokenized_dataset.take(TRAIN_SAMPLES_LIMIT)
 
     return tokenized_dataset
 
 
-def build_test_dataset(dataset_class: Type[Dataset]) -> List[Dict[str, str]]:
-    test_ds = dataset_class(
-        "test",
-        "",
+def build_test_dataset(
+    common_evaluator: CommonEvaluator, dataset_class: Type[Dataset]
+) -> HFDataset:
+    test_ds = common_evaluator.load_dataset(
+        dataset_class=dataset_class,
+        split="test",
         format_sample_str=True,
-        time_series_format_function=ts_format_function,
     )
+
     items = list(test_ds)
     if EVAL_SAMPLES_LIMIT > 0:
         items = items[:EVAL_SAMPLES_LIMIT]
-    return items
+
+    pattern = (
+        r"This is the time series, it has mean (-?\d+\.\d{4}) and std (-?\d+\.\d{4})\."
+    )
+    replacement = "This is the time series:"
+
+    cleaned_items = []
+    for idx, item in enumerate(items):
+        cleaned_prompt = re.sub(pattern, replacement, item["prompt"])
+        cleaned_items.append(
+            {
+                "sample_idx": idx,
+                "input_text": cleaned_prompt,
+                "target_answer": item["answer"],
+            }
+        )
+
+    return HFDataset.from_list(cleaned_items)
+
+
+def prepare_eval_dataset(test_items: List[Dict[str, str]]) -> HFDataset:
+    """
+    Prepare test items for batch evaluation by cleaning prompts and converting to HF Dataset.
+    """
+    # Clean up prompts for TSQADataset to match baseline
+    pattern = (
+        r"This is the time series, it has mean (-?\d+\.\d{4}) and std (-?\d+\.\d{4})\."
+    )
+    replacement = "This is the time series:"
+
+    cleaned_items = []
+    for idx, item in enumerate(test_items):
+        cleaned_prompt = re.sub(pattern, replacement, item["prompt"])
+        cleaned_items.append(
+            {
+                "sample_idx": idx,
+                "input_text": cleaned_prompt,
+                "target_answer": item["answer"],
+            }
+        )
+
+    return HFDataset.from_list(cleaned_items)
 
 
 def apply_lora(model: AutoModelForCausalLM) -> PeftModel:
@@ -220,6 +269,39 @@ def apply_lora(model: AutoModelForCausalLM) -> PeftModel:
         modules_to_save=None,
     )
     return get_peft_model(model, lora_cfg)
+
+
+@dataclass
+class SimpleCollator:
+    tokenizer: Any
+    label_pad_token_id: int = -100
+
+    def __call__(self, features: List[Dict]) -> Dict[str, torch.Tensor]:
+        """
+        features is a list of dicts with keys: 'input_ids' (list), 'attention_mask' (list), 'prompt_length' (int)
+        They are already padded to the same length by prepare_dataset.
+        """
+        # Stack into tensors
+        input_ids = torch.tensor([f["input_ids"] for f in features], dtype=torch.long)
+        attention_mask = torch.tensor(
+            [f["attention_mask"] for f in features], dtype=torch.long
+        )
+        prompt_lengths = [f["prompt_length"] for f in features]
+
+        # Build labels: copy input_ids and mask prompt tokens and pad tokens with -100
+        labels = input_ids.clone()
+        for i, prompt_length in enumerate(prompt_lengths):
+            if prompt_length > 0:
+                labels[i, :prompt_length] = self.label_pad_token_id
+
+        # mask any pad tokens
+        labels[labels == self.tokenizer.pad_token_id] = self.label_pad_token_id
+
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": labels,
+        }
 
 
 def train_lora_for_model_and_dataset(
@@ -269,36 +351,30 @@ def train_lora_for_model_and_dataset(
 
     # Prepare datasets and collator
     print("Preparing training dataset...")
-    # train_dataset = build_train_dataset(dataset_class, tokenizer.eos_token)
-    train_dataset = prepare_train_dataset(
-        tokenizer, dataset_class, max_length=MAX_SEQ_LEN
-    )
-    # data_collator = DataCollatorForCausalLMWithPromptMask(
-    #    tokenizer=tokenizer, max_seq_len=MAX_SEQ_LEN
-    # )
-    data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokenizer,
-        mlm=False,  # False for causal language modeling
-        # pad_to_multiple_of=8,  # Optional: for better performance on some hardware
-    )
+    common_evaluator = CommonEvaluator(device=device)
+    common_evaluator.current_model_name = model_id
+    train_dataset = prepare_train_dataset(common_evaluator, tokenizer, dataset_class)
+    data_collator = SimpleCollator(tokenizer=tokenizer)
 
     # Training
     trainer = Trainer(
         model=model,
         args=TrainingArguments(
             output_dir=output_dir,
-            # optim="paged_adamw_8bit",  # Use 8-bit AdamW optimizer for memory efficiency
+            optim="paged_adamw_8bit"
+            if device == "cuda"
+            else None,  # Use 8-bit AdamW optimizer for memory efficiency
             num_train_epochs=EPOCHS,
             learning_rate=LEARNING_RATE,
             per_device_train_batch_size=PER_DEVICE_TRAIN_BATCH_SIZE,
             gradient_accumulation_steps=GRAD_ACC_STEPS,
-            weight_decay=WEIGHT_DECAY,
-            warmup_ratio=WARMUP_RATIO,
+            # weight_decay=WEIGHT_DECAY,
+            # warmup_ratio=WARMUP_RATIO,
             logging_steps=10,
             fp16=(device == "cuda"),
-            # remove_unused_columns=False,
+            remove_unused_columns=False,
+            save_strategy="epoch",
             # dataloader_pin_memory=False,
-            # label_names=["answer"],
         ),
         train_dataset=train_dataset,
         data_collator=data_collator,
@@ -332,7 +408,7 @@ def evaluate_finetuned_model(
     print("Loading base model and attaching LoRA adapters...")
     tokenizer = AutoTokenizer.from_pretrained(adapter_dir, use_fast=True)
     tokenizer = ensure_pad_token(tokenizer)
-    tokenizer.padding_side = "right"
+    tokenizer.padding_side = "left"
 
     base_model = AutoModelForCausalLM.from_pretrained(model_id)
     if (
@@ -349,7 +425,6 @@ def evaluate_finetuned_model(
         model=ft_model,
         tokenizer=tokenizer,
         device=device,
-        temperature=GEN_TEMPERATURE,
         max_new_tokens=GEN_MAX_NEW_TOKENS,
     )
 
@@ -364,52 +439,52 @@ def evaluate_finetuned_model(
 
     # Load test dataset
     print("Loading test dataset...")
-    test_items = build_test_dataset(dataset_class)
-    print(f"Loaded {len(test_items)} test samples")
+    common_evaluator = CommonEvaluator(device=detect_device())
+    common_evaluator.current_model_name = model_id
+    test_dataset = build_test_dataset(common_evaluator, dataset_class)
+    print(f"Loaded {len(test_dataset)} test samples")
 
     # Metrics
     total_samples = 0
     successful_inferences = 0
     results: List[Dict[str, str]] = []
 
+    # Prepare dataset for batch processing
+
+    # Process in batches
     print("\nRunning inference on test samples...")
     print("=" * 80)
 
-    # Process each sample
-    for idx in tqdm(range(len(test_items)), desc="Evaluating samples"):
+    # Process all samples in batches
+    all_outputs = pipe(
+        KeyDataset(test_dataset, "input_text"),
+        max_new_tokens=GEN_MAX_NEW_TOKENS,
+        return_full_text=False,
+        batch_size=EVAL_BATCH_SIZE,
+    )
+
+    # Process results
+    for idx, output in tqdm(
+        enumerate(all_outputs), total=len(test_dataset), desc="Eval"
+    ):
         try:
-            sample = test_items[idx].copy()
-
-            # Clean up prompt for TSQADataset to match baseline
-            pattern = r"This is the time series, it has mean (-?\d+\.\d{4}) and std (-?\d+\.\d{4})\."
-            replacement = "This is the time series:"
-            sample["prompt"] = re.sub(pattern, replacement, sample["prompt"])
-
-            input_text = sample["prompt"]
-            target_answer = sample["answer"]
-
-            outputs = pipe(
-                input_text,
-                max_new_tokens=GEN_MAX_NEW_TOKENS,
-                return_full_text=False,
-            )
-
-            if outputs and len(outputs) > 0:
-                generated_text = outputs[0]["generated_text"].strip()
+            sample = test_dataset[idx]
+            if output and len(output) > 0:
+                generated_text = output[0]["generated_text"].strip()
                 successful_inferences += 1
 
                 result = {
-                    "sample_idx": idx,
-                    "input_text": input_text,
-                    "target_answer": target_answer,
+                    "sample_idx": sample["sample_idx"],
+                    "input_text": sample["input_text"],
+                    "target_answer": sample["target_answer"],
                     "generated_answer": generated_text,
                 }
                 results.append(result)
 
                 if idx < 5:
                     print(f"\nSAMPLE {idx + 1}:")
-                    print(f"PROMPT: {sample['prompt'][:1000]}...")
-                    print(f"ANSWER: {target_answer}")
+                    print(f"PROMPT: {sample['input_text'][:1000]}...")
+                    print(f"ANSWER: {sample['target_answer']}")
                     print(f"OUTPUT: {generated_text}")
                     print("=" * 80)
 
@@ -417,7 +492,8 @@ def evaluate_finetuned_model(
 
         except Exception as e:
             print(f"Error processing sample {idx}: {e}")
-            continue
+            raise e
+            # continue
 
     if successful_inferences > 0:
         success_rate = successful_inferences / total_samples

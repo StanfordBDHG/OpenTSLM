@@ -38,9 +38,9 @@ class QADataset(Dataset, ABC):
 
             format_function = partial(self._format_sample_str, time_series_format_function) if format_sample_str else self._format_sample
            
-            self.__class__._train_dataset = list(map(format_function, train))
-            self.__class__._validation_dataset = list(map(format_function, val))
-            self.__class__._test_dataset = list(map(format_function, test))
+            self.__class__._train_dataset = train.map(format_function, remove_columns=train.column_names, load_from_cache_file=True)
+            self.__class__._validation_dataset = val.map(format_function, remove_columns=val.column_names, load_from_cache_file=True)
+            self.__class__._test_dataset = test.map(format_function, remove_columns=test.column_names, load_from_cache_file=True)
 
             self.__class__.loaded = True
 
@@ -53,7 +53,7 @@ class QADataset(Dataset, ABC):
                 self.dataset = self.__class__._test_dataset
             case _:
                 raise RuntimeError(
-                    "Split must be a literal of 'train', 'training', or 'validation'"
+                    "Split must be a literal of 'train', 'test', or 'validation'"
                 )
 
     @abstractmethod
