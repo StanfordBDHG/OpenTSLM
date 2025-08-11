@@ -9,3 +9,5 @@ raw_data
 *.ts
 *.zip
 ./__pycache__
+
+evaluation/baseline/models/
