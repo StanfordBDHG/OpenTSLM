@@ -29,7 +29,9 @@ sys.path.insert(
 )
 
 from time_series_datasets.TSQADataset import TSQADataset
-# from time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
+from time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
+from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
+#from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 
 # --------------------
 # Configuration
@@ -42,8 +44,10 @@ MODEL_IDS: List[str] = [
 ]
 
 DATASETS: List[Type[Dataset]] = [
-    TSQADataset,
-    # PAMAP2AccQADataset,
+    #TSQADataset,
+    #PAMAP2AccQADataset,
+    PAMAP2CoTQADataset,
+    #SleepEDFCoTQADataset
 ]
 
 # Training hyperparameters (defaults)
@@ -64,10 +68,10 @@ LORA_DROPOUT = 0.0  # 0.05
 # Generation/eval settings
 GEN_TEMPERATURE = 0.1
 GEN_MAX_NEW_TOKENS = 50
-EVAL_BATCH_SIZE = 8  # Batch size for evaluation to improve GPU efficiency
+EVAL_BATCH_SIZE = 2  # Batch size for evaluation to improve GPU efficiency
 
 
-FORCE_RETRAIN = True  # Set to True to force retraining even if output exists
+FORCE_RETRAIN = False  # Set to True to force retraining even if output exists
 
 # --------------------
 # Utilities
@@ -82,10 +86,14 @@ def detect_device() -> str:
     return "cpu"
 
 
-def ensure_pad_token(tokenizer):
+def ensure_pad_token(tokenizer, model_id: str):
     if tokenizer.pad_token is None:
-        # Fall back to eos token for padding
-        tokenizer.pad_token = tokenizer.eos_token
+        if "llama" in model_id.lower():
+            tokenizer.pad_token = "<|finetune_right_pad_id|>"
+        elif "gemma" in model_id.lower():
+            tokenizer.pad_token = "<pad>"
+        else:
+            tokenizer.pad_token = tokenizer.unk_token or "<pad>"
     return tokenizer
 
 
@@ -127,7 +135,7 @@ def prepare_train_dataset(
         def compute_length(batch):
             prompts = batch["prompt"]
             answers = batch["answer"]
-            eos = tokenizer.eos_token or ""
+            eos = tokenizer.eos_token
             full_texts = [p + "\n" + a + eos for p, a in zip(prompts, answers)]
             tokens = tokenizer(full_texts, add_special_tokens=False)["input_ids"]
             return {"token_length": list(map(len, tokens))}
@@ -150,7 +158,7 @@ def prepare_train_dataset(
             answers = batch["answer"]
 
             # Build full texts (we append eos to answers to mark their end)
-            eos = tokenizer.eos_token or ""
+            eos = tokenizer.eos_token
             full_texts = [p + "\n" + a + eos for p, a in zip(prompts, answers)]
 
             # Tokenize full texts in one batched call -> uses fast tokenizer path
@@ -336,7 +344,7 @@ def train_lora_for_model_and_dataset(
     # Load tokenizer and model
     print("Loading tokenizer and base model...")
     tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-    tokenizer = ensure_pad_token(tokenizer)
+    tokenizer = ensure_pad_token(tokenizer, model_id)
     tokenizer.padding_side = "right"
 
     # Load model with 4-bit quantization for memory efficiency (optional)
@@ -361,7 +369,7 @@ def train_lora_for_model_and_dataset(
         model=model,
         args=TrainingArguments(
             output_dir=output_dir,
-            optim="paged_adamw_8bit"
+            optim="adamw_8bit"
             if device == "cuda"
             else None,  # Use 8-bit AdamW optimizer for memory efficiency
             num_train_epochs=EPOCHS,
@@ -373,7 +381,7 @@ def train_lora_for_model_and_dataset(
             logging_steps=10,
             fp16=(device == "cuda"),
             remove_unused_columns=False,
-            save_strategy="epoch",
+            # save_strategy="epoch",
             # dataloader_pin_memory=False,
         ),
         train_dataset=train_dataset,
@@ -407,7 +415,7 @@ def evaluate_finetuned_model(
     # Load base and attach adapters for inference
     print("Loading base model and attaching LoRA adapters...")
     tokenizer = AutoTokenizer.from_pretrained(adapter_dir, use_fast=True)
-    tokenizer = ensure_pad_token(tokenizer)
+    tokenizer = ensure_pad_token(tokenizer, model_id)
     tokenizer.padding_side = "left"
 
     base_model = AutoModelForCausalLM.from_pretrained(model_id)

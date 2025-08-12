@@ -26,9 +26,9 @@ TIME_SERIES_LABELS = [
 
 
 class PAMAP2CoTQADataset(QADataset):
-    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, min_series_length: int = 150):
+    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, min_series_length: int = 150, **kwargs):
         self.min_series_length = min_series_length
-        super().__init__(split, EOS_TOKEN)
+        super().__init__(split, EOS_TOKEN, **kwargs)
     
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         """
