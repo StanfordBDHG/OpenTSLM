@@ -120,15 +120,21 @@ def download_ptbxl():
     for req_file in required_files:
         file_path = os.path.join(PTBXL_DIR, req_file)
         if not os.path.exists(file_path):
-            print(f"Warning: Required file {req_file} not found in {PTBXL_DIR}")
+            raise FileNotFoundError(f"Required PTB-XL file {req_file} not found in {PTBXL_DIR}. "
+                                   f"PTB-XL dataset may be corrupted or incomplete.")
     
     if not os.path.exists(PTBXL_RECORDS_DIR):
-        print(f"Warning: Records directory not found at {PTBXL_RECORDS_DIR}")
         # List what's actually in the directory to help debug
+        contents = []
         if os.path.exists(PTBXL_DIR):
-            print(f"Contents of {PTBXL_DIR}:")
-            for item in os.listdir(PTBXL_DIR):
-                print(f"  {item}")
+            contents = [f"  {item}" for item in os.listdir(PTBXL_DIR)]
+            contents_str = "\n".join(contents)
+        else:
+            contents_str = "  Directory does not exist"
+        
+        raise FileNotFoundError(f"PTB-XL records directory not found at {PTBXL_RECORDS_DIR}. "
+                               f"PTB-XL dataset may be corrupted or incomplete.\n"
+                               f"Contents of {PTBXL_DIR}:\n{contents_str}")
 
 
 def download_ecg_qa_if_not_exists():
@@ -310,8 +316,9 @@ def load_ecg_qa_ptbxl_splits() -> Tuple[Dataset, Dataset, Dataset]:
                     raise ValueError(f"Expected 'ecg_id' in sample {sample_idx} of {json_path} to be a list, got {type(ecg_ids)}")
                 
                 if not ecg_ids:
-                    print(f"Warning: Sample {sample_idx} in {json_path} has empty ecg_id list")
-                    continue
+                    raise ValueError(f"Sample {sample_idx} in {json_path} has empty ecg_id list. "
+                                   f"Every ECG-QA sample must have at least one ECG ID. "
+                                   f"This indicates corrupted or invalid data.")
                 
                 for ecg_id in ecg_ids:
                     if not isinstance(ecg_id, int):
@@ -322,9 +329,11 @@ def load_ecg_qa_ptbxl_splits() -> Tuple[Dataset, Dataset, Dataset]:
                     if os.path.exists(ecg_path + '.dat'):
                         sample['ecg_paths'].append(ecg_path + '.dat')
                     else:
-                        # Don't fail here, just warn - some ECG files might be missing
-                        print(f"Warning: ECG file not found: {ecg_path}.dat (ECG ID: {ecg_id})")
-                        sample['ecg_paths'].append(ecg_path + '.dat')  # Keep the path for error reporting
+                        # Missing ECG files are a critical error - the dataset is incomplete
+                        raise FileNotFoundError(f"ECG file not found: {ecg_path}.dat (ECG ID: {ecg_id}). "
+                                              f"This indicates that the PTB-XL dataset is incomplete or corrupted. "
+                                              f"Please re-download the PTB-XL dataset or check the ECG ID {ecg_id} "
+                                              f"in sample {sample_idx} of {json_path}.")
                     
                     # Add safe clinical context
                     clinical_context = create_clinical_context(ecg_id, ptbxl_metadata)

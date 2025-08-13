@@ -261,26 +261,7 @@ Answer: <your_answer>
             "arrhythmia", "axis deviation", "non-specific changes"
         ]
     
-    def _format_sample(self, row):
-        """Format a sample for the dataset."""
-        sample = super()._format_sample(row)
-        
-        # Add ECG-QA specific metadata
-        sample["question_id"] = row.get("question_id")
-        sample["template_id"] = row.get("template_id") 
-        sample["question_type"] = row.get("question_type")
-        sample["attribute_type"] = row.get("attribute_type")
-        sample["ecg_id"] = row.get("ecg_id")
-        sample["attribute"] = row.get("attribute")
-        
-        # Add clinical context from PTB-XL
-        sample["clinical_contexts"] = row.get("clinical_contexts", [])
-        if sample["clinical_contexts"]:
-            sample["primary_clinical_context"] = sample["clinical_contexts"][0]
-        else:
-            sample["primary_clinical_context"] = "12-lead ECG recording."
-        
-        return sample
+
 
 
 if __name__ == "__main__":
