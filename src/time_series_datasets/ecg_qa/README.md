@@ -7,7 +7,7 @@ ECG-QA is one of the core training datasets for **EmbedHealth**, providing compr
 | Split | Samples | Description |
 |-------|---------|-------------|
 | **Train** | 267,539 | Training samples for model learning |
-| **Validation** | 64,663 | Validation samples for hyperparameter tuning |  
+| **Validation** | 64,663 | Validation samples |  
 | **Test** | 82,146 | Test samples for final evaluation |
 | **Total** | **414,348** | Complete ECG question-answering dataset |
 
@@ -233,9 +233,3 @@ for i, lead in enumerate(sample['time_series_text']):
 ```
 
 **Paper**: [PTB-XL, a large publicly available electrocardiography dataset](https://www.nature.com/articles/s41597-020-0495-6)
-
-## Additional Resources
-
-- **EmbedHealth Documentation**: See main repository README
-- **Clinical ECG Interpretation**: Understanding 12-lead ECG analysis principles
-- **WFDB Python Package**: [Documentation](https://wfdb.readthedocs.io/) for ECG data processing 
