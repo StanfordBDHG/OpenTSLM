@@ -18,3 +18,4 @@ einops
 einops-exts
 pyvim
 openai
+wfdb
