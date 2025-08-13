@@ -105,10 +105,12 @@ Please analyze the ECG signal patterns carefully and provide an accurate answer.
 
     def _get_post_prompt(self, row) -> str:
         """Generate the post-prompt with possible answers and instructions."""
-        question_type = row.get("question_type", "unknown")
+        # Try to get template-specific answers first
+        template_id = row.get("template_id")
+        possible_answers = []
         
-        # Get possible answers for this question type from the answers mapping
-        possible_answers = self._get_possible_answers_for_type(question_type)
+        if template_id:
+            possible_answers = self.get_possible_answers_for_template(template_id)
         
         if possible_answers:
             answers_text = ", ".join(possible_answers)
@@ -128,18 +130,31 @@ Answer: <your_answer>
         
         return prompt.strip()
 
-    def _get_possible_answers_for_type(self, question_type: str) -> List[str]:
-        """Get possible answers based on question type and answers mapping."""
-        # This would ideally use the answers.csv to get all possible answers
-        # For now, return common ECG-QA answers based on question type
-        
-        if "verify" in question_type:
-            return ["yes", "no", "not sure"]
-        elif "choice" in question_type or "rhythm" in question_type:
-            return ["normal", "abnormal", "borderline"]  
-        else:
+    def get_possible_answers_for_template(self, template_id: int) -> List[str]:
+        """Get possible answers for a specific template ID."""
+        try:
+            import pandas as pd
+            import ast
+            from time_series_datasets.ecg_qa.ecgqa_loader import ECG_QA_DIR
+            
+            # Load template answers directly
+            template_answers_path = os.path.join(ECG_QA_DIR, "ecgqa", "ptbxl", "answers_for_each_template.csv")
+            template_df = pd.read_csv(template_answers_path)
+            
+            # Find the row for this template_id
+            template_row = template_df[template_df.template_id == template_id]
+            if len(template_row) > 0:
+                # Parse the string list back to actual list
+                answers_str = template_row.iloc[0]['classes']
+                return ast.literal_eval(answers_str)
+            else:
+                print(f"Warning: Template ID {template_id} not found in answers mapping")
+                return []
+                
+        except Exception as e:
+            print(f"Error loading template answers: {e}")
             return []
-
+    
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         """Load ECG data and convert to TextTimeSeriesPrompt format."""
         
@@ -261,7 +276,15 @@ Answer: <your_answer>
             "arrhythmia", "axis deviation", "non-specific changes"
         ]
     
-
+    def _format_sample(self, row):
+        # Call parent method to get the standard formatted sample
+        formatted_sample = super()._format_sample(row)
+        
+        # Add template_id if it exists in the original row
+        if 'template_id' in row:
+            formatted_sample['template_id'] = row['template_id']
+        
+        return formatted_sample
 
 
 if __name__ == "__main__":
