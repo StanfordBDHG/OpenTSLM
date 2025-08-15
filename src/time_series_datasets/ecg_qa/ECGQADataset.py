@@ -30,19 +30,56 @@ class ECGQADataset(QADataset):
     
     def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, 
                  format_sample_str: bool = False, time_series_format_function=None,
-                 max_samples: int = None):
+                 max_samples: int = None, exclude_comparison: bool = False):
+        """
+        Initialize ECG-QA Dataset.
+        
+        Args:
+            split: Dataset split to load
+            EOS_TOKEN: End-of-sequence token
+            format_sample_str: Whether to format samples as strings
+            time_series_format_function: Function to format time series data
+            max_samples: Maximum number of samples per split (for testing)
+            exclude_comparison: If True, exclude comparison questions (question_type starting with "comparison_")
+        """
         # Load answers mapping once
         if not hasattr(self.__class__, 'answers_df'):
             print("Loading ECG-QA answers mapping...")
             self.__class__.answers_df = load_ecg_qa_answers()
         
         self.max_samples = max_samples
+        self.exclude_comparison = exclude_comparison
         super().__init__(split, EOS_TOKEN, format_sample_str, time_series_format_function)
 
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         """Load the ECG-QA PTB-XL dataset splits."""
         print("Loading ECG-QA dataset splits...")
         train, val, test = load_ecg_qa_ptbxl_splits()
+        
+        # Filter out comparison questions if requested
+        if self.exclude_comparison:
+            print("Filtering out comparison questions...")
+            
+            def filter_comparison(dataset):
+                filtered_data = []
+                for sample in dataset:
+                    question_type = sample.get("question_type", "")
+                    if not question_type.startswith("comparison"):
+                        filtered_data.append(sample)
+                return Dataset.from_list(filtered_data)
+            
+            original_train_len = len(train)
+            original_val_len = len(val)
+            original_test_len = len(test)
+            
+            train = filter_comparison(train)
+            val = filter_comparison(val)
+            test = filter_comparison(test)
+            
+            print(f"Filtered out comparison questions:")
+            print(f"  Train: {original_train_len} -> {len(train)} ({original_train_len - len(train)} removed)")
+            print(f"  Val: {original_val_len} -> {len(val)} ({original_val_len - len(val)} removed)")
+            print(f"  Test: {original_test_len} -> {len(test)} ({original_test_len - len(test)} removed)")
         
         # Limit samples for faster testing if requested
         if self.max_samples:
@@ -280,9 +317,11 @@ Answer: <your_answer>
         # Call parent method to get the standard formatted sample
         formatted_sample = super()._format_sample(row)
         
-        # Add template_id if it exists in the original row
+        # Add template_id and question_type if they exist in the original row
         if 'template_id' in row:
             formatted_sample['template_id'] = row['template_id']
+        if 'question_type' in row:
+            formatted_sample['question_type'] = row['question_type']
         
         return formatted_sample
 
