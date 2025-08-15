@@ -8,8 +8,8 @@ import argparse
 from typing import List, Optional, Dict, Any, Callable
 from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.m4.M4QADataset import M4QADataset
-from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
@@ -50,7 +50,6 @@ from model_config import (
     WARMUP_FRAC,
     WEIGHT_DECAY,
 )
-from time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSampler
 
 
 # Global stage configuration - users can modify this to mix and match stages
@@ -855,7 +854,7 @@ class CurriculumTrainer:
         )
     
     def stage3_cot(self, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
-        """Stage CoT: Chain-of-Thought Reasoning (PAMAP2).
+        """Stage CoT: Chain-of-Thought Reasoning (HAR).
         
         Configuration:
         - Epochs: 100
@@ -863,20 +862,11 @@ class CurriculumTrainer:
         - EmbedHealthFlamingo: base_lr=2e-4
         - Metric: Test loss only (chain-of-thought reasoning)
         """
-        from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
         sampler = None
-        #if not (self.world_size > 1):
-        #    train_dataset = PAMAP2CoTQADataset("train", EOS_TOKEN=self._get_model().get_eos_token())
-        #    labels = [row["label"] for row in train_dataset]
-        #    num_classes = len(set(labels))
-        #    if batch_size is None:
-        #        batch_size = BATCH_SIZE
-        #    if batch_size % num_classes != 0:
-        #        raise ValueError(f"Batch size ({batch_size}) must be divisible #by number of classes ({num_classes}) for BalancedBatchSampler.")
-        #    sampler = BalancedBatchSampler(labels, batch_size)
+        
         return self._train_stage(
             stage_name="stage3_cot",
-            dataset_class=PAMAP2CoTQADataset,
+            dataset_class=HARCoTQADataset,
             num_epochs=11,
             lr_encoder=2e-4,
             lr_projector=1e-4,
