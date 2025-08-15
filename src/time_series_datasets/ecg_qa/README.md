@@ -4,12 +4,27 @@ ECG-QA is one of the core training datasets for **EmbedHealth**, providing compr
 
 ## Dataset Overview
 
+ECG-QA contains single-ECG and multi-ECG questions. Multi-ECG questions are about comparing two ECGs. The latter are not used for training EmbedHealth.
+
+### Full Dataset (All Question Types)
+
 | Split | Samples | Description |
 |-------|---------|-------------|
 | **Train** | 267,539 | Training samples for model learning |
-| **Validation** | 64,663 | Validation samples |  
+| **Validation** | 64,663 | Validation samples for hyperparameter tuning |  
 | **Test** | 82,146 | Test samples for final evaluation |
 | **Total** | **414,348** | Complete ECG question-answering dataset |
+
+### Filtered Dataset (Single Questions Only, `exclude_comparison=True`)
+
+| Split | Samples | Removed | Description |
+|-------|---------|---------|-------------|
+| **Train** | 159,306 | 108,233 | Single-question training samples |
+| **Validation** | 31,137 | 33,526 | Single-question validation samples |  
+| **Test** | 41,093 | 41,053 | Single-question test samples |
+| **Total** | **231,536** | **182,812** | Filtered dataset excluding comparison questions |
+
+**Note:** The filtered dataset excludes all comparison questions (those requiring analysis of multiple ECGs). 
 
 
 ![Dataset Distribution](dataset_distribution.png)
@@ -26,14 +41,6 @@ ECG-QA is one of the core training datasets for **EmbedHealth**, providing compr
 
 This example demonstrates how EmbedHealth processes ECG signals on a millimeter paper grid (similar to clinical practice) and answers specific diagnostic questions about cardiac conditions.
 
-## Dataset Statistics
-
-| Split | Samples | Description |
-|-------|---------|-------------|
-| **Train** | 267,539 | Training samples for model learning |
-| **Validation** | 64,663 | Validation samples for hyperparameter tuning |  
-| **Test** | 82,146 | Test samples for final evaluation |
-| **Total** | **414,348** | Complete ECG question-answering dataset |
 
 ### Relationship to PTB-XL
 
@@ -94,16 +101,26 @@ train_dataset = ECGQADataset(split="train", EOS_TOKEN="")
 val_dataset = ECGQADataset(split="validation", EOS_TOKEN="")  
 test_dataset = ECGQADataset(split="test", EOS_TOKEN="")
 
-print(f"Train: {len(train_dataset):,} samples")
-print(f"Validation: {len(val_dataset):,} samples")
-print(f"Test: {len(test_dataset):,} samples")
+print(f"Full dataset - Train: {len(train_dataset):,} samples")
+print(f"Full dataset - Validation: {len(val_dataset):,} samples")
+print(f"Full dataset - Test: {len(test_dataset):,} samples")
+
+# Load filtered dataset (single questions only, excludes comparison questions)
+train_filtered = ECGQADataset(split="train", EOS_TOKEN="", exclude_comparison=True)
+val_filtered = ECGQADataset(split="validation", EOS_TOKEN="", exclude_comparison=True)
+test_filtered = ECGQADataset(split="test", EOS_TOKEN="", exclude_comparison=True)
+
+print(f"Filtered dataset - Train: {len(train_filtered):,} samples")
+print(f"Filtered dataset - Validation: {len(val_filtered):,} samples") 
+print(f"Filtered dataset - Test: {len(test_filtered):,} samples")
 
 # Examine a sample
 sample = train_dataset[0]
 print(f"Pre-prompt: {sample['pre_prompt'][:100]}...")
 print(f"Answer: {sample['answer']}")
+print(f"Question type: {sample['question_type']}")
+print(f"Template ID: {sample['template_id']}")
 print(f"ECG leads: {len(sample['time_series_text'])}")
-print(f"Clinical context: {sample['primary_clinical_context']}")
 ```
 
 ## Data Structure
