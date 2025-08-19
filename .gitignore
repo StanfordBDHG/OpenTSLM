@@ -16,3 +16,4 @@ evaluation/baseline/datasets/
 data/
 .vscode/settings.json
 baseline_test_results*.json
+evaluation/baseline/logs/

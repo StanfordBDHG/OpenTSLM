@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import argparse
 import glob
 import json
 import os
@@ -7,6 +8,8 @@ import sys
 from typing import Any, Dict, List, Type
 
 import torch
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 from peft import LoraConfig, PeftModel, get_peft_model, TaskType
 from torch.utils.data import Dataset as Dataset
 from tqdm import tqdm
@@ -33,36 +36,39 @@ from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
 from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 
 # --------------------
 # Configuration
 # --------------------
+FALLBACK_MODEL_ID = "meta-llama/Llama-3.2-1B"  # Default model if none specified
+FALLBACK_DATASET = PAMAP2AccQADataset
 
-MODEL_IDS: List[str] = [
-    # "google/gemma-3n-e2b",
-    # "google/gemma-3n-e2b-it",
-    "meta-llama/Llama-3.2-1B",
-    #"meta-llama/Llama-3.2-3B",
-]
+# MODEL_IDS: List[str] = [
+#     # "google/gemma-3n-e2b",
+#     # "google/gemma-3n-e2b-it",
+#     "meta-llama/Llama-3.2-1B",
+#     #"meta-llama/Llama-3.2-3B",
+# ]
 
-DATASETS: List[Type[Dataset]] = [
-    #TSQADataset,
-    #PAMAP2AccQADataset,
-    PAMAP2CoTQADataset,
-    #SleepEDFCoTQADataset
-]
+# DATASETS: List[Type[Dataset]] = [
+#     #TSQADataset,
+#     #PAMAP2AccQADataset,
+#     PAMAP2CoTQADataset,
+#     #SleepEDFCoTQADataset
+#]
 
 # Training hyperparameters (defaults)
-EPOCHS = 20
+EPOCHS = 1
 LEARNING_RATE = 2e-4
 PER_DEVICE_TRAIN_BATCH_SIZE = 1
-GRAD_ACC_STEPS = 8
+GRAD_ACC_STEPS = 16
 WEIGHT_DECAY = 0.0
 WARMUP_RATIO = 0.03
 TRAIN_SAMPLES_LIMIT = 0  # 0 or negative = no limit
 EVAL_SAMPLES_LIMIT = 0  # number of test samples to evaluate; 0 => all
 
-DO_VALIDATION = True
+DO_VALIDATION = False
 
 # LoRA config (defaults)
 LORA_R = 16
@@ -78,12 +84,52 @@ EVAL_BATCH_SIZE = 2  # Batch size for evaluation to improve GPU efficiency
 FORCE_RETRAIN = True  # Set to True to force retraining even if output exists
 
 # --------------------
+# Distributed Utilities
+# --------------------
+def is_distributed() -> bool:
+    return "LOCAL_RANK" in os.environ
+
+def setup_distributed():
+    """Initialize distributed training if running in distributed mode."""
+    if "LOCAL_RANK" in os.environ:
+        local_rank = int(os.environ["LOCAL_RANK"])
+        torch.cuda.set_device(local_rank)
+        dist.init_process_group(backend="nccl")
+        return True
+    return False
+
+def cleanup_distributed():
+    """Clean up distributed training."""
+    if dist.is_initialized():
+        dist.destroy_process_group()
+
+def is_main_process():
+    """Check if this is the main process (rank 0)."""
+    return not dist.is_initialized() or dist.get_rank() == 0
+
+def get_rank():
+    """Get the current process rank."""
+    if dist.is_initialized():
+        return dist.get_rank()
+    return 0
+
+def get_world_size():
+    """Get the total number of processes."""
+    if dist.is_initialized():
+        return dist.get_world_size()
+    return 1
+
+# --------------------
 # Utilities
 # --------------------
 
 
 def detect_device() -> str:
+    """Detect the appropriate device, considering distributed setup."""
     if torch.cuda.is_available():
+        if "LOCAL_RANK" in os.environ:
+            # In distributed mode, use the local rank as device
+            return f"cuda:{int(os.environ['LOCAL_RANK'])}"
         return "cuda"
     if torch.backends.mps.is_available():
         return "mps"
@@ -120,88 +166,101 @@ def prepare_dataset(
         "datasets",
         f"hf_{split}_dataset_{dataset_class.__name__}",
     )
+    
+    # Only main process should create/save datasets to avoid race conditions
     if os.path.exists(dataset_file):
-        print(f"Loading cached dataset from disk: {dataset_file}")
+        if is_main_process():
+            print(f"Loading cached dataset from disk: {dataset_file}")
         tokenized_dataset = HFDataset.load_from_disk(dataset_file)
     else:
-        # Load your data
-        # Use same formatting approach as baseline
-
-        split_ds = common_evaluator.load_dataset(
-            dataset_class=dataset_class,
-            split=split,
-            format_sample_str=True,
-        )
-
-        items = list(split_ds)
-
-        # Convert to Hugging Face dataset
-        dataset = HFDataset.from_list(items)
-
-        # compute max_tokens in training dataset
-        def compute_length(batch):
-            prompts = batch["prompt"]
-            answers = batch["answer"]
-            eos = tokenizer.eos_token
-            full_texts = [p + "\n" + a + eos for p, a in zip(prompts, answers)]
-            tokens = tokenizer(full_texts, add_special_tokens=False)["input_ids"]
-            return {"token_length": list(map(len, tokens))}
-
-        # Map across dataset
-        token_lens = dataset.map(
-            compute_length,
-            batched=True,
-            num_proc=2,
-            batch_size=1000,
-            remove_columns=dataset.column_names,
-        )
-
-        # Find max token length in
-        max_tokens = max(token_lens["token_length"])
-        print(f"Maximum token length in dataset: {max_tokens}")
-
-        def tokenize_function(batch):
-            prompts = batch["prompt"]
-            answers = batch["answer"]
-
-            # Build full texts (we append eos to answers to mark their end)
-            eos = tokenizer.eos_token
-            full_texts = [p + "\n" + a + eos for p, a in zip(prompts, answers)]
-
-            # Tokenize full texts in one batched call -> uses fast tokenizer path
-            full_enc = tokenizer(
-                full_texts,
-                padding="max_length",  # pad to max_length (consistent tensor sizes)
-                truncation=True,
-                max_length=max_tokens,
-                add_special_tokens=False,
+        # Only main process creates the dataset
+        if is_main_process():
+            print(f"Creating dataset for {dataset_class.__name__} {split} split...")
+            
+            # Load your data
+            # Use same formatting approach as baseline
+            split_ds = common_evaluator.load_dataset(
+                dataset_class=dataset_class,
+                split=split,
+                format_sample_str=True,
             )
 
-            # Tokenize prompts alone (no padding) to compute prompt lengths
-            prompt_enc = tokenizer(
-                [p + "\n" for p in prompts],
-                padding=False,
-                truncation=True,
-                max_length=max_tokens,
-                add_special_tokens=False,
+            items = list(split_ds)
+
+            # Convert to Hugging Face dataset
+            dataset = HFDataset.from_list(items)
+
+            # compute max_tokens in training dataset
+            def compute_length(batch):
+                prompts = batch["prompt"]
+                answers = batch["answer"]
+                eos = tokenizer.eos_token
+                full_texts = [p + "\n" + a + eos for p, a in zip(prompts, answers)]
+                tokens = tokenizer(full_texts, add_special_tokens=False)["input_ids"]
+                return {"token_length": list(map(len, tokens))}
+
+            # Map across dataset
+            token_lens = dataset.map(
+                compute_length,
+                batched=True,
+                num_proc=2,
+                batch_size=1000,
+                remove_columns=dataset.column_names,
             )
-            prompt_lengths = [len(x) for x in prompt_enc["input_ids"]]
 
-            # Return the tokenized/padded arrays and prompt length
-            return {
-                "input_ids": full_enc["input_ids"],
-                "attention_mask": full_enc["attention_mask"],
-                "prompt_length": prompt_lengths,
-            }
+            # Find max token length in
+            max_tokens = max(token_lens["token_length"])
+            print(f"Maximum token length in dataset: {max_tokens}")
 
-        # Tokenize dataset
-        tokenized_dataset = dataset.map(
-            tokenize_function,
-            num_proc=2,
-            batched=True,
-            remove_columns=dataset.column_names,
-        )
-        tokenized_dataset.save_to_disk(dataset_file)
+            def tokenize_function(batch):
+                prompts = batch["prompt"]
+                answers = batch["answer"]
+
+                # Build full texts (we append eos to answers to mark their end)
+                eos = tokenizer.eos_token
+                full_texts = [p + "\n" + a + eos for p, a in zip(prompts, answers)]
+
+                # Tokenize full texts in one batched call -> uses fast tokenizer path
+                full_enc = tokenizer(
+                    full_texts,
+                    padding="max_length",  # pad to max_length (consistent tensor sizes)
+                    truncation=True,
+                    max_length=max_tokens,
+                    add_special_tokens=False,
+                )
+
+                # Tokenize prompts alone (no padding) to compute prompt lengths
+                prompt_enc = tokenizer(
+                    [p + "\n" for p in prompts],
+                    padding=False,
+                    truncation=True,
+                    max_length=max_tokens,
+                    add_special_tokens=False,
+                )
+                prompt_lengths = [len(x) for x in prompt_enc["input_ids"]]
+
+                # Return the tokenized/padded arrays and prompt length
+                return {
+                    "input_ids": full_enc["input_ids"],
+                    "attention_mask": full_enc["attention_mask"],
+                    "prompt_length": prompt_lengths,
+                }
+
+            # Tokenize dataset
+            tokenized_dataset = dataset.map(
+                tokenize_function,
+                num_proc=2,
+                batched=True,
+                remove_columns=dataset.column_names,
+            )
+            tokenized_dataset.save_to_disk(dataset_file)
+        
+        # Wait for main process to finish creating dataset
+        if dist.is_initialized():
+            dist.barrier()
+        
+        # Now all processes can load the dataset
+        tokenized_dataset = HFDataset.load_from_disk(dataset_file)
 
     if TRAIN_SAMPLES_LIMIT > 0:
         tokenized_dataset = tokenized_dataset.take(TRAIN_SAMPLES_LIMIT)
@@ -355,14 +414,20 @@ def train_lora_for_model_and_dataset(
     tokenizer.padding_side = "right"
 
     # Load model with 4-bit quantization for memory efficiency (optional)
-    model = AutoModelForCausalLM.from_pretrained(model_id, )#quantization_config=BitsAndBytesConfig(load_in_8bit=True), max_memory="32768MB")
+    model = AutoModelForCausalLM.from_pretrained(model_id,)#quantization_config=BitsAndBytesConfig(load_in_8bit=True), max_memory="32768MB")
+    model.to(device)
     model.resize_token_embeddings(len(tokenizer))
+
 
     # Apply LoRA
     print("Applying LoRA adapters...")
     model = apply_lora(model)
     model.print_trainable_parameters()
     model.train()
+
+    if is_distributed():
+        print("Wrapping model in DistributedDataParallel...")
+        model = DDP(model, device_ids=[int(os.environ["LOCAL_RANK"])])
 
     # Prepare datasets and collator
     print("Preparing training dataset...")
@@ -395,33 +460,36 @@ def train_lora_for_model_and_dataset(
             save_total_limit=3,  # Keep only 3 best checkpoints
         )
 
+    # DDP-specific training arguments
+    ddp_kwargs = {}
+    if is_distributed():
+        ddp_kwargs.update({
+            "ddp_backend": "nccl",
+            "dataloader_num_workers": 2,
+            "ddp_find_unused_parameters": False,  # LoRA doesn't use all parameters
+            "dataloader_pin_memory": True,
+        })
+    
     # Training
     trainer = Trainer(
         model=model,
         args=TrainingArguments(
             output_dir=output_dir,
-            optim="adamw_8bit"
-            if device == "cuda"
-            else None,  # Use 8-bit AdamW optimizer for memory efficiency
+            optim="adamw_8bit" if "cuda" in device else "adamw_torch",
             num_train_epochs=EPOCHS,
             learning_rate=LEARNING_RATE,
             per_device_train_batch_size=PER_DEVICE_TRAIN_BATCH_SIZE,
             gradient_accumulation_steps=GRAD_ACC_STEPS,
-            # weight_decay=WEIGHT_DECAY,
-            # warmup_ratio=WARMUP_RATIO,
             logging_steps=10,
-            fp16=not torch.cuda.is_bf16_supported() if device == "cuda" else False,
-            bf16=torch.cuda.is_bf16_supported() if device == "cuda" else False,
+            fp16=not torch.cuda.is_bf16_supported() if "cuda" in device else False,
+            bf16=torch.cuda.is_bf16_supported() if "cuda" in device else False,
             remove_unused_columns=False,
-            # save_strategy="epoch",
-            # dataloader_pin_memory=False,
-            
+            **ddp_kwargs,
             **training_arguments_kwargs,
         ),
         train_dataset=train_dataset,
         data_collator=data_collator,
         processing_class=tokenizer,
-        
         **trainer_kwargs,
     )
 
@@ -605,14 +673,64 @@ def evaluate_finetuned_model(
     print("\nEvaluation completed.")
 
 
-def run():
-    for model_id in MODEL_IDS:
-        for dataset_class in DATASETS:
-            adapter_dir = train_lora_for_model_and_dataset(
-                model_id, dataset_class, force_retrain=FORCE_RETRAIN
-            )
-            evaluate_finetuned_model(model_id, dataset_class, adapter_dir)
+def run_single_experiment(model_id: str, dataset_class: Type[Dataset]):
+    """Run a single fine-tuning experiment for the given model and dataset."""
+    adapter_dir = train_lora_for_model_and_dataset(
+        model_id, dataset_class, force_retrain=FORCE_RETRAIN
+    )
+    evaluate_finetuned_model(model_id, dataset_class, adapter_dir)
+
+def main():
+    """Main function with argument parsing and distributed setup."""
+    parser = argparse.ArgumentParser(description="Fine-tune models with LoRA on time series datasets")
+    parser.add_argument(
+        '--model', 
+        type=str, 
+        default='meta-llama/Llama-3.2-1B',
+        help='Model ID to fine-tune (default: meta-llama/Llama-3.2-1B)'
+    )
+    parser.add_argument(
+        '--dataset', 
+        type=str, 
+        default='PAMAP2CoTQADataset',
+        choices=['PAMAP2CoTQADataset', 'HARCoTQADataset', 'SleepEDFCoTQADataset'],
+        help='Dataset class name to use (default: PAMAP2CoTQADataset)'
+    )
+    
+    args = parser.parse_args()
+    
+    # Initialize distributed training if available
+    is_distributed = setup_distributed()
+    
+    try:
+        # Dataset class mapping
+        dataset_classes = {
+            'PAMAP2CoTQADataset': PAMAP2CoTQADataset,
+            'HARCoTQADataset': HARCoTQADataset,
+            'SleepEDFCoTQADataset': SleepEDFCoTQADataset
+        }
+        
+        dataset_class = dataset_classes[args.dataset]
+        
+        if is_main_process():
+            print(f"Starting fine-tuning experiment:")
+            print(f"  Model: {args.model}")
+            print(f"  Dataset: {args.dataset}")
+            if is_distributed:
+                print(f"  Distributed training: {get_world_size()} GPUs")
+                print(f"  Current rank: {get_rank()}")
+            print("=" * 80)
+        
+        run_single_experiment(args.model, dataset_class)
+        
+    finally:
+        # Clean up distributed training
+        if is_distributed:
+            cleanup_distributed()
 
 
 if __name__ == "__main__":
-    run()
+    main()
+
+    # fallback for testing
+    # run_single_experiment(FALLBACK_MODEL_ID, FALLBACK_DATASET)
