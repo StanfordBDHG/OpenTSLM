@@ -6,7 +6,6 @@ import re
 import sys
 from typing import Any, Dict, List, Type
 
-import numpy as np
 import torch
 from peft import LoraConfig, PeftModel, get_peft_model, TaskType
 from torch.utils.data import Dataset as Dataset
@@ -14,6 +13,8 @@ from tqdm import tqdm
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    BitsAndBytesConfig,
+    EarlyStoppingCallback,
     Trainer,
     TrainingArguments,
     pipeline,
@@ -31,7 +32,7 @@ sys.path.insert(
 from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
 from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
-#from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 
 # --------------------
 # Configuration
@@ -41,6 +42,7 @@ MODEL_IDS: List[str] = [
     # "google/gemma-3n-e2b",
     # "google/gemma-3n-e2b-it",
     "meta-llama/Llama-3.2-1B",
+    #"meta-llama/Llama-3.2-3B",
 ]
 
 DATASETS: List[Type[Dataset]] = [
@@ -51,7 +53,7 @@ DATASETS: List[Type[Dataset]] = [
 ]
 
 # Training hyperparameters (defaults)
-EPOCHS = 1
+EPOCHS = 20
 LEARNING_RATE = 2e-4
 PER_DEVICE_TRAIN_BATCH_SIZE = 1
 GRAD_ACC_STEPS = 8
@@ -60,6 +62,8 @@ WARMUP_RATIO = 0.03
 TRAIN_SAMPLES_LIMIT = 0  # 0 or negative = no limit
 EVAL_SAMPLES_LIMIT = 0  # number of test samples to evaluate; 0 => all
 
+DO_VALIDATION = True
+
 # LoRA config (defaults)
 LORA_R = 16
 LORA_ALPHA = 32
@@ -67,11 +71,11 @@ LORA_DROPOUT = 0.0  # 0.05
 
 # Generation/eval settings
 GEN_TEMPERATURE = 0.1
-GEN_MAX_NEW_TOKENS = 50
+GEN_MAX_NEW_TOKENS = 300
 EVAL_BATCH_SIZE = 2  # Batch size for evaluation to improve GPU efficiency
 
 
-FORCE_RETRAIN = False  # Set to True to force retraining even if output exists
+FORCE_RETRAIN = True  # Set to True to force retraining even if output exists
 
 # --------------------
 # Utilities
@@ -101,8 +105,11 @@ def normalize_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "-", name.lower())
 
 
-def prepare_train_dataset(
-    common_evaluator: CommonEvaluator, tokenizer, dataset_class
+def prepare_dataset(
+    common_evaluator: CommonEvaluator,
+    tokenizer,
+    dataset_class,
+    split: str = "train",
 ) -> HFDataset:
     """
     Prepare your dataset for prompt-answer fine-tuning.
@@ -111,7 +118,7 @@ def prepare_train_dataset(
     dataset_file = os.path.join(
         os.path.dirname(__file__),
         "datasets",
-        f"hf_train_dataset_{dataset_class.__name__}",
+        f"hf_{split}_dataset_{dataset_class.__name__}",
     )
     if os.path.exists(dataset_file):
         print(f"Loading cached dataset from disk: {dataset_file}")
@@ -120,13 +127,13 @@ def prepare_train_dataset(
         # Load your data
         # Use same formatting approach as baseline
 
-        train_ds = common_evaluator.load_dataset(
+        split_ds = common_evaluator.load_dataset(
             dataset_class=dataset_class,
-            split="train",
+            split=split,
             format_sample_str=True,
         )
 
-        items = list(train_ds)
+        items = list(split_ds)
 
         # Convert to Hugging Face dataset
         dataset = HFDataset.from_list(items)
@@ -343,12 +350,12 @@ def train_lora_for_model_and_dataset(
 
     # Load tokenizer and model
     print("Loading tokenizer and base model...")
-    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True, device=device)
     tokenizer = ensure_pad_token(tokenizer, model_id)
     tokenizer.padding_side = "right"
 
     # Load model with 4-bit quantization for memory efficiency (optional)
-    model = AutoModelForCausalLM.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(model_id, )#quantization_config=BitsAndBytesConfig(load_in_8bit=True), max_memory="32768MB")
     model.resize_token_embeddings(len(tokenizer))
 
     # Apply LoRA
@@ -361,8 +368,32 @@ def train_lora_for_model_and_dataset(
     print("Preparing training dataset...")
     common_evaluator = CommonEvaluator(device=device)
     common_evaluator.current_model_name = model_id
-    train_dataset = prepare_train_dataset(common_evaluator, tokenizer, dataset_class)
+    train_dataset = prepare_dataset(
+        common_evaluator, tokenizer, dataset_class, split="train"
+    )
     data_collator = SimpleCollator(tokenizer=tokenizer)
+
+    trainer_kwargs = dict()
+    training_arguments_kwargs = dict()
+    if DO_VALIDATION:
+        validation_dataset = prepare_dataset(
+            common_evaluator, tokenizer, dataset_class, split="validation"
+        )
+        trainer_kwargs = dict(
+            eval_dataset=validation_dataset,
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=3)],
+        )
+        training_arguments_kwargs = dict(
+            # Validation & Early Stopping Configuration
+            eval_strategy="epoch",  # or "epoch"
+            eval_steps=1,  # Evaluate every 50 steps
+            per_device_eval_batch_size=PER_DEVICE_TRAIN_BATCH_SIZE,
+            save_strategy="epoch",
+            save_steps=1,
+            load_best_model_at_end=True,
+            metric_for_best_model="eval_loss",  # or custom metric
+            save_total_limit=3,  # Keep only 3 best checkpoints
+        )
 
     # Training
     trainer = Trainer(
@@ -379,14 +410,19 @@ def train_lora_for_model_and_dataset(
             # weight_decay=WEIGHT_DECAY,
             # warmup_ratio=WARMUP_RATIO,
             logging_steps=10,
-            fp16=(device == "cuda"),
+            fp16=not torch.cuda.is_bf16_supported() if device == "cuda" else False,
+            bf16=torch.cuda.is_bf16_supported() if device == "cuda" else False,
             remove_unused_columns=False,
             # save_strategy="epoch",
             # dataloader_pin_memory=False,
+            
+            **training_arguments_kwargs,
         ),
         train_dataset=train_dataset,
         data_collator=data_collator,
         processing_class=tokenizer,
+        
+        **trainer_kwargs,
     )
 
     print("Starting training...")
@@ -424,7 +460,7 @@ def evaluate_finetuned_model(
         and tokenizer.pad_token_id is not None
     ):
         base_model.config.pad_token_id = tokenizer.pad_token_id
-    ft_model = PeftModel.from_pretrained(base_model, adapter_dir)
+    ft_model = PeftModel.from_pretrained(base_model, adapter_dir, torch_device=device)
 
     # Build pipeline for generation (match baseline style)
     print("Building generation pipeline...")
@@ -519,8 +555,15 @@ def evaluate_finetuned_model(
         partial_matches = 0
 
         for result in results:
-            target = result["target_answer"].lower().strip()
-            generated = result["generated_answer"].lower().strip()
+            target = (
+                result["target_answer"].lower().split("answer:", maxsplit=1)[-1].strip()
+            )
+            generated = (
+                result["generated_answer"]
+                .lower()
+                .split("answer:", maxsplit=1)[-1]
+                .strip()
+            )
 
             if target == generated:
                 exact_matches += 1

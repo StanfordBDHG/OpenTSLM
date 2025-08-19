@@ -14,3 +14,5 @@ raw_data
 evaluation/baseline/models/
 evaluation/baseline/datasets/
 data/
+.vscode/settings.json
+baseline_test_results*.json
