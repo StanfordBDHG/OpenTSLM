@@ -51,6 +51,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             trust_remote_code=True,
             cache_dir=None,
             device_map={"": device},
+            attn_implementation='eager'
         )
 
         # add Flamingo special tokens to the tokenizer
