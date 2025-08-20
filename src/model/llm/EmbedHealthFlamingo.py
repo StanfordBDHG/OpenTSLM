@@ -14,6 +14,16 @@ from model.llm.TimeSeriesLLM import TimeSeriesLLM
 from prompt.full_prompt import FullPrompt
 from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
 
+# Monkey-patch FlamingoLayer to add attention_type property for compatibility with newer transformers
+from open_flamingo.open_flamingo.src.flamingo_lm import FlamingoLayer
+
+def _attention_type_property(self):
+    """Proxy the attention_type attribute from the underlying decoder layer."""
+    return getattr(self.decoder_layer, 'attention_type', None)
+
+# Add the attention_type property to FlamingoLayer
+FlamingoLayer.attention_type = property(_attention_type_property)
+
 class EmbedHealthFlamingo(TimeSeriesLLM):
     def __init__(
         self,
