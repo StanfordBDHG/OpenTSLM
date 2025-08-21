@@ -14,8 +14,6 @@ from model.llm.TimeSeriesLLM import TimeSeriesLLM
 from prompt.full_prompt import FullPrompt
 from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
 
-import torch
-torch._dynamo.config.capture_scalar_outputs = True
 
 # Monkey-patch FlamingoLayer to add attention_type property for compatibility with newer transformers
 from open_flamingo.open_flamingo.src.flamingo_lm import FlamingoLayer
@@ -213,6 +211,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
 
         return input_ids, images, attention_mask, labels
 
+    @torch.compiler.disable
     def generate(
         self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
     ) -> List[str]:
@@ -239,6 +238,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 answer_only_ids, skip_special_tokens=True
             )
 
+    @torch.compiler.disable
     def compute_loss(self, batch: List[Dict[str, any]]) -> torch.Tensor:
         """
         batch: same format as generate()
@@ -307,6 +307,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 print(f"   ... and {len(unexpected_keys) - 10} more keys")
         self.to(self.device)
 
+    @torch.compiler.disable
     def eval_prompt(self, prompt: FullPrompt, max_new_tokens: int = 30000) -> str:
         """
         Evaluate a prompt and return the generated text.
