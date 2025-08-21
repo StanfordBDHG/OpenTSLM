@@ -25,6 +25,7 @@ def _attention_type_property(self):
 
 # Add the attention_type property to FlamingoLayer
 FlamingoLayer.attention_type = property(_attention_type_property)
+
 class EmbedHealthFlamingo(TimeSeriesLLM):
     def __init__(
         self,
@@ -211,19 +212,17 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
 
         return input_ids, images, attention_mask, labels
 
-
     def generate(
         self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
     ) -> List[str]:
-        input_ids, images, attention_mask, _ = self.pad_and_apply_batch(
-            batch, include_labels=True
-        )
+
+        with torch.no_grad():
+            input_ids, images, attention_mask, _ = self.pad_and_apply_batch(
+                batch, include_labels=True
+            )
         
-        # Disable Dynamo compilation during generation to avoid data-dependent operation errors
-        with torch.inference_mode():
             gen_ids = self.llm.generate(
-                self.llm,
-                vision_x=images, 
+                vision_x=images,
                 lang_x=input_ids,
                 attention_mask=attention_mask,
                 max_new_tokens=max_new_tokens,
@@ -232,13 +231,12 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 **generate_kwargs,
             )
 
-        # Remove input ids from generation
-        answer_only_ids = gen_ids[:, input_ids.shape[1] :]
+            # Remove input ids from generation
+            answer_only_ids = gen_ids[:, input_ids.shape[1] :]
 
-        return self.text_tokenizer.batch_decode(
-            answer_only_ids, skip_special_tokens=True
-        )
-
+            return self.text_tokenizer.batch_decode(
+                answer_only_ids, skip_special_tokens=True
+            )
 
     def compute_loss(self, batch: List[Dict[str, any]]) -> torch.Tensor:
         """
