@@ -25,7 +25,9 @@ def _attention_type_property(self):
 
 # Add the attention_type property to FlamingoLayer
 FlamingoLayer.attention_type = property(_attention_type_property)
-
+import torch
+torch._dynamo.config.capture_scalar_outputs = True
+torch._dynamo.config.raise_on_unsupported = False
 class EmbedHealthFlamingo(TimeSeriesLLM):
     def __init__(
         self,
@@ -218,11 +220,6 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
     def _call_generate(llm, **kwargs):
         return llm.generate(**kwargs)
 
-    @staticmethod
-    @torch._dynamo.disable
-    def _call_forward(model, **kwargs):
-        return model(**kwargs)
-
     def generate(
         self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
     ) -> List[str]:
@@ -260,8 +257,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             batch, include_labels=False
         )
 
-        output = self._call_forward(
-            self.model,
+        output = self.model(
             vision_x=images,
             lang_x=input_ids,
             attention_mask=attention_mask,
