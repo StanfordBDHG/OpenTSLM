@@ -14,9 +14,6 @@ from model.llm.TimeSeriesLLM import TimeSeriesLLM
 from prompt.full_prompt import FullPrompt
 from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
 
-import torch
-torch._dynamo.config.capture_scalar_outputs = True
-
 # Monkey-patch FlamingoLayer to add attention_type property for compatibility with newer transformers
 from open_flamingo.open_flamingo.src.flamingo_lm import FlamingoLayer
 
