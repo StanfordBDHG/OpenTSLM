@@ -220,8 +220,14 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             batch, include_labels=True
         )
         
-        # Disable torch.compile for generation to avoid data-dependent operation issues
-        with torch._dynamo.disable():
+        # Temporarily disable torch compile for generation to avoid data-dependent operation issues
+        old_compile_mode = torch.is_compiled_module(self.llm)
+        if hasattr(torch, '_dynamo') and hasattr(torch._dynamo, 'disable'):
+            disable_ctx = torch._dynamo.disable
+        else:
+            disable_ctx = torch.no_grad  # Fallback context manager
+            
+        try:
             gen_ids = self.llm.generate(
                 vision_x=images,
                 lang_x=input_ids,
@@ -231,6 +237,21 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 pad_token_id=self.text_tokenizer.pad_token_id,
                 **generate_kwargs,
             )
+        except Exception as e:
+            if "Data dependent operator" in str(e) or "Unsupported" in str(e):
+                # Try with no_grad as fallback
+                with torch.no_grad():
+                    gen_ids = self.llm.generate(
+                        vision_x=images,
+                        lang_x=input_ids,
+                        attention_mask=attention_mask,
+                        max_new_tokens=max_new_tokens,
+                        eos_token_id=self.text_tokenizer.eos_token_id,
+                        pad_token_id=self.text_tokenizer.pad_token_id,
+                        **generate_kwargs,
+                    )
+            else:
+                raise e
 
         # Remove input ids from generation
         answer_only_ids = gen_ids[:, input_ids.shape[1] :]
@@ -248,14 +269,26 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             batch, include_labels=False
         )
 
-        # Disable torch.compile for forward pass to avoid data-dependent operation issues
-        with torch._dynamo.disable():
+        # Handle compilation issues for forward pass
+        try:
             output = self.model(
                 vision_x=images,
                 lang_x=input_ids,
                 attention_mask=attention_mask,
                 labels=labels,
             )
+        except Exception as e:
+            if "Data dependent operator" in str(e) or "Unsupported" in str(e):
+                # Try with no_grad as fallback
+                with torch.no_grad():
+                    output = self.model(
+                        vision_x=images,
+                        lang_x=input_ids,
+                        attention_mask=attention_mask,
+                        labels=labels,
+                    )
+            else:
+                raise e
         return output[0]
 
     def get_eos_token(self) -> str:
