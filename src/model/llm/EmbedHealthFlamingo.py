@@ -212,6 +212,11 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
 
         return input_ids, images, attention_mask, labels
 
+    @staticmethod
+    @torch._dynamo.disable
+    def _call_generate(llm, **kwargs):
+        return llm.generate(**kwargs)
+
     def generate(
         self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
     ) -> List[str]:
@@ -220,8 +225,9 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         )
         
         # Disable Dynamo compilation during generation to avoid data-dependent operation errors
-        with torch._dynamo.disable():
-            gen_ids = self.llm.generate(
+        with torch.inference_mode():
+            gen_ids = self._call_generate(
+                self.llm,
                 vision_x=images,
                 lang_x=input_ids,
                 attention_mask=attention_mask,
@@ -247,12 +253,14 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             batch, include_labels=False
         )
 
-        output = self.model(
-            vision_x=images,
-            lang_x=input_ids,
-            attention_mask=attention_mask,
-            labels=labels,
-        )
+        # Disable Dynamo compilation during forward pass to avoid data-dependent operation errors
+        with torch._dynamo.disable():
+            output = self.model(
+                vision_x=images,
+                lang_x=input_ids,
+                attention_mask=attention_mask,
+                labels=labels,
+            )
         return output[0]
 
     def get_eos_token(self) -> str:
