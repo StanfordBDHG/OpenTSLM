@@ -216,7 +216,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
     ) -> List[str]:
 
-        with torch.no_grad():
+        with torch.inference_mode(), torch.compiler.disable():
             input_ids, images, attention_mask, _ = self.pad_and_apply_batch(
                 batch, include_labels=True
             )
