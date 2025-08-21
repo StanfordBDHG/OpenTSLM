@@ -25,8 +25,6 @@ def _attention_type_property(self):
 
 # Add the attention_type property to FlamingoLayer
 FlamingoLayer.attention_type = property(_attention_type_property)
-import torch
-torch._dynamo.config.capture_scalar_outputs = True
 class EmbedHealthFlamingo(TimeSeriesLLM):
     def __init__(
         self,
