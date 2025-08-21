@@ -6,6 +6,7 @@ from model.llm.TimeSeriesFlamingoWithTrainableEncoder import (
 from open_flamingo.open_flamingo.src.flamingo_lm import FlamingoLMMixin
 from open_flamingo.open_flamingo.src.utils import extend_instance
 import torch
+import torch._dynamo
 from typing import List, Dict, Tuple
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
@@ -115,9 +116,6 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         # additonally unfreeze encoder
         model.vision_encoder.requires_grad_(True)
 
-        # Disable compilation for the entire model to avoid data-dependent operation issues
-        model = torch.compiler.disable(model)
-
         self.model = model
         self.llm = model
         self.text_tokenizer = text_tokenizer
@@ -216,45 +214,60 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
     def generate(
         self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
     ) -> List[str]:
-
-        with torch.inference_mode():
-            input_ids, images, attention_mask, _ = self.pad_and_apply_batch(
-                batch, include_labels=True
-            )
+        # Temporarily disable compilation to avoid data-dependent operation issues
+        original_disable = torch._dynamo.config.disable
+        torch._dynamo.config.disable = True
         
-            gen_ids = self.llm.generate(
-                vision_x=images,
-                lang_x=input_ids,
-                attention_mask=attention_mask,
-                max_new_tokens=max_new_tokens,
-                eos_token_id=self.text_tokenizer.eos_token_id,
-                pad_token_id=self.text_tokenizer.pad_token_id,
-                **generate_kwargs,
-            )
+        try:
+            with torch.inference_mode():
+                input_ids, images, attention_mask, _ = self.pad_and_apply_batch(
+                    batch, include_labels=True
+                )
+            
+                gen_ids = self.llm.generate(
+                    vision_x=images,
+                    lang_x=input_ids,
+                    attention_mask=attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    eos_token_id=self.text_tokenizer.eos_token_id,
+                    pad_token_id=self.text_tokenizer.pad_token_id,
+                    **generate_kwargs,
+                )
 
-            # Remove input ids from generation
-            answer_only_ids = gen_ids[:, input_ids.shape[1] :]
+                # Remove input ids from generation
+                answer_only_ids = gen_ids[:, input_ids.shape[1] :]
 
-            return self.text_tokenizer.batch_decode(
-                answer_only_ids, skip_special_tokens=True
-            )
+                return self.text_tokenizer.batch_decode(
+                    answer_only_ids, skip_special_tokens=True
+                )
+        finally:
+            # Restore original compilation setting
+            torch._dynamo.config.disable = original_disable
 
     def compute_loss(self, batch: List[Dict[str, any]]) -> torch.Tensor:
         """
         batch: same format as generate()
         answers: List[str] of length B
         """
-        input_ids, images, attention_mask, labels = self.pad_and_apply_batch(
-            batch, include_labels=False
-        )
+        # Temporarily disable compilation to avoid data-dependent operation issues
+        original_disable = torch._dynamo.config.disable
+        torch._dynamo.config.disable = True
+        
+        try:
+            input_ids, images, attention_mask, labels = self.pad_and_apply_batch(
+                batch, include_labels=False
+            )
 
-        output = self.model(
-            vision_x=images,
-            lang_x=input_ids,
-            attention_mask=attention_mask,
-            labels=labels,
-        )
-        return output[0]
+            output = self.model(
+                vision_x=images,
+                lang_x=input_ids,
+                attention_mask=attention_mask,
+                labels=labels,
+            )
+            return output[0]
+        finally:
+            # Restore original compilation setting
+            torch._dynamo.config.disable = original_disable
 
     def get_eos_token(self) -> str:
         return self.text_tokenizer.eos_token
@@ -311,9 +324,16 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         """
         Evaluate a prompt and return the generated text.
         """
-                
-        batch = [prompt.to_dict()]
-        self.eval()
-        batch = extend_time_series_to_match_patch_size_and_aggregate(batch)
-        output = self.generate(batch, max_new_tokens=max_new_tokens)
-        return output[0]
+        # Temporarily disable compilation to avoid data-dependent operation issues
+        original_disable = torch._dynamo.config.disable
+        torch._dynamo.config.disable = True
+        
+        try:        
+            batch = [prompt.to_dict()]
+            self.eval()
+            batch = extend_time_series_to_match_patch_size_and_aggregate(batch)
+            output = self.generate(batch, max_new_tokens=max_new_tokens)
+            return output[0]
+        finally:
+            # Restore original compilation setting
+            torch._dynamo.config.disable = original_disable
