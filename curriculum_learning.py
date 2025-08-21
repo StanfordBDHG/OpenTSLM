@@ -790,6 +790,8 @@ class CurriculumTrainer:
                 print(f"📂 Loaded best checkpoint from epoch {best_epoch} for evaluation.")
         
         if self.rank == 0:
+            if not epoch:
+                epoch = best_epoch
             print(f"🏁 Training completed for {stage_name}")
             print(f"   Total epochs run: {epoch}")
             print(f"   Best validation loss: {best_val_loss:.4f}")
