@@ -14,7 +14,8 @@ from model.llm.TimeSeriesLLM import TimeSeriesLLM
 from prompt.full_prompt import FullPrompt
 from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
 
-
+import torch
+torch._dynamo.config.capture_scalar_outputs = True
 
 # Monkey-patch FlamingoLayer to add attention_type property for compatibility with newer transformers
 from open_flamingo.open_flamingo.src.flamingo_lm import FlamingoLayer
@@ -216,7 +217,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
     ) -> List[str]:
 
-        with torch.inference_mode(), torch.compiler.disable():
+        with torch.inference_mode():
             input_ids, images, attention_mask, _ = self.pad_and_apply_batch(
                 batch, include_labels=True
             )
