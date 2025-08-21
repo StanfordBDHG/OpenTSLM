@@ -213,11 +213,6 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
 
         return input_ids, images, attention_mask, labels
 
-    
-    @staticmethod
-    @torch._dynamo.disable
-    def _call_generate(llm, **kwargs):
-        return llm.generate(**kwargs)
 
     def generate(
         self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
