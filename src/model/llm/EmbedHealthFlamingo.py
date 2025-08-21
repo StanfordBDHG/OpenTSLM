@@ -223,7 +223,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         
         # Disable Dynamo compilation during generation to avoid data-dependent operation errors
         with torch.inference_mode():
-            gen_ids = self._call_generate(
+            gen_ids = self.llm.generate(
                 self.llm,
                 vision_x=images, 
                 lang_x=input_ids,
