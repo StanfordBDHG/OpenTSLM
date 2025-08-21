@@ -25,6 +25,8 @@ from transformers import (
 from transformers.pipelines.pt_utils import KeyDataset
 from datasets import Dataset as HFDataset
 
+os.environ["NCCL_P2P_LEVEL"] = "NVL"
+
 from common_evaluator import CommonEvaluator
 
 # Ensure project src is on path (this script is under evaluation/baseline/)
@@ -62,7 +64,7 @@ FALLBACK_DATASET = PAMAP2AccQADataset
 EPOCHS = 1
 LEARNING_RATE = 2e-4
 PER_DEVICE_TRAIN_BATCH_SIZE = 1
-GRAD_ACC_STEPS = 16
+GRAD_ACC_STEPS = 8
 WEIGHT_DECAY = 0.0
 WARMUP_RATIO = 0.03
 TRAIN_SAMPLES_LIMIT = 0  # 0 or negative = no limit
@@ -119,6 +121,11 @@ def get_world_size():
         return dist.get_world_size()
     return 1
 
+def print_main(message: str):
+    """Print message only from the main process."""
+    if is_main_process():
+        print(message)
+
 # --------------------
 # Utilities
 # --------------------
@@ -169,8 +176,7 @@ def prepare_dataset(
     
     # Only main process should create/save datasets to avoid race conditions
     if os.path.exists(dataset_file):
-        if is_main_process():
-            print(f"Loading cached dataset from disk: {dataset_file}")
+        print_main(f"Loading cached dataset from disk: {dataset_file}")
         tokenized_dataset = HFDataset.load_from_disk(dataset_file)
     else:
         # Only main process creates the dataset
@@ -271,33 +277,57 @@ def prepare_dataset(
 def build_test_dataset(
     common_evaluator: CommonEvaluator, dataset_class: Type[Dataset]
 ) -> HFDataset:
-    test_ds = common_evaluator.load_dataset(
-        dataset_class=dataset_class,
-        split="test",
-        format_sample_str=True,
+
+    dataset_file = os.path.join(
+        os.path.dirname(__file__),
+        "datasets",
+        f"hf_test_dataset_{dataset_class.__name__}",
     )
+    
+    # Only main process should create/save datasets to avoid race conditions
+    if os.path.exists(dataset_file):
+        print_main(f"Loading cached dataset from disk: {dataset_file}")
+        test_dataset = HFDataset.load_from_disk(dataset_file)
+    else:
+        # Only main process creates the dataset
+        if is_main_process():
+            test_ds = common_evaluator.load_dataset(
+                dataset_class=dataset_class,
+                split="test",
+                format_sample_str=True,
+            )
 
-    items = list(test_ds)
-    if EVAL_SAMPLES_LIMIT > 0:
-        items = items[:EVAL_SAMPLES_LIMIT]
+            items = list(test_ds)
+            if EVAL_SAMPLES_LIMIT > 0:
+                items = items[:EVAL_SAMPLES_LIMIT]
 
-    pattern = (
-        r"This is the time series, it has mean (-?\d+\.\d{4}) and std (-?\d+\.\d{4})\."
-    )
-    replacement = "This is the time series:"
+            pattern = (
+                r"This is the time series, it has mean (-?\d+\.\d{4}) and std (-?\d+\.\d{4})\."
+            )
+            replacement = "This is the time series:"
 
-    cleaned_items = []
-    for idx, item in enumerate(items):
-        cleaned_prompt = re.sub(pattern, replacement, item["prompt"])
-        cleaned_items.append(
-            {
-                "sample_idx": idx,
-                "input_text": cleaned_prompt,
-                "target_answer": item["answer"],
-            }
-        )
+            cleaned_items = []
+            for idx, item in enumerate(items):
+                cleaned_prompt = re.sub(pattern, replacement, item["prompt"])
+                cleaned_items.append(
+                    {
+                        "sample_idx": idx,
+                        "input_text": cleaned_prompt,
+                        "target_answer": item["answer"],
+                    }
+                )
 
-    return HFDataset.from_list(cleaned_items)
+            test_dataset = HFDataset.from_list(cleaned_items)
+            test_dataset.save_to_disk(dataset_file)
+        
+        # Wait for main process to finish creating dataset
+        if dist.is_initialized():
+            dist.barrier()
+        
+        # Now all processes can load the dataset
+        test_dataset = HFDataset.load_from_disk(dataset_file)
+
+    return test_dataset
 
 
 def prepare_eval_dataset(test_items: List[Dict[str, str]]) -> HFDataset:
@@ -381,9 +411,8 @@ class SimpleCollator:
 def train_lora_for_model_and_dataset(
     model_id: str, dataset_class: Type[Dataset], force_retrain: bool = False
 ) -> str:
-    print(
-        f"Starting LoRA fine-tuning for model {model_id} on dataset {dataset_class.__name__}"
-    )
+
+    print_main(f"Starting LoRA fine-tuning for model {model_id} on dataset {dataset_class.__name__}")
 
     # Prepare training output directory
     normalized_model_id = normalize_name(model_id)
@@ -398,39 +427,38 @@ def train_lora_for_model_and_dataset(
         and os.path.exists(output_dir)
         and glob.glob("*.safetensors", root_dir=output_dir)
     ):
-        print(f"Output directory {output_dir} already exists. Skipping fine-tuning.")
+        print_main(f"Output directory {output_dir} already exists. Skipping fine-tuning.")
         return output_dir
 
     os.makedirs(output_dir, exist_ok=True)
 
-    print("=" * 80)
     device = detect_device()
     print(f"Using device: {device}")
 
     # Load tokenizer and model
-    print("Loading tokenizer and base model...")
+    print_main("Loading tokenizer and base model...")
     tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True, device=device)
     tokenizer = ensure_pad_token(tokenizer, model_id)
     tokenizer.padding_side = "right"
 
     # Load model with 4-bit quantization for memory efficiency (optional)
-    model = AutoModelForCausalLM.from_pretrained(model_id,)#quantization_config=BitsAndBytesConfig(load_in_8bit=True), max_memory="32768MB")
+    model = AutoModelForCausalLM.from_pretrained(model_id, max_memory="38000MB",)#quantization_config=BitsAndBytesConfig(load_in_8bit=True))
     model.to(device)
     model.resize_token_embeddings(len(tokenizer))
 
 
     # Apply LoRA
-    print("Applying LoRA adapters...")
     model = apply_lora(model)
-    model.print_trainable_parameters()
+    if is_main_process():
+        model.print_trainable_parameters()
     model.train()
 
     if is_distributed():
-        print("Wrapping model in DistributedDataParallel...")
+        print_main("Wrapping model in DistributedDataParallel...")
         model = DDP(model, device_ids=[int(os.environ["LOCAL_RANK"])])
 
     # Prepare datasets and collator
-    print("Preparing training dataset...")
+    print_main("Preparing training dataset...")
     common_evaluator = CommonEvaluator(device=device)
     common_evaluator.current_model_name = model_id
     train_dataset = prepare_dataset(
@@ -493,14 +521,19 @@ def train_lora_for_model_and_dataset(
         **trainer_kwargs,
     )
 
-    print("Starting training...")
-    trainer.train()
-    print("Training complete.")
 
-    print("Saving LoRA adapters...")
-    trainer.model.save_pretrained(output_dir)  # type: ignore
-    tokenizer.save_pretrained(output_dir)
-    print(f"Saved to {output_dir}")
+    print_main("Starting training...")
+    trainer.train()
+    print_main("Training complete.")
+
+    if is_main_process():
+        print_main("Saving LoRA adapters...")
+        if isinstance(model, DDP) and hasattr(model, "module"):
+            trainer.model.module.save_pretrained(output_dir)  # type: ignore
+        else:
+            trainer.model.save_pretrained(output_dir)  # type: ignore
+        tokenizer.save_pretrained(output_dir)
+        print_main(f"Saved to {output_dir}")
 
     return output_dir
 
@@ -508,30 +541,28 @@ def train_lora_for_model_and_dataset(
 def evaluate_finetuned_model(
     model_id: str, dataset_class: Type[Dataset], adapter_dir: str
 ):
-    print(
-        f"\nEvaluating fine-tuned model (adapters from {adapter_dir}) on dataset {dataset_class.__name__}"
-    )
-    print("=" * 80)
+    print_main(f"\nEvaluating fine-tuned model (adapters from {adapter_dir}) on dataset {dataset_class.__name__}")
+    print_main("=" * 80)
 
     device = detect_device()
     print(f"Using device: {device}")
 
     # Load base and attach adapters for inference
-    print("Loading base model and attaching LoRA adapters...")
+    print_main("Loading base model and attaching LoRA adapters...")
     tokenizer = AutoTokenizer.from_pretrained(adapter_dir, use_fast=True)
     tokenizer = ensure_pad_token(tokenizer, model_id)
     tokenizer.padding_side = "left"
 
     base_model = AutoModelForCausalLM.from_pretrained(model_id)
+    base_model.to(device)
     if (
         getattr(base_model.config, "pad_token_id", None) is None
         and tokenizer.pad_token_id is not None
     ):
         base_model.config.pad_token_id = tokenizer.pad_token_id
-    ft_model = PeftModel.from_pretrained(base_model, adapter_dir, torch_device=device)
+    ft_model = PeftModel.from_pretrained(base_model, adapter_dir, torch_device=device, tp_plan="auto" if is_distributed() else None)
 
     # Build pipeline for generation (match baseline style)
-    print("Building generation pipeline...")
     pipe = pipeline(
         task="text-generation",
         model=ft_model,
@@ -541,7 +572,7 @@ def evaluate_finetuned_model(
     )
 
     # Quick sanity check
-    print("Quick generation sanity check...")
+    print_main("Quick generation sanity check...")
     try:
         out = pipe("The capital of France is", max_new_tokens=20)
         print(out)
@@ -550,40 +581,66 @@ def evaluate_finetuned_model(
         raise e
 
     # Load test dataset
-    print("Loading test dataset...")
+    print_main("Loading test dataset...")
     common_evaluator = CommonEvaluator(device=detect_device())
     common_evaluator.current_model_name = model_id
     test_dataset = build_test_dataset(common_evaluator, dataset_class)
-    print(f"Loaded {len(test_dataset)} test samples")
+    print_main(f"Loaded {len(test_dataset)} test samples")
 
-    # Metrics
-    total_samples = 0
-    successful_inferences = 0
-    results: List[Dict[str, str]] = []
-
-    # Prepare dataset for batch processing
+    # Distribute dataset across GPUs for multi-GPU inference
+    if is_distributed():
+        world_size = get_world_size()
+        rank = get_rank()
+        
+        # Calculate samples per GPU
+        total_samples = len(test_dataset)
+        samples_per_gpu = total_samples // world_size
+        remainder = total_samples % world_size
+        
+        # Handle uneven distribution - give extra samples to first few GPUs
+        if rank < remainder:
+            start_idx = rank * (samples_per_gpu + 1)
+            end_idx = start_idx + samples_per_gpu + 1
+        else:
+            start_idx = remainder * (samples_per_gpu + 1) + (rank - remainder) * samples_per_gpu
+            end_idx = start_idx + samples_per_gpu
+        
+        # Create local dataset for this GPU
+        local_test_dataset = test_dataset.select(range(start_idx, end_idx))
+        
+        print_main(f"Distributed inference across {world_size} GPUs")
+        print(f"GPU {rank}: processing samples {start_idx} to {end_idx-1} ({len(local_test_dataset)} samples)")
+    else:
+        local_test_dataset = test_dataset
+        if is_main_process():
+            print("Single GPU inference")
 
     # Process in batches
-    print("\nRunning inference on test samples...")
+    print(f"\nRunning inference on {len(local_test_dataset)} local samples...")
     print("=" * 80)
 
-    # Process all samples in batches
-    all_outputs = pipe(
-        KeyDataset(test_dataset, "input_text"),
+    # Process local samples in batches
+    local_outputs = pipe(
+        KeyDataset(local_test_dataset, "input_text"),
         max_new_tokens=GEN_MAX_NEW_TOKENS,
         return_full_text=False,
         batch_size=EVAL_BATCH_SIZE,
     )
 
-    # Process results
+    # Process local results
+    local_results = []
+    local_successful_inferences = 0
+    
     for idx, output in tqdm(
-        enumerate(all_outputs), total=len(test_dataset), desc="Eval"
+        enumerate(local_outputs), 
+        total=len(local_test_dataset), 
+        desc=f"Eval GPU {get_rank()}" if is_distributed() else "Eval"
     ):
         try:
-            sample = test_dataset[idx]
+            sample = local_test_dataset[idx]
             if output and len(output) > 0:
                 generated_text = output[0]["generated_text"].strip()
-                successful_inferences += 1
+                local_successful_inferences += 1
 
                 result = {
                     "sample_idx": sample["sample_idx"],
@@ -591,31 +648,68 @@ def evaluate_finetuned_model(
                     "target_answer": sample["target_answer"],
                     "generated_answer": generated_text,
                 }
-                results.append(result)
+                local_results.append(result)
 
-                if idx < 5:
-                    print(f"\nSAMPLE {idx + 1}:")
+                # Show first few samples only on main process
+                if idx < 5 and is_main_process():
+                    print(f"\nSAMPLE {sample['sample_idx'] + 1}:")
                     print(f"PROMPT: {sample['input_text'][:1000]}...")
                     print(f"ANSWER: {sample['target_answer']}")
                     print(f"OUTPUT: {generated_text}")
                     print("=" * 80)
 
-            total_samples += 1
-
         except Exception as e:
-            print(f"Error processing sample {idx}: {e}")
-            raise e
-            # continue
+            print(f"Error processing sample {idx} on GPU {get_rank()}: {e}")
+            continue
 
-    if successful_inferences > 0:
-        success_rate = successful_inferences / total_samples
+    # Gather results from all GPUs
+    if is_distributed():
+        # Synchronize all processes before gathering results
+        dist.barrier()
+        
+        # Gather all results to main process
+        all_results = [None] * get_world_size()
+        all_successful_counts = [None] * get_world_size()
+        
+        dist.all_gather_object(all_results, local_results)
+        dist.all_gather_object(all_successful_counts, local_successful_inferences)
+        
+        if is_main_process():
+            # Combine results from all GPUs
+            results = []
+            total_successful_inferences = sum(count for count in all_successful_counts if count is not None)
+            
+            for gpu_results in all_results:
+                if gpu_results is not None:
+                    results.extend(gpu_results)
+            
+            # Sort results by original sample index to maintain order
+            results.sort(key=lambda x: x["sample_idx"])
+            total_samples = len(test_dataset)
+            
+            print(f"\nCombined results from {get_world_size()} GPUs:")
+            print(f"Total samples: {total_samples}")
+            print(f"Total successful inferences: {total_successful_inferences}")
+        else:
+            # Non-main processes don't need to process final results
+            print(f"GPU {get_rank()} completed processing {len(local_results)} samples")
+            return
+    else:
+        # Single GPU case
+        results = local_results
+        total_samples = len(local_test_dataset)
+        total_successful_inferences = local_successful_inferences
+
+    # Final evaluation metrics (only on main process)
+    if is_main_process() and total_successful_inferences > 0:
+        success_rate = total_successful_inferences / total_samples
 
         print("\n" + "=" * 80)
         print("FINE-TUNED MODEL EVALUATION RESULTS")
         print("=" * 80)
         print(f"Model: {model_id}")
         print(f"Total samples processed: {total_samples}")
-        print(f"Successful inferences: {successful_inferences}")
+        print(f"Successful inferences: {total_successful_inferences}")
         print(f"Success rate: {success_rate:.2%}")
 
         # Simple accuracy metrics (exact and partial match) to mirror baseline
@@ -638,8 +732,8 @@ def evaluate_finetuned_model(
             elif target in generated or generated in target:
                 partial_matches += 1
 
-        exact_accuracy = exact_matches / successful_inferences
-        partial_accuracy = (exact_matches + partial_matches) / successful_inferences
+        exact_accuracy = exact_matches / total_successful_inferences
+        partial_accuracy = (exact_matches + partial_matches) / total_successful_inferences
 
         print("\nAccuracy Metrics:")
         print(f"  Exact match accuracy: {exact_accuracy:.2%}")
@@ -656,7 +750,7 @@ def evaluate_finetuned_model(
                     "model_name": model_id,
                     "adapter_dir": adapter_dir,
                     "total_samples": total_samples,
-                    "successful_inferences": successful_inferences,
+                    "successful_inferences": total_successful_inferences,
                     "success_rate": success_rate,
                     "exact_accuracy": exact_accuracy,
                     "partial_accuracy": partial_accuracy,
@@ -668,8 +762,9 @@ def evaluate_finetuned_model(
 
         print(f"\nDetailed evaluation results saved to: {results_file}")
 
-    else:
+    elif is_main_process():
         print("No successful inferences completed!")
+    
     print("\nEvaluation completed.")
 
 
@@ -678,6 +773,9 @@ def run_single_experiment(model_id: str, dataset_class: Type[Dataset]):
     adapter_dir = train_lora_for_model_and_dataset(
         model_id, dataset_class, force_retrain=FORCE_RETRAIN
     )
+    # Wait for all processes
+    if dist.is_initialized():
+        dist.barrier()
     evaluate_finetuned_model(model_id, dataset_class, adapter_dir)
 
 def main():
@@ -693,7 +791,7 @@ def main():
         '--dataset', 
         type=str, 
         default='PAMAP2CoTQADataset',
-        choices=['PAMAP2CoTQADataset', 'HARCoTQADataset', 'SleepEDFCoTQADataset'],
+        choices=['PAMAP2CoTQADataset', 'HARCoTQADataset', 'SleepEDFCoTQADataset', 'PAMAP2AccQADataset'],
         help='Dataset class name to use (default: PAMAP2CoTQADataset)'
     )
     
@@ -705,6 +803,7 @@ def main():
     try:
         # Dataset class mapping
         dataset_classes = {
+            'PAMAP2AccQADataset': PAMAP2AccQADataset,
             'PAMAP2CoTQADataset': PAMAP2CoTQADataset,
             'HARCoTQADataset': HARCoTQADataset,
             'SleepEDFCoTQADataset': SleepEDFCoTQADataset
@@ -712,14 +811,13 @@ def main():
         
         dataset_class = dataset_classes[args.dataset]
         
-        if is_main_process():
-            print(f"Starting fine-tuning experiment:")
-            print(f"  Model: {args.model}")
-            print(f"  Dataset: {args.dataset}")
-            if is_distributed:
-                print(f"  Distributed training: {get_world_size()} GPUs")
-                print(f"  Current rank: {get_rank()}")
-            print("=" * 80)
+        print_main(f"Starting fine-tuning experiment:")
+        print_main(f"  Model: {args.model}")
+        print_main(f"  Dataset: {args.dataset}")
+        if is_distributed:
+            print_main(f"  Distributed training: {get_world_size()} GPUs")
+            print_main(f"  Current rank: {get_rank()}")
+        print_main("=" * 80)
         
         run_single_experiment(args.model, dataset_class)
         
