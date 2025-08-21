@@ -225,7 +225,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         with torch.inference_mode():
             gen_ids = self._call_generate(
                 self.llm,
-                vision_x=images,
+                vision_x=images, 
                 lang_x=input_ids,
                 attention_mask=attention_mask,
                 max_new_tokens=max_new_tokens,
