@@ -445,7 +445,6 @@ class CurriculumTrainer:
         # Set higher max_tokens for generation during evaluation
         max_new_tokens = 30000
         
-        epoch = None
         with torch.no_grad():
             for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
              
@@ -533,6 +532,7 @@ class CurriculumTrainer:
                     lr_encoder: float, lr_projector: float, lr_base: float, 
                     metric_func: Callable = None, batch_size: int = None, eval_only: bool = False, sampler=None) -> Dict[str, Any]:
         """Generic training function for any stage."""
+        epoch = None
         # Use provided batch_size or default to global BATCH_SIZE
         if batch_size is None:
             batch_size = BATCH_SIZE
