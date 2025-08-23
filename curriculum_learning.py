@@ -432,25 +432,18 @@ class CurriculumTrainer:
     def _evaluate_stage(self, stage: str, test_loader: DataLoader, stage_name: str, 
                        metric_func: Callable = None, epoch: int = None) -> Dict[str, Any]:
         """Evaluate model on test set for a specific stage."""
-        # Only evaluate on rank 0 for distributed training
-        if dist.is_initialized() and self.rank != 0:
-            # Other ranks wait for evaluation to complete
-            dist.barrier()
-            return {"test_loss": 0.0}
-        
         self.model.eval()
-        results = []
-        test_loss = 0.0
+        local_results = []
+        local_test_loss = 0.0
         
         # Set higher max_tokens for generation during evaluation
         max_new_tokens = 30000
         
         with torch.no_grad():
             for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
-             
                 # Compute loss
                 loss = self._get_model().compute_loss(batch)
-                test_loss += loss.item()
+                local_test_loss += loss.item()
                 
                 # Generate predictions with higher max_tokens
                 predictions = self._get_model().generate(batch, max_new_tokens=max_new_tokens)
@@ -469,15 +462,60 @@ class CurriculumTrainer:
                     if stage == "stage2_captioning" and "id" in sample:
                         result["time_series_id"] = sample["id"]
                     
-                    results.append(result)
+                    local_results.append(result)
         
-        avg_test_loss = test_loss / len(test_loader)
+        # Calculate local metrics
+        local_avg_test_loss = local_test_loss / len(test_loader) if len(test_loader) > 0 else 0.0
+        local_num_batches = len(test_loader)
         
-        # Calculate stage-specific metrics
+        # For distributed evaluation, gather results from all ranks
+        if dist.is_initialized():
+            # Gather all results to rank 0
+            if self.rank == 0:
+                all_results = [local_results]
+                all_losses = [local_test_loss]
+                all_num_batches = [local_num_batches]
+                
+                # Receive results from other ranks
+                for src_rank in range(1, self.world_size):
+                    rank_results = [None]
+                    rank_loss = [None]
+                    rank_num_batches = [None]
+                    dist.broadcast_object_list(rank_results, src=src_rank)
+                    dist.broadcast_object_list(rank_loss, src=src_rank)
+                    dist.broadcast_object_list(rank_num_batches, src=src_rank)
+                    all_results.append(rank_results[0])
+                    all_losses.append(rank_loss[0])
+                    all_num_batches.append(rank_num_batches[0])
+                
+                # Combine all results
+                results = []
+                for rank_results in all_results:
+                    results.extend(rank_results)
+                
+                # Calculate global metrics
+                total_loss = sum(all_losses)
+                total_batches = sum(all_num_batches)
+                avg_test_loss = total_loss / total_batches if total_batches > 0 else 0.0
+            else:
+                # Send results to rank 0
+                dist.broadcast_object_list([local_results], src=self.rank)
+                dist.broadcast_object_list([local_test_loss], src=self.rank)
+                dist.broadcast_object_list([local_num_batches], src=self.rank)
+                
+                # Non-rank-0 processes return dummy metrics
+                dist.barrier()
+                return {"test_loss": 0.0}
+        else:
+            # Single GPU case
+            results = local_results
+            avg_test_loss = local_avg_test_loss
+        
+        # Calculate stage-specific metrics on rank 0
         metrics = {"test_loss": avg_test_loss}
         if epoch is not None:
             metrics["epoch"] = epoch
-        if metric_func:
+        if metric_func and results:
             predictions = [r["generated"] for r in results]
             gold_answers = [r["gold"] for r in results]
             additional_metrics = metric_func(predictions, gold_answers)
@@ -499,6 +537,9 @@ class CurriculumTrainer:
             print(f"   Test predictions saved to: {results_file}")
             print(f"   Metrics saved to: {metrics_file}")
             print(f"   Max tokens used for generation: {max_new_tokens}")
+            if dist.is_initialized():
+                print(f"   Evaluated across {self.world_size} GPUs")
+                print(f"   Total test samples: {len(results)}")
             for metric, value in metrics.items():
                 if isinstance(value, (int, float)):
                     print(f"   {metric}: {value:.4f}")
@@ -653,7 +694,7 @@ class CurriculumTrainer:
             shuffle=False,
             batch_size=1,
             patch_size=PATCH_SIZE,
-            distribute_data=False  # Don't distribute test
+            distribute_data=self.world_size > 1  # Distribute test for multi-GPU evaluation
         )
         
         # Scheduler
@@ -860,7 +901,7 @@ class CurriculumTrainer:
         return self._train_stage(
             stage_name="stage3_cot",
             dataset_class=HARCoTQADataset,
-            num_epochs=11,
+            num_epochs=25,
             lr_encoder=2e-4,
             lr_projector=1e-4,
             lr_base=2e-4,

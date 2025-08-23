@@ -249,25 +249,17 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         batch: same format as generate()
         answers: List[str] of length B
         """
-        # Temporarily disable compilation to avoid data-dependent operation issues
-        original_disable = torch._dynamo.config.disable
-        torch._dynamo.config.disable = True
-        
-        try:
-            input_ids, images, attention_mask, labels = self.pad_and_apply_batch(
-                batch, include_labels=False
-            )
+        input_ids, images, attention_mask, labels = self.pad_and_apply_batch(
+            batch, include_labels=False
+        )
 
-            output = self.model(
-                vision_x=images,
-                lang_x=input_ids,
-                attention_mask=attention_mask,
-                labels=labels,
-            )
-            return output[0]
-        finally:
-            # Restore original compilation setting
-            torch._dynamo.config.disable = original_disable
+        output = self.model(
+            vision_x=images,
+            lang_x=input_ids,
+            attention_mask=attention_mask,
+            labels=labels,
+        )
+        return output[0]
 
     def get_eos_token(self) -> str:
         return self.text_tokenizer.eos_token
