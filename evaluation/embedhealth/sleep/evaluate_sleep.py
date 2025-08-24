@@ -110,17 +110,17 @@ def main():
             # Run inference to get prediction
             try:
                 # Build the prompt for inference
-                pre_prompt = """You are given a 30-second EEG time series segment. Your task is to classify the sleep stage based on analysis of the data.
+                pre_prompt = TextPrompt("""You are given a 30-second EEG time series segment. Your task is to classify the sleep stage based on analysis of the data.
 
                 Instructions:
                 - Analyze the data objectively without presuming a particular label.
                 - Reason carefully and methodically about what the signal patterns suggest regarding sleep stage.
-                - Write your reasoning as a single, coherent paragraph. Do not use bullet points, lists, or section headers. You must always provide a rationale and a final answer."""
+                - Write your reasoning as a single, coherent paragraph. Do not use bullet points, lists, or section headers. You must always provide a rationale and a final answer.""")
 
-                post_prompt = f"""Possible sleep stages are: 
+                post_prompt = TextPrompt(f"""Possible sleep stages are: 
                 Wake, Non-REM stage 1, Non-REM stage 2, Non-REM stage 3, REM sleep, Movement
 
-                Please now write your answer. Make sure that your last word is the answer. The possible labels are: {labels}. You MUST end your response with "Answer:" follwed by the respective label."""
+                Please now write your answer. Make sure that your last word is the answer. The possible labels are: {labels}. You MUST end your response with "Answer:" follwed by the respective label.""")
 
                 # Create time series prompts using the data from the dataset
                 ts_prompts = []
@@ -159,7 +159,7 @@ def main():
                 print(f"  ❌ Error processing sample {idx}: {e}")
                 continue
 
-    print(f"Acc: {correct * 100 / len(results)}%")
+    print(f"Acc: {correct * 100 / len(dataset)}%")
 
     # # Save results
     # save_results_to_csv(results, config["output_path"])
