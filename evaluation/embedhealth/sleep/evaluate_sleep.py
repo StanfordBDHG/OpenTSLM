@@ -129,18 +129,6 @@ def main():
                 for ts_text, ts_data in zip(
                     row["time_series_text"], row["time_series"]
                 ):
-                    # fix 0.000 mean and std
-                    ts_text = re.sub(
-                        r"mean -?\d+\.?\d+",
-                        f"mean {round(np.mean(ts_data), 4):.4f}",
-                        ts_text,
-                    )
-                    ts_text = re.sub(
-                        r"std -?\d+\.?\d+",
-                        f"std {round(np.std(ts_data), 4):.4f}",
-                        ts_text,
-                    )
-
                     ts_prompts.append(TextTimeSeriesPrompt(ts_text, ts_data))
 
                 # Create full prompt
