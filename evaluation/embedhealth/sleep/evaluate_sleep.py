@@ -7,6 +7,7 @@ from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
 import random
 import torch
 import numpy as np
+import re
 from prompt.full_prompt import FullPrompt
 from prompt.text_prompt import TextPrompt
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
@@ -134,9 +135,16 @@ def main():
                     normalized_ts_data = (ts_data - mean) / std
 
                     # fix 0.000 mean and std
-                    ts_text = ts_text.replace(
-                        "0.000", f"{np.mean(normalized_ts_data):.3f}", 1
-                    ).replace("0.000", f"{np.std(normalized_ts_data):.3f}", 1)
+                    ts_text = re.sub(
+                        r"mean -?\d+\.?\d+",
+                        f"mean {np.mean(normalized_ts_data):.3f}",
+                        ts_text,
+                    )
+                    ts_text = re.sub(
+                        r"std -?\d+\.?\d+",
+                        f"std {np.mean(normalized_ts_data):.3f}",
+                        ts_text,
+                    )
 
                     ts_prompts.append(TextTimeSeriesPrompt(ts_text, normalized_ts_data))
 
