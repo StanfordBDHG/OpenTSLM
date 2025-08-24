@@ -6,6 +6,7 @@ from get_sleep_predictions import (
 from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
 import random
 import torch
+import numpy as np
 from prompt.full_prompt import FullPrompt
 from prompt.text_prompt import TextPrompt
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
@@ -127,6 +128,13 @@ def main():
                 for ts_text, ts_data in zip(
                     row["time_series_text"], row["time_series"]
                 ):
+                    # fix 0.000 mean and std
+                    mean = np.mean(ts_data)
+                    std = np.std(ts_data)
+                    ts_text = ts_text.replace("0.000", str(mean), 1).replace(
+                        "0.000", str(std), 1
+                    )
+
                     ts_prompts.append(TextTimeSeriesPrompt(ts_text, ts_data))
 
                 # Create full prompt
@@ -136,7 +144,7 @@ def main():
                 prediction = model.eval_prompt(prompt, max_new_tokens=max_new_tokens)
                 predicted_label = extract_sleep_label(prediction)
 
-                print("prompt", prompt)
+                print("prompt", prompt.to_dict())
                 print("predicition", prediction)
 
                 result = {
