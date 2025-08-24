@@ -88,6 +88,7 @@ def main():
     results = []
 
     correct = 0
+    labels = list(set(d["label"] for d in dataset))
     with torch.no_grad():
         for i, idx in enumerate(selected_indices):
             print(f"Processing sample {i + 1}/{len(selected_indices)} (index {idx})...")
@@ -109,8 +110,17 @@ def main():
             # Run inference to get prediction
             try:
                 # Build the prompt for inference
-                pre_prompt = TextPrompt(row["pre_prompt"])
-                post_prompt = TextPrompt(row["post_prompt"])
+                pre_prompt = """You are given a 30-second EEG time series segment. Your task is to classify the sleep stage based on analysis of the data.
+
+                Instructions:
+                - Analyze the data objectively without presuming a particular label.
+                - Reason carefully and methodically about what the signal patterns suggest regarding sleep stage.
+                - Write your reasoning as a single, coherent paragraph. Do not use bullet points, lists, or section headers. You must always provide a rationale and a final answer."""
+
+                post_prompt = f"""Possible sleep stages are: 
+                Wake, Non-REM stage 1, Non-REM stage 2, Non-REM stage 3, REM sleep, Movement
+
+                Please now write your answer. Make sure that your last word is the answer. The possible labels are: {labels}. You MUST end your response with "Answer:" follwed by the respective label."""
 
                 # Create time series prompts using the data from the dataset
                 ts_prompts = []
@@ -126,7 +136,7 @@ def main():
                 prediction = model.eval_prompt(prompt, max_new_tokens=max_new_tokens)
                 predicted_label = extract_sleep_label(prediction)
 
-                print("row", row)
+                print("prompt", prompt)
                 print("predicition", prediction)
 
                 result = {
