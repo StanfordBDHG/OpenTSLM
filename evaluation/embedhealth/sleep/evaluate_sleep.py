@@ -134,9 +134,9 @@ def main():
                     normalized_ts_data = (ts_data - mean) / std
 
                     # fix 0.000 mean and std
-                    ts_text = ts_text.replace("0.000", f"{np.mean():.3f}", 1).replace(
-                        "0.000", f"{np.st():.3f}", 1
-                    )
+                    ts_text = ts_text.replace(
+                        "0.000", f"{np.mean(normalized_ts_data):.3f}", 1
+                    ).replace("0.000", f"{np.std(normalized_ts_data):.3f}", 1)
 
                     ts_prompts.append(TextTimeSeriesPrompt(ts_text, normalized_ts_data))
 
