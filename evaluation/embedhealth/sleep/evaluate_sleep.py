@@ -128,14 +128,17 @@ def main():
                 for ts_text, ts_data in zip(
                     row["time_series_text"], row["time_series"]
                 ):
-                    # fix 0.000 mean and std
+                    # fix no normalization
                     mean = np.mean(ts_data)
                     std = np.std(ts_data)
-                    ts_text = ts_text.replace("0.000", str(mean), 1).replace(
-                        "0.000", str(std), 1
+                    normalized_ts_data = (ts_data - mean) / std
+
+                    # fix 0.000 mean and std
+                    ts_text = ts_text.replace("0.000", f"{np.mean():.3f}", 1).replace(
+                        "0.000", f"{np.st():.3f}", 1
                     )
 
-                    ts_prompts.append(TextTimeSeriesPrompt(ts_text, ts_data))
+                    ts_prompts.append(TextTimeSeriesPrompt(ts_text, normalized_ts_data))
 
                 # Create full prompt
                 prompt = FullPrompt(pre_prompt, ts_prompts, post_prompt)
