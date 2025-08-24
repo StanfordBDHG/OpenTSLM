@@ -1,10 +1,14 @@
 from get_sleep_predictions import (
     setup_device,
     load_dataset,
-    run_inference_and_collect_data,
-    save_results_to_csv,
+    extract_sleep_label,
 )
 from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
+import random
+import torch
+from prompt.full_prompt import FullPrompt
+from prompt.text_prompt import TextPrompt
+from prompt.text_time_series_prompt import TextTimeSeriesPrompt
 
 
 def load_model(model_path: str, device: str, llm_id: str = "meta-llama/Llama-3.2-1B"):
@@ -52,13 +56,13 @@ def main():
     dataset = load_dataset(split=config["dataset_split"])
 
     # Run inference and collect data
-    results = run_inference_and_collect_data(
-        model,
-        dataset,
-        len(dataset),  # eval whole dataset
-        config["max_new_tokens"],
-        config["random_seed"],
-    )
+    # results = run_inference_and_collect_data(
+    #     model,
+    #     dataset,
+    #     len(dataset),  # eval whole dataset
+    #     config["max_new_tokens"],
+    #     config["random_seed"],
+    # )
     #     "sample_index": idx,
     # "eeg_data": eeg_data,
     # "ground_truth_label": ground_truth_label,
@@ -67,15 +71,83 @@ def main():
     # "full_prediction": prediction,
     # "series_length": len(eeg_data)
 
+    random_seed = config["random_seed"]
+    max_new_tokens = config["max_new_tokens"]
+    num_samples = len(dataset)
+
+    # Set random seed for reproducibility
+    random.seed(random_seed)
+    torch.manual_seed(random_seed)
+
+    # Select random indices
+    dataset_size = len(dataset)
+    selected_indices = random.sample(
+        range(dataset_size), min(num_samples, dataset_size)
+    )
+
+    results = []
+
     correct = 0
-    for r in results:
-        predicted_label = r["predicted_label"]
-        ground_truth_label = r["ground_truth_label"]
+    with torch.no_grad():
+        for i, idx in enumerate(selected_indices):
+            print(f"Processing sample {i + 1}/{len(selected_indices)} (index {idx})...")
 
-        print(f"'{predicted_label}' vs '{ground_truth_label}'")
+            # Get the sample
+            row = dataset[idx]
 
-        if predicted_label.strip() == ground_truth_label.strip():
-            correct += 1
+            # Extract raw time series data
+            original_data = row.get("original_data", [])
+            if len(original_data) > 0:
+                eeg_data = original_data  # Original EEG data
+            else:
+                raise RuntimeError(f"No original data found for sample {idx}")
+
+            # Get ground truth label and rationale
+            ground_truth_label = row["label"]
+            rationale = row["answer"]
+
+            # Run inference to get prediction
+            try:
+                # Build the prompt for inference
+                pre_prompt = TextPrompt(row["pre_prompt"])
+                post_prompt = TextPrompt(row["post_prompt"])
+
+                # Create time series prompts using the data from the dataset
+                ts_prompts = []
+                for ts_text, ts_data in zip(
+                    row["time_series_text"], row["time_series"]
+                ):
+                    ts_prompts.append(TextTimeSeriesPrompt(ts_text, ts_data))
+
+                # Create full prompt
+                prompt = FullPrompt(pre_prompt, ts_prompts, post_prompt)
+
+                # Run inference
+                prediction = model.eval_prompt(prompt, max_new_tokens=max_new_tokens)
+                predicted_label = extract_sleep_label(prediction)
+
+                print("row", row)
+                print("predicition", prediction)
+
+                result = {
+                    "sample_index": idx,
+                    "eeg_data": eeg_data,
+                    "ground_truth_label": ground_truth_label,
+                    "predicted_label": predicted_label,
+                    "rationale": rationale,
+                    "full_prediction": prediction,
+                    "series_length": len(eeg_data),
+                }
+
+                results.append(result)
+                print(f"  Ground truth: {ground_truth_label}")
+                print(f"  Prediction: {predicted_label}")
+                if predicted_label.strip() == ground_truth_label.strip():
+                    correct += 1
+
+            except Exception as e:
+                print(f"  ❌ Error processing sample {idx}: {e}")
+                continue
 
     print(f"Acc: {correct * 100 / len(results)}%")
 
