@@ -52,9 +52,10 @@ class SleepEDFCoTQADataset(QADataset):
         - Please now write your rationale. Make sure that your last word is the answer. You MUST end your response with "Answer: """
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
-        series = np.array(row["time_series"][0], dtype=np.float32)
+        series = np.array(row["time_series"], dtype=np.float32)
         mean = float(np.mean(series))
         std = float(np.std(series))
+        print("normalize time series", series, mean, std)
         min_std = 1e-6
         std = max(std, min_std)
         series_norm = (series - mean) / std
