@@ -6,7 +6,7 @@
 MODEL=${1:-"EmbedHealthFlamingo"}
 NUM_GPUS=${2:-4}
 BATCH_SIZE=${3:-8}
-STAGES=${4:-"stage1_mcq stage2_captioning"}
+STAGES=${4:-"stage1_mcq stage2_captioning stage3_cot"}
 LLM_ID=${5:-"meta-llama/Llama-3.2-1B"}
 
 echo "🚀 Launching distributed curriculum learning"
@@ -21,6 +21,7 @@ echo "   Effective batch size: $((BATCH_SIZE * NUM_GPUS))"
 echo "   Learning rates and epochs are defined per stage in the code"
 echo "   Stage 1 (MCQ): 30 epochs, LR varies by model"
 echo "   Stage 2 (Captioning): 60 epochs, LR varies by model"
+echo "   Stage 3 (CoT Reasoning): 100 epochs, LR varies by model"
 echo ""
 
 # Check if CUDA is available

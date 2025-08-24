@@ -1,15 +1,14 @@
 import json
-from typing import Literal, List, Optional, Tuple
+from typing import List, Tuple
 
 
-from datasets import Dataset, Value, Sequence, Features, load_dataset
+from datasets import Dataset, load_dataset
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from time_series_datasets.QADataset import QADataset
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
 from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
 import torch
 
 

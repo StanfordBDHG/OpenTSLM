@@ -124,8 +124,11 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 current_length = ts.shape[1]
                 if current_length < max_length:
                     # Pad with zeros to reach max_length
+                    # Ensure padding has the same number of dimensions as the time series
+                    padding_shape = list(ts.shape)
+                    padding_shape[1] = max_length - current_length
                     padding = torch.zeros(
-                        1, max_length - current_length, device=ts.device, dtype=ts.dtype
+                        padding_shape, device=ts.device, dtype=ts.dtype
                     )
                     padded = torch.cat([ts, padding], dim=1)
                 else:

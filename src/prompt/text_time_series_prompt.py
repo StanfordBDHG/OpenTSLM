@@ -20,7 +20,7 @@ class TextTimeSeriesPrompt(Prompt):
 
         ts_array = np.array(time_series)
 
-        assert ts_array.ndim == 1, "Time series must be one-dimensional!"
+        assert ts_array.ndim == 1, "Time series must be one-dimensional! You can input multiple time series, but each time series must be a one-dimensional array."
         assert ts_array.size > 0, "Time series must not be empty!"
         assert np.issubdtype(ts_array.dtype, np.number), (
             "Time series must contain only numeric values!"

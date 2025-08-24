@@ -1,5 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import List, Literal, Tuple
+from functools import partial
+from typing import Callable, List, Literal, Tuple
+
+import numpy as np
+import sys
 from prompt.prompt_with_answer import PromptWithAnswer
 from prompt.text_prompt import TextPrompt
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
@@ -7,14 +11,36 @@ from torch.utils.data import Dataset
 
 
 class QADataset(Dataset, ABC):
-    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str):
+    def __init__(
+        self,
+        split: Literal["train", "test", "validation"],
+        EOS_TOKEN: str,
+        format_sample_str: bool = False,
+        time_series_format_function: Callable[[np.ndarray], str] | None = None,
+    ):
+        """
+        Initializes the dataset by loading and formatting the specified data split.
+        Args:
+            split (Literal["train", "test", "validation"]): The dataset split to load. Must be one of "train", "test", or "validation".
+            EOS_TOKEN (str): End-of-sequence token to be used in formatting.
+            format_sample_str (bool, optional): If True, applies a string formatting function to each sample. Defaults to False.
+            time_series_format_function (Callable[[np.ndarray], str] | None, optional): Optional function to format time series data as strings. Used only if `format_sample_str` is True.
+        Raises:
+            RuntimeError: If the provided split is not one of "train", "test", or "validation".
+        Notes:
+            - The datasets for each split are loaded and formatted only once per class.
+            - The formatted datasets are cached as class attributes for subsequent initializations.
+        """
+        
         self.EOS_TOKEN = EOS_TOKEN
         if not hasattr(self.__class__, "loaded"):
             train, val, test = self._load_splits()
 
-            self.__class__._train_dataset = list(map(self._format_sample, train))
-            self.__class__._validation_dataset = list(map(self._format_sample, val))
-            self.__class__._test_dataset = list(map(self._format_sample, test))
+            format_function = partial(self._format_sample_str, time_series_format_function) if format_sample_str else self._format_sample
+           
+            self.__class__._train_dataset = list(map(format_function, train))
+            self.__class__._validation_dataset = list(map(format_function, val))
+            self.__class__._test_dataset = list(map(format_function, test))
 
             self.__class__.loaded = True
 
@@ -61,6 +87,39 @@ class QADataset(Dataset, ABC):
             TextPrompt(self._get_post_prompt(row).strip()),
             answer.strip(),
         ).to_dict()
+
+    def _format_sample_str(
+        self, time_series_format_function: Callable[[np.ndarray], str] | None, row
+    ):
+        def fallback_timeseries_formatter(time_series: np.ndarray) -> str:
+            # Fallback formatter for time series data
+        
+            return np.array2string(
+                time_series,
+                separator=" ",
+                formatter={"all": lambda x: f'"{x:.2f}"'.replace(".", "")},
+                threshold=sys.maxsize,
+                max_line_width=sys.maxsize,
+            ).removeprefix("[").removesuffix("]")
+
+               
+
+        if not time_series_format_function:
+            time_series_format_function = fallback_timeseries_formatter
+
+        # Create the prompt chunks: pre-prompt, time series prompts, and post-prompt
+        prompt_chunks = [self._get_pre_prompt(row).strip()]
+
+        for text_time_series_prompt in self._get_text_time_series_prompt_list(row):
+            prompt_chunks.append(text_time_series_prompt.get_text())
+            time_series = time_series_format_function(
+                text_time_series_prompt.get_time_series()
+            )
+            prompt_chunks.append(time_series)
+
+        prompt_chunks.append(self._get_post_prompt(row).strip())
+
+        return {"prompt": "\n".join(prompt_chunks), "answer": self._get_answer(row)}
 
     def __len__(self):
         return len(self.dataset)

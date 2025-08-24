@@ -8,6 +8,8 @@ import argparse
 from typing import List, Optional, Dict, Any, Callable
 from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.m4.M4QADataset import M4QADataset
+from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
+from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
@@ -35,8 +37,9 @@ from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
 from model.llm.EmbedHealthSP import EmbedHealthSP
 from model.projector.MLPProjector import MLPProjector
 import datetime
+from logger import get_logger, set_global_verbose
 
-from src.model_config import (
+from model_config import (
     BATCH_SIZE,
     EARLY_STOP_PAT,
     GRAD_CLIP_NORM,
@@ -47,10 +50,11 @@ from src.model_config import (
     WARMUP_FRAC,
     WEIGHT_DECAY,
 )
+from time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSampler
 
 
 # Global stage configuration - users can modify this to mix and match stages
-CURRICULUM_STAGES = ["stage1_mcq", "stage2_captioning"]
+CURRICULUM_STAGES = ["stage1_mcq", "stage2_captioning", "stage3_cot", "stage4_sleep_cot"]
 
 
 class CurriculumTrainer:
@@ -62,6 +66,7 @@ class CurriculumTrainer:
     We train across different stages:
     - stage1_mcq: Trains the model on a time-series MCQ dataset (TSQA)
     - stage2_captioning: Trains the model on a time-series captioning dataset (M4 time series captioning)
+    - stage3_cot: Trains the model on a chain-of-thought reasoning dataset (PAMAP2 CoT)
 
     If you run this script, you should be able to reproduce our results from the paper.
     All datasets are automatically downloaded and processed.
@@ -235,6 +240,18 @@ class CurriculumTrainer:
         """Create a merged data loader from multiple datasets."""
         merged_ds = ConcatDataset(datasets)
         
+
+
+        return DataLoader(
+                merged_ds,
+                shuffle=shuffle,
+                batch_size=batch_size,
+                collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
+                    batch, patch_size=patch_size
+                ),
+            )
+    
+        # Dont use sampler for now.
         # Use distributed sampler if distributed training is enabled
         if distribute_data and dist.is_initialized():
             sampler = DistributedSampler(
@@ -527,7 +544,7 @@ class CurriculumTrainer:
 
     def _train_stage(self, stage_name: str, dataset_class, num_epochs: int, 
                     lr_encoder: float, lr_projector: float, lr_base: float, 
-                    metric_func: Callable = None, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
+                    metric_func: Callable = None, batch_size: int = None, eval_only: bool = False, sampler=None) -> Dict[str, Any]:
         """Generic training function for any stage."""
         # Use provided batch_size or default to global BATCH_SIZE
         if batch_size is None:
@@ -608,13 +625,33 @@ class CurriculumTrainer:
         optimizer = self._get_optimizer(batch_size, lr_encoder, lr_projector, lr_base)
         
         # Create data loaders
-        train_loader = self._merge_data_loaders(
-            [dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())],
-            shuffle=True,
-            batch_size=batch_size,
-            patch_size=PATCH_SIZE,
-            distribute_data=self.world_size > 1
-        )
+        if sampler is not None:
+            if self.world_size > 1:
+                get_logger().warning("BalancedBatchSampler was provided, but distributed training (DDP) is enabled. BalancedBatchSampler will NOT be used. Data will be sharded using DistributedSampler instead. Typically for stage3_cot it is better to use BalancedBatchSampler, if dataset is imbalanced.")
+                train_loader = self._merge_data_loaders(
+                    [dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())],
+                    shuffle=True,
+                    batch_size=batch_size,
+                    patch_size=PATCH_SIZE,
+                    distribute_data=True
+                )
+            else:
+                train_dataset = dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())
+                train_loader = DataLoader(
+                    train_dataset,
+                    batch_sampler=sampler,
+                    collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
+                        batch, patch_size=PATCH_SIZE
+                    ),
+                )
+        else:
+            train_loader = self._merge_data_loaders(
+                [dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())],
+                shuffle=True,
+                batch_size=batch_size,
+                patch_size=PATCH_SIZE,
+                distribute_data=self.world_size > 1
+            )
         
         val_loader = self._merge_data_loaders(
             [dataset_class("validation", EOS_TOKEN=self._get_model().get_eos_token())],
@@ -673,8 +710,18 @@ class CurriculumTrainer:
                 self.model.train()
                 running_loss = 0.0
                 prog = tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs}", disable=self.rank != 0)
-                
-                for batch in prog:
+                for i, batch in enumerate(prog):
+                    # DEBUG PRINT: Only for the first batch of the first epoch
+                    if epoch == start_epoch and i == 0:
+                        print(f"[DEBUG] Batch {i} - batch size: {len(batch)}")
+                        if isinstance(batch, list) and isinstance(batch[0], dict):
+                            for k, v in batch[0].items():
+                                if hasattr(v, 'shape'):
+                                    print(f"[DEBUG] Sample key '{k}' shape: {v.shape}")
+                                elif isinstance(v, list):
+                                    print(f"[DEBUG] Sample key '{k}' list length: {len(v)}")
+                        import torch
+                        print(torch.cuda.memory_summary() if torch.cuda.is_available() else "No CUDA")
                     optimizer.zero_grad()
                     loss = self._get_model().compute_loss(batch)
                     loss.backward()
@@ -807,6 +854,63 @@ class CurriculumTrainer:
             eval_only=eval_only
         )
     
+    def stage3_cot(self, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
+        """Stage CoT: Chain-of-Thought Reasoning (PAMAP2).
+        
+        Configuration:
+        - Epochs: 100
+        - EmbedHealthSP: encoder_lr=2e-4, projector_lr=1e-4
+        - EmbedHealthFlamingo: base_lr=2e-4
+        - Metric: Test loss only (chain-of-thought reasoning)
+        """
+        from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
+        sampler = None
+        #if not (self.world_size > 1):
+        #    train_dataset = PAMAP2CoTQADataset("train", EOS_TOKEN=self._get_model().get_eos_token())
+        #    labels = [row["label"] for row in train_dataset]
+        #    num_classes = len(set(labels))
+        #    if batch_size is None:
+        #        batch_size = BATCH_SIZE
+        #    if batch_size % num_classes != 0:
+        #        raise ValueError(f"Batch size ({batch_size}) must be divisible #by number of classes ({num_classes}) for BalancedBatchSampler.")
+        #    sampler = BalancedBatchSampler(labels, batch_size)
+        return self._train_stage(
+            stage_name="stage3_cot",
+            dataset_class=PAMAP2CoTQADataset,
+            num_epochs=11,
+            lr_encoder=2e-4,
+            lr_projector=1e-4,
+            lr_base=2e-4,
+            metric_func=None,  # Only test loss for chain-of-thought reasoning
+            batch_size=batch_size,
+            eval_only=eval_only,
+            sampler=sampler
+        )
+    
+    def stage4_sleep_cot(self, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
+        """Stage CoT: Chain-of-Thought Reasoning (SleepEDF).
+        
+        Configuration:
+        - Epochs: 100
+        - EmbedHealthSP: encoder_lr=2e-4, projector_lr=1e-4
+        - EmbedHealthFlamingo: base_lr=2e-4
+        - Metric: Test loss only (chain-of-thought reasoning)
+        """
+        sampler = None
+        
+        return self._train_stage(
+            stage_name="stage4_sleep_cot",
+            dataset_class=SleepEDFCoTQADataset,
+            num_epochs=60,
+            lr_encoder=2e-4,
+            lr_projector=1e-4,
+            lr_base=2e-4,
+            metric_func=None,  # Only test loss for chain-of-thought reasoning
+            batch_size=batch_size,
+            eval_only=eval_only,
+            sampler=sampler
+        )
+    
     def run_curriculum(self, stages: List[str] = None, batch_size: int = None, eval_only: bool = False):
         """Run the complete curriculum learning pipeline."""
         if stages is None:
@@ -848,6 +952,14 @@ class CurriculumTrainer:
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage2_captioning":
                 stage_results = self.stage2_captioning(batch_size=batch_size, eval_only=eval_only)
+                results[stage] = stage_results
+                self._mark_stage_completed(stage, stage_results)
+            elif stage == "stage3_cot":
+                stage_results = self.stage3_cot(batch_size=batch_size, eval_only=eval_only)
+                results[stage] = stage_results
+                self._mark_stage_completed(stage, stage_results)
+            elif stage == "stage4_sleep_cot":
+                stage_results = self.stage4_sleep_cot(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
             else:
@@ -1030,7 +1142,19 @@ def main():
         help="Local GPU rank"
     )
     
+    # Logging arguments
+    parser.add_argument(
+        "--verbose", 
+        default=False, 
+        action="store_true",
+        help="Enable verbose logging"
+    )
+    
     args = parser.parse_args()
+    
+    # Set up global logging
+    set_global_verbose(args.verbose)
+    logger = get_logger(verbose=args.verbose)
     
     # Initialize trainer
     trainer = CurriculumTrainer(
@@ -1051,15 +1175,15 @@ def main():
     )
     
     # Print summary
-    print("\n📈 Final Results Summary:")
-    print("=" * 40)
+    logger.info("Final Results Summary:")
+    logger.info("=" * 40)
     for stage, metrics in results.items():
-        print(f"\n{stage.upper()}:")
+        logger.info(f"{stage.upper()}:")
         for metric, value in metrics.items():
             if isinstance(value, (int, float)):
-                print(f"  {metric}: {value:.4f}")
+                logger.info(f"  {metric}: {value:.4f}")
             else:
-                print(f"  {metric}: {value}")
+                logger.info(f"  {metric}: {value}")
 
 
 if __name__ == "__main__":
