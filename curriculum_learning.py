@@ -677,6 +677,18 @@ class CurriculumTrainer:
             print(f"🆕 Starting fresh training for {stage_name}")
             best_val_loss = float("inf")  # Ensure proper initialization
         
+        # Initialize loss history tracking
+        loss_history = {
+            "stage": stage_name,
+            "model_type": self.model_type,
+            "llm_id": self.llm_id,
+            "epochs": [],
+            "train_losses": [],
+            "val_losses": [],
+            "best_val_loss": None,
+            "best_epoch": None
+        }
+        
         # Skip training loop if eval_only is True
         if eval_only:
             if self.rank == 0:
@@ -749,6 +761,12 @@ class CurriculumTrainer:
                     tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}")
                     tqdm.write(f"Epoch {epoch} — best  loss: {best_val_loss:.4f}")
                 
+                # Record loss history (only on rank 0 to avoid duplication)
+                if self.rank == 0:
+                    loss_history["epochs"].append(epoch)
+                    loss_history["train_losses"].append(avg_train_loss)
+                    loss_history["val_losses"].append(avg_val_loss)
+                
                 # Early stopping - all ranks need to make the same decision
                 should_save = avg_val_loss + 1e-4 < best_val_loss
                 if dist.is_initialized():
@@ -799,6 +817,19 @@ class CurriculumTrainer:
                 print(f"   Total epochs run: {epoch}")
                 print(f"   Best validation loss: {best_val_loss:.4f}")
                 print(f"   Epochs without improvement: {epochs_no_improve}")
+        
+        # Save loss history only on rank 0
+        if self.rank == 0 and len(loss_history["epochs"]) > 0:
+            # Update final metadata
+            loss_history["best_val_loss"] = float(best_val_loss) if best_val_loss != float("inf") else None
+            loss_history["best_epoch"] = int(best_epoch) if best_epoch is not None else None
+            loss_history["total_epochs_trained"] = len(loss_history["epochs"])
+            
+            loss_history_file = os.path.join(self.results_dir, stage_name, "results", "loss_history.json")
+            with open(loss_history_file, "w") as f:
+                json.dump(loss_history, f, indent=2)
+            print(f"📈 Loss history saved to: {loss_history_file}")
+            print(f"   Recorded {loss_history['total_epochs_trained']} epochs of training")
         
         metrics = self._evaluate_stage(stage_name, test_loader, stage_name, metric_func, best_epoch)
         
