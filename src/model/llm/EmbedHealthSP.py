@@ -58,7 +58,7 @@ class EmbedHealthSP(TimeSeriesLLM):
     def enable_lora(self, 
                     lora_r: int = 16,
                     lora_alpha: int = 32,
-                    lora_dropout: float = 0.1,
+                    lora_dropout: float = 0.0,
                     target_modules: Optional[List[str]] = None):
         """
         Enable LoRA fine-tuning for the LLM component.
@@ -98,11 +98,14 @@ class EmbedHealthSP(TimeSeriesLLM):
             self.lora_enabled = True
             
             # Print LoRA info
+            lora_params = sum(p.numel() for name, p in self.llm.named_parameters() if p.requires_grad and "lora_" in name)
             trainable_params = sum(p.numel() for p in self.llm.parameters() if p.requires_grad)
             total_params = sum(p.numel() for p in self.llm.parameters())
             print(f"✅ LoRA enabled:")
-            print(f"   Trainable parameters: {trainable_params:,}")
+            print(f"   LoRA parameters: {lora_params:,}")
+            print(f"   Total trainable parameters: {trainable_params:,}")
             print(f"   Total parameters: {total_params:,}")
+            print(f"   LoRA %: {100 * lora_params / total_params:.2f}%")
             print(f"   Trainable %: {100 * trainable_params / total_params:.2f}%")
             
         except Exception as e:

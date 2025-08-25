@@ -1118,7 +1118,7 @@ class CurriculumTrainer:
                     model.enable_lora(
                         lora_r=16,
                         lora_alpha=32,
-                        lora_dropout=0.1
+                        lora_dropout=0.0
                     )
                     if self.rank == 0:
                         print(f"✅ LoRA enabled for {stage_name}")
