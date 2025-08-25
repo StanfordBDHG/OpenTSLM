@@ -70,9 +70,17 @@ class PAMAP2AccQADataset(QADataset):
     def _get_post_prompt(self, _row) -> str:
         activities = ", ".join(MAIN_ACTITIVIES)
         text = f"""
-        Answer ONLY with the activity label.
+        You are given accelerometer data in all three dimensions. Your task is to classify the activity based on analysis of the data.
+
+        Instructions:
+        - Begin by analyzing the time series without assuming a specific label.
+        - Think step-by-step about what the observed patterns suggest regarding movement intensity and behavior.
+        - Write your rationale as a single, natural paragraph — do not use bullet points, numbered steps, or section headings.
+        - Do **not** mention any class label until the final sentence.
+
         The following activities are possible: {activities}
-        You MUST end your response with 'Answer: <class label>'
+        
+        - Make sure that your last word is the answer. You MUST end your response with "Answer: "
         """
         return text
        
