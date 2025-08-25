@@ -46,6 +46,7 @@ def main():
         print("Example: python evaluate_pamap.py meta-llama/Llama-3.2-1B")
         sys.exit(1)
     
+    USE_PLOTS = True
     model_name = sys.argv[1]
     
     dataset_classes = [PAMAP2AccQADataset]
@@ -59,6 +60,7 @@ def main():
         evaluation_functions=evaluation_functions,
         max_samples=None,  # Limit for faster testing, set to None for full evaluation,
         max_new_tokens=400,
+        task="image-text-to-text" if USE_PLOTS else "text-generation",
     )
     print("\n" + "="*80)
     print("FINAL RESULTS SUMMARY")

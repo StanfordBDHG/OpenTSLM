@@ -15,6 +15,7 @@ from tqdm import tqdm
 from transformers.pipelines import pipeline
 import matplotlib.pyplot as plt
 from time import sleep
+from PIL import Image
 
 # Add src to path
 sys.path.insert(
@@ -48,8 +49,8 @@ class CommonEvaluator:
         """Get the best available device."""
         if torch.cuda.is_available():
             return "cuda"
-        elif torch.backends.mps.is_available():
-            return "mps"
+        # elif torch.backends.mps.is_available():
+        #     return "mps"
         else:
             return "cpu"
     
@@ -195,12 +196,40 @@ class CommonEvaluator:
                 target_answer = sample["answer"]
                 
                 # Generate prediction
-                outputs = pipe(
-                    input_text,
-                    max_new_tokens=max_new_tokens,
-                    return_full_text=False,
-                    plot_data=plot_data
-                )
+                if isinstance(pipe, OpenAIPipeline):
+                    outputs = pipe(
+                        input_text,
+                        max_new_tokens=max_new_tokens,
+                        return_full_text=False,
+                        plot_data=plot_data,
+                    )
+                else: # For Hugging Face pipelines, convert plot_data (base64) to PIL and pass via images
+                    task = getattr(pipe, "task", None)
+                    if plot_data and task in ("image-to-text", "image-text-to-text"):
+                        try:
+                            img_bytes = base64.b64decode(plot_data)
+                            img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+
+                            messages = [
+                                {"role": "user", "content": [
+                                    {"type": "image", "image": img}, 
+                                    {"type": "text", "text": input_text}
+                                ]}
+                            ]
+                            outputs = pipe(
+                                text=messages,
+                                max_new_tokens=max_new_tokens,
+                                return_full_text=False,
+                            )
+                        except Exception as e:
+                            raise RuntimeError(f"Failed to decode plot image: {e}")
+
+                    else:
+                        outputs = pipe(
+                            input_text,
+                            max_new_tokens=max_new_tokens,
+                            return_full_text=False,
+                        )
                 
                 # Extract generated text
                 if outputs and len(outputs) > 0:
@@ -420,7 +449,7 @@ class CommonEvaluator:
                         dataset_class=dataset_class,
                         evaluation_function=evaluation_function,
                         max_samples=max_samples,
-                        use_plot=False,
+                        use_plot=True,
                         **pipeline_kwargs
                     )
                     
