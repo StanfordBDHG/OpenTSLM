@@ -96,15 +96,32 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                         
                         if "ConditionalGeneration" in model_class_name:
                             # Gemma3ForConditionalGeneration (multimodal 4B model)
+                            print(f"[DEBUG] Handling {model_class_name}")
+                            print(f"[DEBUG] Model top-level attrs: {[attr for attr in dir(model) if not attr.startswith('_')]}")
+                            
                             # Try common alternatives for conditional generation models
                             alternatives = ["language_model.model.layers", "text_model.layers", "model.text_model.layers", "language_model.layers"]
                             for alt in alternatives:
                                 try:
-                                    getattr_recursive(model, alt)
+                                    result = getattr_recursive(model, alt)
                                     print(f"[DEBUG] Gemma3ForConditionalGeneration layers found at: {alt}")
                                     return alt
-                                except AttributeError:
+                                except AttributeError as e:
+                                    print(f"[DEBUG] Failed to access {alt}: {e}")
                                     continue
+                                    
+                            # If common paths fail, inspect the model structure more deeply
+                            print(f"[DEBUG] Common paths failed, inspecting model structure...")
+                            if hasattr(model, 'language_model'):
+                                print(f"[DEBUG] language_model attrs: {[attr for attr in dir(model.language_model) if not attr.startswith('_')]}")
+                                if hasattr(model.language_model, 'model'):
+                                    print(f"[DEBUG] language_model.model attrs: {[attr for attr in dir(model.language_model.model) if not attr.startswith('_')]}")
+                            if hasattr(model, 'model'):
+                                print(f"[DEBUG] model attrs: {[attr for attr in dir(model.model) if not attr.startswith('_')]}")
+                            if hasattr(model, 'text_model'):
+                                print(f"[DEBUG] text_model attrs: {[attr for attr in dir(model.text_model) if not attr.startswith('_')]}")
+                            if hasattr(model, 'transformer'):
+                                print(f"[DEBUG] transformer attrs: {[attr for attr in dir(model.transformer) if not attr.startswith('_')]}")
                         else:
                             # Gemma3ForCausalLM (text-only 1B model) - should work with standard path
                             try:
