@@ -86,29 +86,52 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 if k.lower() in model.__class__.__name__.lower():
                     attr_name = __KNOWN_DECODER_LAYERS_ATTR_NAMES[k]
                     
-                    # Special handling for Gemma3: inspect the actual model structure
+                    # Special handling for Gemma3: different architectures have different structures
                     if k.lower() == "gemma3":
                         # Check if the model has the expected structure
                         from src.open_flamingo.open_flamingo.src.utils import getattr_recursive
-                        try:
-                            getattr_recursive(model, attr_name)
-                        except AttributeError:
-                            # Gemma3 might have different structure, try common alternatives
-                            alternatives = ["model.model.layers", "layers", "transformer.layers"]
+                        
+                        # Gemma3ForConditionalGeneration (4B) vs Gemma3ForCausalLM (1B) have different structures
+                        model_class_name = model.__class__.__name__
+                        
+                        if "ConditionalGeneration" in model_class_name:
+                            # Gemma3ForConditionalGeneration (multimodal 4B model)
+                            # Try common alternatives for conditional generation models
+                            alternatives = ["language_model.model.layers", "text_model.layers", "model.text_model.layers", "language_model.layers"]
                             for alt in alternatives:
                                 try:
                                     getattr_recursive(model, alt)
-                                    print(f"[DEBUG] Gemma3 layers found at: {alt}")
+                                    print(f"[DEBUG] Gemma3ForConditionalGeneration layers found at: {alt}")
                                     return alt
                                 except AttributeError:
                                     continue
-                            # If none work, raise an informative error
-                            model_attrs = [attr for attr in dir(model) if not attr.startswith('_')]
-                            if hasattr(model, 'model'):
-                                model_attrs.extend([f"model.{attr}" for attr in dir(model.model) if not attr.startswith('_')][:10])
-                            raise ValueError(
-                                f"Could not find layers attribute for Gemma3. Model attributes: {model_attrs[:20]}"
-                            )
+                        else:
+                            # Gemma3ForCausalLM (text-only 1B model) - should work with standard path
+                            try:
+                                getattr_recursive(model, attr_name)
+                                return attr_name
+                            except AttributeError:
+                                pass
+                        
+                        # If standard paths don't work, try common alternatives
+                        alternatives = ["model.model.layers", "layers", "transformer.layers", "model.text_model.layers"]
+                        for alt in alternatives:
+                            try:
+                                getattr_recursive(model, alt)
+                                print(f"[DEBUG] Gemma3 layers found at: {alt}")
+                                return alt
+                            except AttributeError:
+                                continue
+                                
+                        # If none work, raise an informative error with model inspection
+                        model_attrs = [attr for attr in dir(model) if not attr.startswith('_')][:10]
+                        if hasattr(model, 'model'):
+                            model_attrs.extend([f"model.{attr}" for attr in dir(model.model) if not attr.startswith('_')][:10])
+                        if hasattr(model, 'language_model'):
+                            model_attrs.extend([f"language_model.{attr}" for attr in dir(model.language_model) if not attr.startswith('_')][:5])
+                        raise ValueError(
+                            f"Could not find layers attribute for {model_class_name}. Model attributes: {model_attrs[:25]}"
+                        )
                     
                     return attr_name
 
