@@ -265,6 +265,51 @@ class CurriculumTrainer:
                 ),
             )
     
+    def _load_existing_loss_history(self, stage_name: str) -> Optional[Dict]:
+        """Load existing loss history when resuming training."""
+        loss_history_file = os.path.join(self.results_dir, stage_name, "results", "loss_history.json")
+        
+        if not os.path.exists(loss_history_file):
+            return None
+            
+        try:
+            with open(loss_history_file, "r") as f:
+                existing_history = json.load(f)
+            
+            # Validate required fields
+            required_fields = ["epochs", "train_losses", "val_losses"]
+            if not all(field in existing_history for field in required_fields):
+                if self.rank == 0:
+                    print(f"⚠️  Warning: Existing loss history file is corrupted, starting fresh")
+                return None
+                
+            if self.rank == 0:
+                print(f"📂 Loaded existing loss history with {len(existing_history['epochs'])} epochs")
+                
+            return existing_history
+            
+        except Exception as e:
+            if self.rank == 0:
+                print(f"⚠️  Warning: Failed to load existing loss history: {e}, starting fresh")
+            return None
+    
+    def _save_loss_history_continuous(self, stage_name: str, loss_history: Dict, current_best_val_loss: float, current_best_epoch: int):
+        """Save loss history continuously after each epoch."""
+        # Update current metadata
+        loss_history_copy = loss_history.copy()
+        loss_history_copy["best_val_loss"] = float(current_best_val_loss) if current_best_val_loss != float("inf") else None
+        loss_history_copy["best_epoch"] = int(current_best_epoch) if current_best_epoch is not None else None
+        loss_history_copy["total_epochs_trained"] = len(loss_history["epochs"])
+        loss_history_copy["last_updated"] = datetime.datetime.now().isoformat()
+        
+        loss_history_file = os.path.join(self.results_dir, stage_name, "results", "loss_history.json")
+        
+        try:
+            with open(loss_history_file, "w") as f:
+                json.dump(loss_history_copy, f, indent=2)
+        except Exception as e:
+            print(f"⚠️  Warning: Failed to save loss history: {e}")
+    
     def _save_checkpoint(self, stage: str, epoch: int, val_loss: float, optimizer, scheduler):
         """Save model checkpoint for a specific stage."""
         checkpoint_dir = os.path.join(self.results_dir, stage, "checkpoints")
@@ -677,23 +722,29 @@ class CurriculumTrainer:
             print(f"🆕 Starting fresh training for {stage_name}")
             best_val_loss = float("inf")  # Ensure proper initialization
         
-        # Initialize loss history tracking
-        loss_history = {
-            "stage": stage_name,
-            "model_type": self.model_type,
-            "llm_id": self.llm_id,
-            "epochs": [],
-            "train_losses": [],
-            "val_losses": [],
-            "best_val_loss": None,
-            "best_epoch": None
-        }
+        # Initialize loss history tracking - try to load existing history if resuming
+        loss_history = self._load_existing_loss_history(stage_name)
+        if loss_history is None:
+            loss_history = {
+                "stage": stage_name,
+                "model_type": self.model_type,
+                "llm_id": self.llm_id,
+                "epochs": [],
+                "train_losses": [],
+                "val_losses": [],
+                "best_val_loss": None,
+                "best_epoch": None
+            }
         
         # Skip training loop if eval_only is True
         if eval_only:
             if self.rank == 0:
                 print(f"⏭️  Skipping training loop (eval_only mode)")
                 print(f"📂 Using existing checkpoint for evaluation")
+                # Save minimal loss history for eval-only mode
+                if len(loss_history["epochs"]) == 0:  # No existing history
+                    loss_history["note"] = "eval_only_mode_no_training_performed"
+                    self._save_loss_history_continuous(stage_name, loss_history, best_val_loss, best_epoch)
             epoch = best_epoch
             epochs_no_improve = 0
         else:
@@ -766,6 +817,9 @@ class CurriculumTrainer:
                     loss_history["epochs"].append(epoch)
                     loss_history["train_losses"].append(avg_train_loss)
                     loss_history["val_losses"].append(avg_val_loss)
+                    
+                    # Save loss history continuously after each epoch
+                    self._save_loss_history_continuous(stage_name, loss_history, best_val_loss, best_epoch)
                 
                 # Early stopping - all ranks need to make the same decision
                 should_save = avg_val_loss + 1e-4 < best_val_loss
@@ -818,18 +872,12 @@ class CurriculumTrainer:
                 print(f"   Best validation loss: {best_val_loss:.4f}")
                 print(f"   Epochs without improvement: {epochs_no_improve}")
         
-        # Save loss history only on rank 0
+        # Final loss history summary (continuous saving was done during training)
         if self.rank == 0 and len(loss_history["epochs"]) > 0:
-            # Update final metadata
-            loss_history["best_val_loss"] = float(best_val_loss) if best_val_loss != float("inf") else None
-            loss_history["best_epoch"] = int(best_epoch) if best_epoch is not None else None
-            loss_history["total_epochs_trained"] = len(loss_history["epochs"])
-            
             loss_history_file = os.path.join(self.results_dir, stage_name, "results", "loss_history.json")
-            with open(loss_history_file, "w") as f:
-                json.dump(loss_history, f, indent=2)
-            print(f"📈 Loss history saved to: {loss_history_file}")
-            print(f"   Recorded {loss_history['total_epochs_trained']} epochs of training")
+            print(f"📈 Loss history tracking completed: {loss_history_file}")
+            print(f"   Recorded {len(loss_history['epochs'])} epochs of training")
+            print(f"   Best validation loss: {best_val_loss:.4f} at epoch {best_epoch}")
         
         metrics = self._evaluate_stage(stage_name, test_loader, stage_name, metric_func, best_epoch)
         
