@@ -92,6 +92,11 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         lang_encoder.set_decoder_layers_attr_name(decoder_layers_attr_name)
         lang_encoder.resize_token_embeddings(len(text_tokenizer))
 
+        # Fix compatibility for Gemma3Config which has hidden_size in text_config
+        if hasattr(lang_encoder.config, "text_config") and hasattr(lang_encoder.config.text_config, "hidden_size"):
+            if not hasattr(lang_encoder.config, "hidden_size"):
+                lang_encoder.config.hidden_size = lang_encoder.config.text_config.hidden_size
+
         model = TimeSeriesFlamingoWithTrainableEncoder(
             SimpleNamespace(visual=time_series_encoder),
             lang_encoder,
