@@ -82,71 +82,15 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 "medgemma": "model.layers",
             }
 
-            # Special handling for ANY Gemma3 model first
+            # Special handling for Gemma3 models with different architectures
             model_class_name = model.__class__.__name__
             if "gemma3" in model_class_name.lower():
-                print(f"[DEBUG] Detected Gemma3 model: {model_class_name}")
-                from src.open_flamingo.open_flamingo.src.utils import getattr_recursive
-                
                 if "ConditionalGeneration" in model_class_name:
-                    # Gemma3ForConditionalGeneration (multimodal 4B model)
-                    print(f"[DEBUG] Handling {model_class_name}")
-                    print(f"[DEBUG] Model top-level attrs: {[attr for attr in dir(model) if not attr.startswith('_')]}")
-                    
-                    # Try common alternatives for conditional generation models
-                    alternatives = ["language_model.model.layers", "text_model.layers", "model.text_model.layers", "language_model.layers"]
-                    for alt in alternatives:
-                        try:
-                            result = getattr_recursive(model, alt)
-                            print(f"[DEBUG] Gemma3ForConditionalGeneration layers found at: {alt}")
-                            return alt
-                        except AttributeError as e:
-                            print(f"[DEBUG] Failed to access {alt}: {e}")
-                            continue
-                            
-                    # If common paths fail, inspect the model structure more deeply
-                    print(f"[DEBUG] Common paths failed, inspecting model structure...")
-                    if hasattr(model, 'language_model'):
-                        print(f"[DEBUG] language_model attrs: {[attr for attr in dir(model.language_model) if not attr.startswith('_')]}")
-                        if hasattr(model.language_model, 'model'):
-                            print(f"[DEBUG] language_model.model attrs: {[attr for attr in dir(model.language_model.model) if not attr.startswith('_')]}")
-                    if hasattr(model, 'model'):
-                        print(f"[DEBUG] model attrs: {[attr for attr in dir(model.model) if not attr.startswith('_')]}")
-                    if hasattr(model, 'text_model'):
-                        print(f"[DEBUG] text_model attrs: {[attr for attr in dir(model.text_model) if not attr.startswith('_')]}")
-                    if hasattr(model, 'transformer'):
-                        print(f"[DEBUG] transformer attrs: {[attr for attr in dir(model.transformer) if not attr.startswith('_')]}")
+                    # Gemma3ForConditionalGeneration (multimodal 4B model) - layers are at language_model.layers
+                    return "language_model.layers"
                 else:
-                    # Gemma3ForCausalLM (text-only 1B model) - should work with standard path
-                    try:
-                        getattr_recursive(model, "model.layers")
-                        print(f"[DEBUG] Gemma3ForCausalLM layers found at: model.layers")
-                        return "model.layers"
-                    except AttributeError:
-                        print(f"[DEBUG] model.layers failed for {model_class_name}")
-                
-                # If standard paths don't work, try common alternatives
-                print(f"[DEBUG] Trying common alternatives for {model_class_name}...")
-                alternatives = ["model.model.layers", "layers", "transformer.layers", "model.text_model.layers"]
-                for alt in alternatives:
-                    try:
-                        getattr_recursive(model, alt)
-                        print(f"[DEBUG] Gemma3 layers found at: {alt}")
-                        return alt
-                    except AttributeError:
-                        print(f"[DEBUG] Failed: {alt}")
-                        continue
-                        
-                # If none work, raise an informative error with model inspection
-                print(f"[DEBUG] All alternatives failed, inspecting model structure...")
-                model_attrs = [attr for attr in dir(model) if not attr.startswith('_')][:10]
-                if hasattr(model, 'model'):
-                    model_attrs.extend([f"model.{attr}" for attr in dir(model.model) if not attr.startswith('_')][:10])
-                if hasattr(model, 'language_model'):
-                    model_attrs.extend([f"language_model.{attr}" for attr in dir(model.language_model) if not attr.startswith('_')][:5])
-                raise ValueError(
-                    f"Could not find layers attribute for {model_class_name}. Model attributes: {model_attrs[:25]}"
-                )
+                    # Gemma3ForCausalLM (text-only 1B model) - layers are at standard model.layers
+                    return "model.layers"
             
             # Original logic for non-Gemma3 models
             for k in __KNOWN_DECODER_LAYERS_ATTR_NAMES:
