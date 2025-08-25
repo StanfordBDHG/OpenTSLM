@@ -193,15 +193,35 @@ class CurriculumTrainer:
             encoder_lr = lr_encoder if lr_encoder is not None else LR_ENCODER
             projector_lr = lr_projector if lr_projector is not None else LR_PROJECTOR
             
-            if self.rank == 0:
-                print(f"📊 Learning rates for {self.model_type}:")
-                print(f"   Encoder LR: {encoder_lr:.2e}")
-                print(f"   Projector LR: {projector_lr:.2e}")
-            
-            return AdamW([
+            param_groups = [
                 {"params": enc_params, "lr": encoder_lr, "weight_decay": WEIGHT_DECAY},
                 {"params": proj_params, "lr": projector_lr, "weight_decay": WEIGHT_DECAY},
-            ])
+            ]
+            
+            # Add LoRA parameters if enabled
+            if hasattr(model, 'lora_enabled') and model.lora_enabled:
+                lora_params = model.get_lora_parameters()
+                if lora_params:
+                    # Use projector LR for LoRA parameters (similar fine-tuning nature)
+                    param_groups.append({
+                        "params": lora_params, 
+                        "lr": projector_lr, 
+                        "weight_decay": WEIGHT_DECAY
+                    })
+                    if self.rank == 0:
+                        print(f"📊 Learning rates for {self.model_type} (with LoRA):")
+                        print(f"   Encoder LR: {encoder_lr:.2e}")
+                        print(f"   Projector LR: {projector_lr:.2e}")
+                        print(f"   LoRA LR: {projector_lr:.2e} ({len(lora_params)} parameters)")
+                else:
+                    raise RuntimeError("LoRA is enabled but no trainable LoRA parameters found. This indicates a LoRA configuration issue.")
+            else:
+                if self.rank == 0:
+                    print(f"📊 Learning rates for {self.model_type}:")
+                    print(f"   Encoder LR: {encoder_lr:.2e}")
+                    print(f"   Projector LR: {projector_lr:.2e}")
+            
+            return AdamW(param_groups)
         else:
             # For Flamingo, use grouped parameters
             params_to_optimize = model.named_parameters()
@@ -265,51 +285,6 @@ class CurriculumTrainer:
                 ),
             )
     
-    def _load_existing_loss_history(self, stage_name: str) -> Optional[Dict]:
-        """Load existing loss history when resuming training."""
-        loss_history_file = os.path.join(self.results_dir, stage_name, "results", "loss_history.json")
-        
-        if not os.path.exists(loss_history_file):
-            return None
-            
-        try:
-            with open(loss_history_file, "r") as f:
-                existing_history = json.load(f)
-            
-            # Validate required fields
-            required_fields = ["epochs", "train_losses", "val_losses"]
-            if not all(field in existing_history for field in required_fields):
-                if self.rank == 0:
-                    print(f"⚠️  Warning: Existing loss history file is corrupted, starting fresh")
-                return None
-                
-            if self.rank == 0:
-                print(f"📂 Loaded existing loss history with {len(existing_history['epochs'])} epochs")
-                
-            return existing_history
-            
-        except Exception as e:
-            if self.rank == 0:
-                print(f"⚠️  Warning: Failed to load existing loss history: {e}, starting fresh")
-            return None
-    
-    def _save_loss_history_continuous(self, stage_name: str, loss_history: Dict, current_best_val_loss: float, current_best_epoch: int):
-        """Save loss history continuously after each epoch."""
-        # Update current metadata
-        loss_history_copy = loss_history.copy()
-        loss_history_copy["best_val_loss"] = float(current_best_val_loss) if current_best_val_loss != float("inf") else None
-        loss_history_copy["best_epoch"] = int(current_best_epoch) if current_best_epoch is not None else None
-        loss_history_copy["total_epochs_trained"] = len(loss_history["epochs"])
-        loss_history_copy["last_updated"] = datetime.datetime.now().isoformat()
-        
-        loss_history_file = os.path.join(self.results_dir, stage_name, "results", "loss_history.json")
-        
-        try:
-            with open(loss_history_file, "w") as f:
-                json.dump(loss_history_copy, f, indent=2)
-        except Exception as e:
-            print(f"⚠️  Warning: Failed to save loss history: {e}")
-    
     def _save_checkpoint(self, stage: str, epoch: int, val_loss: float, optimizer, scheduler):
         """Save model checkpoint for a specific stage."""
         checkpoint_dir = os.path.join(self.results_dir, stage, "checkpoints")
@@ -330,6 +305,9 @@ class CurriculumTrainer:
                 "val_loss": val_loss,
                 "epoch": epoch,
             }
+            
+            # Add LoRA state to checkpoint
+            model.save_lora_state_to_checkpoint(checkpoint)
         else:
             # Handle DDP or single GPU case for EmbedHealthFlamingo
             model_state = model.state_dict()
@@ -359,6 +337,15 @@ class CurriculumTrainer:
             if self.model_type == "EmbedHealthSP":
                 model.encoder.load_state_dict(checkpoint["encoder_state"])
                 model.projector.load_state_dict(checkpoint["projector_state"])
+                
+                # Load LoRA state using the EmbedHealthSP method (allow missing for backward compatibility)
+                try:
+                    model.load_lora_state_from_checkpoint(checkpoint, allow_missing=True)
+                except RuntimeError as e:
+                    if self.rank == 0:
+                        print(f"❌ Failed to load LoRA state from checkpoint: {e}")
+                    raise
+                
                 optimizer.load_state_dict(checkpoint["optimizer_state"])
             else:
                 # Handle DDP or single GPU case for EmbedHealthFlamingo
@@ -425,6 +412,17 @@ class CurriculumTrainer:
             if self.model_type == "EmbedHealthSP":
                 model.encoder.load_state_dict(checkpoint["encoder_state"])
                 model.projector.load_state_dict(checkpoint["projector_state"])
+                
+                # Load LoRA state from previous stage (allow missing for stage transitions)
+                try:
+                    loaded_count = model.load_lora_state_from_checkpoint(checkpoint, allow_missing=True)
+                    if loaded_count > 0 and self.rank == 0:
+                        print(f"📥 Loaded LoRA adapters from previous stage: {loaded_count} parameters")
+                except RuntimeError as e:
+                    if self.rank == 0:
+                        print(f"❌ Failed to load LoRA state from previous stage: {e}")
+                    # For previous stage loading, we can be more tolerant of LoRA mismatches
+                    # as stages might have different LoRA configurations
             else:
                 # Handle EmbedHealthFlamingo with graceful loading
                 model_state = checkpoint["model_state"]
@@ -653,6 +651,9 @@ class CurriculumTrainer:
             
             return metrics
         
+        # Enable LoRA if needed for this stage
+        self._enable_lora_if_needed(stage_name)
+        
         # Initialize optimizer and scheduler
         optimizer = self._get_optimizer(batch_size, lr_encoder, lr_projector, lr_base)
         
@@ -722,29 +723,11 @@ class CurriculumTrainer:
             print(f"🆕 Starting fresh training for {stage_name}")
             best_val_loss = float("inf")  # Ensure proper initialization
         
-        # Initialize loss history tracking - try to load existing history if resuming
-        loss_history = self._load_existing_loss_history(stage_name)
-        if loss_history is None:
-            loss_history = {
-                "stage": stage_name,
-                "model_type": self.model_type,
-                "llm_id": self.llm_id,
-                "epochs": [],
-                "train_losses": [],
-                "val_losses": [],
-                "best_val_loss": None,
-                "best_epoch": None
-            }
-        
         # Skip training loop if eval_only is True
         if eval_only:
             if self.rank == 0:
                 print(f"⏭️  Skipping training loop (eval_only mode)")
                 print(f"📂 Using existing checkpoint for evaluation")
-                # Save minimal loss history for eval-only mode
-                if len(loss_history["epochs"]) == 0:  # No existing history
-                    loss_history["note"] = "eval_only_mode_no_training_performed"
-                    self._save_loss_history_continuous(stage_name, loss_history, best_val_loss, best_epoch)
             epoch = best_epoch
             epochs_no_improve = 0
         else:
@@ -812,15 +795,6 @@ class CurriculumTrainer:
                     tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}")
                     tqdm.write(f"Epoch {epoch} — best  loss: {best_val_loss:.4f}")
                 
-                # Record loss history (only on rank 0 to avoid duplication)
-                if self.rank == 0:
-                    loss_history["epochs"].append(epoch)
-                    loss_history["train_losses"].append(avg_train_loss)
-                    loss_history["val_losses"].append(avg_val_loss)
-                    
-                    # Save loss history continuously after each epoch
-                    self._save_loss_history_continuous(stage_name, loss_history, best_val_loss, best_epoch)
-                
                 # Early stopping - all ranks need to make the same decision
                 should_save = avg_val_loss + 1e-4 < best_val_loss
                 if dist.is_initialized():
@@ -871,13 +845,6 @@ class CurriculumTrainer:
                 print(f"   Total epochs run: {epoch}")
                 print(f"   Best validation loss: {best_val_loss:.4f}")
                 print(f"   Epochs without improvement: {epochs_no_improve}")
-        
-        # Final loss history summary (continuous saving was done during training)
-        if self.rank == 0 and len(loss_history["epochs"]) > 0:
-            loss_history_file = os.path.join(self.results_dir, stage_name, "results", "loss_history.json")
-            print(f"📈 Loss history tracking completed: {loss_history_file}")
-            print(f"   Recorded {len(loss_history['epochs'])} epochs of training")
-            print(f"   Best validation loss: {best_val_loss:.4f} at epoch {best_epoch}")
         
         metrics = self._evaluate_stage(stage_name, test_loader, stage_name, metric_func, best_epoch)
         
@@ -1131,6 +1098,43 @@ class CurriculumTrainer:
         """Check if a checkpoint exists for a specific stage."""
         checkpoint_path = os.path.join(self.results_dir, stage, "checkpoints", "best_model.pt")
         return os.path.exists(checkpoint_path)
+    
+    def _enable_lora_if_needed(self, stage_name: str):
+        """Enable LoRA for EmbedHealthSP models in stages after stage2."""
+        if self.model_type != "EmbedHealthSP":
+            return  # LoRA only for EmbedHealthSP
+        
+        # Get the underlying model (handles DDP wrapping)
+        model = self._get_model()
+        
+        # Enable LoRA for stages after stage2_captioning
+        stages_with_lora = ["stage3_cot", "stage4_sleep_cot"]
+        
+        if stage_name in stages_with_lora:
+            if not getattr(model, 'lora_enabled', False):
+                if self.rank == 0:
+                    print(f"🔧 Enabling LoRA for {stage_name}")
+                try:
+                    model.enable_lora(
+                        lora_r=16,
+                        lora_alpha=32,
+                        lora_dropout=0.1
+                    )
+                    if self.rank == 0:
+                        print(f"✅ LoRA enabled for {stage_name}")
+                except Exception as e:
+                    if self.rank == 0:
+                        print(f"❌ Failed to enable LoRA for {stage_name}: {e}")
+                        print("   Continuing without LoRA...")
+            else:
+                if self.rank == 0:
+                    print(f"✅ LoRA already enabled for {stage_name}")
+        else:
+            if self.rank == 0:
+                if stage_name in ["stage1_mcq", "stage2_captioning"]:
+                    print(f"ℹ️  LoRA disabled for {stage_name} (only enabled for stages 3+)")
+                else:
+                    print(f"ℹ️  LoRA not configured for {stage_name}")
 
 
 def main():
