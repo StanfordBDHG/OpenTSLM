@@ -77,12 +77,40 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 "mpt": "transformer.blocks",
                 "mosaicgpt": "transformer.blocks",
                 "gemma": "model.layers",
+                "gemma2": "model.layers",
+                "gemma3": "model.layers",
                 "medgemma": "model.layers",
             }
 
             for k in __KNOWN_DECODER_LAYERS_ATTR_NAMES:
                 if k.lower() in model.__class__.__name__.lower():
-                    return __KNOWN_DECODER_LAYERS_ATTR_NAMES[k]
+                    attr_name = __KNOWN_DECODER_LAYERS_ATTR_NAMES[k]
+                    
+                    # Special handling for Gemma3: inspect the actual model structure
+                    if k.lower() == "gemma3":
+                        # Check if the model has the expected structure
+                        from src.open_flamingo.open_flamingo.src.utils import getattr_recursive
+                        try:
+                            getattr_recursive(model, attr_name)
+                        except AttributeError:
+                            # Gemma3 might have different structure, try common alternatives
+                            alternatives = ["model.model.layers", "layers", "transformer.layers"]
+                            for alt in alternatives:
+                                try:
+                                    getattr_recursive(model, alt)
+                                    print(f"[DEBUG] Gemma3 layers found at: {alt}")
+                                    return alt
+                                except AttributeError:
+                                    continue
+                            # If none work, raise an informative error
+                            model_attrs = [attr for attr in dir(model) if not attr.startswith('_')]
+                            if hasattr(model, 'model'):
+                                model_attrs.extend([f"model.{attr}" for attr in dir(model.model) if not attr.startswith('_')][:10])
+                            raise ValueError(
+                                f"Could not find layers attribute for Gemma3. Model attributes: {model_attrs[:20]}"
+                            )
+                    
+                    return attr_name
 
             raise ValueError(
                 f"We require the attribute name for the nn.ModuleList in the decoder storing the transformer block layers. Please supply this string manually."
