@@ -1,5 +1,6 @@
 import re
 import sys
+import argparse
 from typing import Dict, Any
 
 from common_evaluator import CommonEvaluator
@@ -41,14 +42,14 @@ def evaluate_pamap_acc(ground_truth: str, prediction: str) -> Dict[str, Any]:
 
 def main():
     """Main function to run PAMAP evaluation."""
-    if len(sys.argv) != 2:
-        print("Usage: python evaluate_pamap.py <model_name>")
-        print("Example: python evaluate_pamap.py meta-llama/Llama-3.2-1B")
-        sys.exit(1)
-    
-    USE_PLOTS = True
-    model_name = sys.argv[1]
-    
+    parser = argparse.ArgumentParser(description="Evaluate models on PAMAP2 Acc QA")
+    parser.add_argument("model_name", help="Model name, e.g., meta-llama/Llama-3.2-1B")
+    parser.add_argument("--plot", action="store_true", help="Enable plotting and image-text evaluation")
+    args = parser.parse_args()
+
+    model_name = args.model_name
+    use_plots = args.plot
+
     dataset_classes = [PAMAP2AccQADataset]
     evaluation_functions = {
         "PAMAP2AccQADataset": evaluate_pamap_acc,
@@ -59,8 +60,8 @@ def main():
         dataset_classes=dataset_classes,
         evaluation_functions=evaluation_functions,
         max_samples=None,  # Limit for faster testing, set to None for full evaluation,
+        use_plot=use_plots,
         max_new_tokens=400,
-        task="image-text-to-text" if USE_PLOTS else "text-generation",
     )
     print("\n" + "="*80)
     print("FINAL RESULTS SUMMARY")
@@ -69,4 +70,4 @@ def main():
     return results_df
 
 if __name__ == "__main__":
-    main() 
+    main()

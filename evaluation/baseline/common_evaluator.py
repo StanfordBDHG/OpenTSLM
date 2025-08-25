@@ -146,6 +146,10 @@ class CommonEvaluator:
         print(f"Starting evaluation with model {model_name} on dataset {dataset_class.__name__}")
         print("=" * 60)
         
+        # Decide pipeline task internally if not set
+        if 'task' not in pipeline_kwargs or not pipeline_kwargs.get('task'):
+            pipeline_kwargs['task'] = "image-text-to-text" if use_plot else "text-generation"
+
         # Load model
         pipe = self.load_model(model_name, **pipeline_kwargs)
         
@@ -385,6 +389,7 @@ class CommonEvaluator:
         dataset_classes: List[Type[Dataset]],
         evaluation_functions: Dict[str, Callable[[str, str], Dict[str, Any]]],
         max_samples: Optional[int] = None,
+        use_plot: bool = False,
         **pipeline_kwargs
     ) -> pd.DataFrame:
         """
@@ -449,7 +454,7 @@ class CommonEvaluator:
                         dataset_class=dataset_class,
                         evaluation_function=evaluation_function,
                         max_samples=max_samples,
-                        use_plot=True,
+                        use_plot=use_plot,
                         **pipeline_kwargs
                     )
                     
