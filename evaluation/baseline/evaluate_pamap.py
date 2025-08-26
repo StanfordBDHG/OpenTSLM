@@ -4,6 +4,7 @@ import argparse
 from typing import Dict, Any
 
 from common_evaluator import CommonEvaluator
+from common_evaluator_plot import CommonEvaluatorPlot
 from time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
 
 
@@ -48,19 +49,17 @@ def main():
     args = parser.parse_args()
 
     model_name = args.model_name
-    use_plots = args.plot
 
     dataset_classes = [PAMAP2AccQADataset]
     evaluation_functions = {
         "PAMAP2AccQADataset": evaluate_pamap_acc,
     }
-    evaluator = CommonEvaluator()
+    evaluator = CommonEvaluatorPlot() if args.plot else CommonEvaluator()
     results_df = evaluator.evaluate_multiple_models(
         model_names=[model_name],
         dataset_classes=dataset_classes,
         evaluation_functions=evaluation_functions,
         max_samples=None,  # Limit for faster testing, set to None for full evaluation,
-        use_plot=use_plots,
         max_new_tokens=400,
     )
     print("\n" + "="*80)

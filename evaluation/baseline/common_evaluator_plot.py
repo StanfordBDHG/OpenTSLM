@@ -13,7 +13,9 @@ import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers.pipelines import pipeline
+import matplotlib.pyplot as plt
 from time import sleep
+from PIL import Image
 
 # Add src to path
 sys.path.insert(
@@ -23,9 +25,9 @@ sys.path.insert(
 # Import OpenAIPipeline
 from openai_pipeline import OpenAIPipeline
 
-class CommonEvaluator:
+class CommonEvaluatorPlot:
     """
-    A common evaluation framework for testing LLMs on time series datasets.
+    A common evaluation framework for testing LLMs on time series datasets with plot generation.
     """
     
     def __init__(self, device: Optional[str] = None):
@@ -47,8 +49,8 @@ class CommonEvaluator:
         """Get the best available device."""
         if torch.cuda.is_available():
             return "cuda"
-        elif torch.backends.mps.is_available():
-            return "mps"
+        # elif torch.backends.mps.is_available():
+        #     return "mps"
         else:
             return "cpu"
     
@@ -125,6 +127,7 @@ class CommonEvaluator:
         dataset_class: Type[Dataset],
         evaluation_function: Callable[[str, str], Dict[str, Any]],
         max_samples: Optional[int] = None,
+        use_plot: bool = False,
         **pipeline_kwargs
     ) -> Dict[str, Any]:
         """
@@ -143,6 +146,10 @@ class CommonEvaluator:
         print(f"Starting evaluation with model {model_name} on dataset {dataset_class.__name__}")
         print("=" * 60)
         
+        # Decide pipeline task internally if not set
+        if 'task' not in pipeline_kwargs or not pipeline_kwargs.get('task'):
+            pipeline_kwargs['task'] = "image-text-to-text" if use_plot else "text-generation"
+
         # Load model
         pipe = self.load_model(model_name, **pipeline_kwargs)
         
@@ -174,6 +181,13 @@ class CommonEvaluator:
         for idx in tqdm(range(dataset_size), desc="Processing samples"):
             try:
                 sample = dataset[idx]
+                plot_data = None
+
+                # Clean up prompt for TSQADataset (if needed)
+                if use_plot and hasattr(sample, 'get') and sample.get('prompt'):
+                    plot_data = self.get_plot_from_prompt(sample["prompt"])
+                    pattern = r'The following is the accelerometer data on the [xyz]-axis\n([\-0-9, ]+)'
+                    sample["prompt"] = re.sub(pattern, '', sample["prompt"])
 
                 # Clean up prompt for TSQADataset (if needed)
                 if hasattr(sample, 'get') and sample.get('prompt'):
@@ -186,11 +200,40 @@ class CommonEvaluator:
                 target_answer = sample["answer"]
                 
                 # Generate prediction
-                outputs = pipe(
-                    input_text,
-                    max_new_tokens=max_new_tokens,
-                    return_full_text=False,
-                )
+                if isinstance(pipe, OpenAIPipeline):
+                    outputs = pipe(
+                        input_text,
+                        max_new_tokens=max_new_tokens,
+                        return_full_text=False,
+                        plot_data=plot_data,
+                    )
+                else: # For Hugging Face pipelines, convert plot_data (base64) to PIL and pass via images
+                    task = getattr(pipe, "task", None)
+                    if plot_data and task in ("image-to-text", "image-text-to-text"):
+                        try:
+                            img_bytes = base64.b64decode(plot_data)
+                            img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+
+                            messages = [
+                                {"role": "user", "content": [
+                                    {"type": "image", "image": img}, 
+                                    {"type": "text", "text": input_text}
+                                ]}
+                            ]
+                            outputs = pipe(
+                                text=messages,
+                                max_new_tokens=max_new_tokens,
+                                return_full_text=False,
+                            )
+                        except Exception as e:
+                            raise RuntimeError(f"Failed to decode plot image: {e}")
+
+                    else:
+                        outputs = pipe(
+                            input_text,
+                            max_new_tokens=max_new_tokens,
+                            return_full_text=False,
+                        )
                 
                 # Extract generated text
                 if outputs and len(outputs) > 0:
@@ -346,6 +389,7 @@ class CommonEvaluator:
         dataset_classes: List[Type[Dataset]],
         evaluation_functions: Dict[str, Callable[[str, str], Dict[str, Any]]],
         max_samples: Optional[int] = None,
+        use_plot: bool = False,
         **pipeline_kwargs
     ) -> pd.DataFrame:
         """
@@ -410,6 +454,7 @@ class CommonEvaluator:
                         dataset_class=dataset_class,
                         evaluation_function=evaluation_function,
                         max_samples=max_samples,
+                        use_plot=use_plot,
                         **pipeline_kwargs
                     )
                     
@@ -462,3 +507,46 @@ class CommonEvaluator:
         
         print(f"\nFinal results saved to: {df_filename}")
         return final_df 
+
+    def get_plot_from_prompt(self, prompt: str):
+        """
+        Parse time series data from the prompt and return a base64 image.
+        """
+        # Parse the time series data from the prompt
+        time_series_data = []
+        
+        # Extract data for each axis using regex
+        axes = ['x-axis', 'y-axis', 'z-axis']
+        for axis in axes:
+            pattern = f"accelerometer data on the {axis}\\n([\\-0-9, ]+)"
+            match = re.search(pattern, prompt.lower())
+            if match:
+                # Extract the data and convert to a list of integers
+                data_str = match.group(1).strip()
+                data_str = data_str.replace(' ', '')
+                data = [int(val.strip()) for val in data_str.split(',') if val.strip()]
+                time_series_data.append(data)
+        
+        # Create the plot
+        num_series = len(time_series_data)
+        fig, axes = plt.subplots(num_series, 1, figsize=(10, 4 * num_series), sharex=True)        
+        # If there's only one series, axes won't be an array
+        if num_series == 1:
+            axes = [axes]
+        
+        # Plot each time series in its own subplot
+        axis_names = {0: 'X-axis', 1: 'Y-axis', 2: 'Z-axis'}
+        for i, series in enumerate(time_series_data):
+            axes[i].plot(series, marker='o', linestyle='-', markersize=0)
+            axes[i].grid(True, alpha=0.3)
+            axes[i].set_title(f"Accelerometer - {axis_names.get(i)}")
+        
+        plt.tight_layout()
+
+        # Convert plot to base64 image
+        img_buffer = io.BytesIO()
+        plt.savefig(img_buffer, format='png', bbox_inches='tight', dpi=100)
+        plt.close()
+        img_buffer.seek(0)
+        image_data = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+        return image_data
