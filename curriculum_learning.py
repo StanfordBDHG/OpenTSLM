@@ -329,7 +329,7 @@ class CurriculumTrainer:
         checkpoint_path = os.path.join(self.results_dir, stage, "checkpoints", "best_model.pt")
         
         if os.path.exists(checkpoint_path):
-            checkpoint = torch.load(checkpoint_path, map_location=self.device)
+            checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
             
             # Get the underlying model (handles DDP wrapping)
             model = self._get_model()
@@ -406,7 +406,7 @@ class CurriculumTrainer:
                         print(f"⚠️  Skipping previous stage {previous_stage} because checkpoint not found: {checkpoint_path}")
                     return None
                 raise RuntimeError(f"Previous stage {previous_stage} checkpoint not found: {checkpoint_path}")
-            checkpoint = torch.load(checkpoint_path, map_location=self.device)
+            checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
             # Get the underlying model (handles DDP wrapping)
             model = self._get_model()
             if self.model_type == "EmbedHealthSP":

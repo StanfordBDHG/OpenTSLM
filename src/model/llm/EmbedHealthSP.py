@@ -339,7 +339,7 @@ class EmbedHealthSP(TimeSeriesLLM):
         torch.save(checkpoint, path)
 
     def load_from_file(self, path: str):
-        ckpt = torch.load(path, map_location=self.device)
+        ckpt = torch.load(path, map_location=self.device, weights_only=False)
         self.encoder.load_state_dict(ckpt["encoder_state"])
         self.projector.load_state_dict(ckpt["projector_state"])
         
