@@ -136,7 +136,7 @@ def parse_sleep_cot_jsonl(input_file, output_file=None):
         if f1_stats['class_f1_scores']:
             print(f"\nPer-Class F1 Scores:")
             for class_name, scores in f1_stats['class_f1_scores'].items():
-                print(f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
+                #print(f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
                 pass
         
         with open(output_file, 'w', encoding='utf-8') as f:
@@ -201,15 +201,15 @@ def extract_answer(text):
         return text
     
     answer = text.split("Answer: ")[-1].strip()
-    # Remove any end-of-text tokens
-    answer = re.sub(r'<\|.*?\|>$', '', answer).strip()
+    # Remove any end-of-text tokens (including <eos> and <|...|>)
+    answer = re.sub(r'<\|.*?\|>|<eos>$', '', answer).strip()
     # Remove trailing periods and normalize
     answer = re.sub(r'\.$', '', answer).strip()
     return answer
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = current_dir / "llama_sp_predictions.jsonl"
-    clean_output = current_dir / "llama_sp_predictions.clean.jsonl"
+    input_file = current_dir / "gemma_sp_predictions.jsonl"
+    clean_output = current_dir / "gemma_sp_predictions.clean.jsonl"
     
     parse_sleep_cot_jsonl(input_file, clean_output)
