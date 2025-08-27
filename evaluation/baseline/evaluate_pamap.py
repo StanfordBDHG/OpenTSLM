@@ -62,7 +62,6 @@ def main():
         dataset_classes=dataset_classes,
         evaluation_functions=evaluation_functions,
         max_samples=None,  # Limit for faster testing, set to None for full evaluation,
-        use_plot=args.plot,
         max_new_tokens=400,
     )
     print("\n" + "="*80)
