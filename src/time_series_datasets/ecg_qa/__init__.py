@@ -20,6 +20,7 @@ Usage:
 """
 
 from .ECGQADataset import ECGQADataset
+from .ECGQACoTQADataset import ECGQACoTQADataset
 from .ecgqa_loader import (
     load_ecg_qa_ptbxl_splits,
     load_ecg_qa_answers,
@@ -28,13 +29,22 @@ from .ecgqa_loader import (
     does_ecg_qa_exist,
     does_ptbxl_exist
 )
+from .ecgqa_cot_loader import (
+    load_ecg_qa_cot_splits,
+    download_ecg_qa_cot_if_not_exists,
+    does_ecg_qa_cot_exist
+)
 
 __all__ = [
     "ECGQADataset",
+    "ECGQACoTQADataset",
     "load_ecg_qa_ptbxl_splits", 
     "load_ecg_qa_answers",
     "download_ecg_qa_if_not_exists",
     "download_ptbxl_if_not_exists",
     "does_ecg_qa_exist",
-    "does_ptbxl_exist"
+    "does_ptbxl_exist",
+    "load_ecg_qa_cot_splits",
+    "download_ecg_qa_cot_if_not_exists",
+    "does_ecg_qa_cot_exist"
 ] 
