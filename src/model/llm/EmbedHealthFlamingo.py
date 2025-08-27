@@ -33,7 +33,6 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         cross_attn_every_n_layers: int = 1,
         decoder_layers_attr_name: str = None,
         freeze_lm_embeddings: bool = False,
-        mean_resizing: bool = False,
         **flamingo_kwargs,
     ):
         super().__init__(device)
@@ -48,10 +47,6 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             cache_dir=None,
         )
 
-        # Prefer left padding only for Gemma-family models
-        if "gemma" in llm_id.lower():
-            if getattr(text_tokenizer, "padding_side", None) != "left":
-                text_tokenizer.padding_side = "left"
 
         lang_encoder = AutoModelForCausalLM.from_pretrained(
             llm_id,
@@ -62,6 +57,13 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             attn_implementation='eager'
         )
 
+        # If Gemma multimodal (ConditionalGeneration), unwrap to text-only language model
+        # so we don't stack Flamingo vision on top of an existing vision stack.
+        if "gemma" in llm_id.lower():
+            class_name_lower = lang_encoder.__class__.__name__.lower()
+            if "conditionalgeneration" in class_name_lower and hasattr(lang_encoder, "language_model"):
+                lang_encoder = lang_encoder.language_model
+
         # add Flamingo special tokens to the tokenizer
         text_tokenizer.add_special_tokens(
             {"additional_special_tokens": ["<|endofchunk|>", "<image>"]}
@@ -69,9 +71,11 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         if text_tokenizer.pad_token is None:
             text_tokenizer.add_special_tokens({"pad_token": "<PAD>"})
             text_tokenizer.pad_token = "<PAD>"
-        # Ensure model has pad_token_id set for generation
-        if getattr(lang_encoder.config, "pad_token_id", None) is None and getattr(text_tokenizer, "pad_token_id", None) is not None:
-            lang_encoder.config.pad_token_id = text_tokenizer.pad_token_id
+        # Ensure model has pad_token_id set for generation (scope to Gemma only)
+        if "gemma" in llm_id.lower():
+            if getattr(lang_encoder.config, "pad_token_id", None) is None and getattr(text_tokenizer, "pad_token_id", None) is not None:
+                lang_encoder.config.pad_token_id = text_tokenizer.pad_token_id
+                print(f"Gemma model, setting pad_token_id to {text_tokenizer.pad_token_id}")
 
         # convert LM to FlamingoLM
         extend_instance(lang_encoder, FlamingoLMMixin)
@@ -113,14 +117,8 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
 
         decoder_layers_attr_name = _infer_decoder_layers_attr_name(lang_encoder)
         lang_encoder.set_decoder_layers_attr_name(decoder_layers_attr_name)
-        # Resize embeddings after adding tokens. For Gemma, allow optional mean_resizing.
-        if "gemma" in llm_id.lower() and mean_resizing:
-            try:
-                lang_encoder.resize_token_embeddings(len(text_tokenizer), mean_resizing=True)
-            except TypeError:
-                lang_encoder.resize_token_embeddings(len(text_tokenizer))
-        else:
-            lang_encoder.resize_token_embeddings(len(text_tokenizer))
+        # Resize embeddings after adding tokens (no mean_resizing changes to preserve behavior)
+        lang_encoder.resize_token_embeddings(len(text_tokenizer))
 
         # Fix compatibility for Gemma3Config which has hidden_size in text_config
         if hasattr(lang_encoder.config, "text_config") and hasattr(lang_encoder.config.text_config, "hidden_size"):
@@ -259,10 +257,6 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                     batch, include_labels=True
                 )
             
-                # For Gemma-family models, default to greedy unless caller specifies sampling
-                if "gemma" in getattr(self, "llm_id", "").lower() and "do_sample" not in generate_kwargs:
-                    generate_kwargs["do_sample"] = False
-
                 gen_ids = self.llm.generate(
                     vision_x=images,
                     lang_x=input_ids,
