@@ -102,9 +102,11 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 if "ConditionalGeneration" in model_class_name:
                     # Gemma3ForConditionalGeneration (multimodal 4B model) - layers are at language_model.layers
                     return "language_model.layers"
-                else:
-                    # Gemma3ForCausalLM (text-only 1B model) - layers are at standard model.layers
-                    return "model.layers"
+                # Unwrapped text submodule typically exposes layers directly
+                if "TextModel" in model_class_name and hasattr(model, "layers"):
+                    return "layers"
+                # Gemma3ForCausalLM (text-only 1B model) - layers are at standard model.layers
+                return "model.layers"
             
             # Original logic for non-Gemma3 models
             for k in __KNOWN_DECODER_LAYERS_ATTR_NAMES:
