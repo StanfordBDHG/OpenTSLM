@@ -67,7 +67,7 @@ class CommonEvaluatorPlot:
         print(f"Using device: {self.device}")
         # Default pipeline arguments
         default_kwargs = {
-            "task": "text-generation",
+            "task": "image-text-to-text",
             "device": self.device,
             "temperature": 0.1,
         }
@@ -85,25 +85,7 @@ class CommonEvaluatorPlot:
         """
         print(f"Loading dataset: {dataset_class.__name__}")
         
-        # Import the gruver formatters
-        from gruver_llmtime_tokenizer import gpt_formatter, llama_formatter
-
-        # Choose formatter based on model type
-        model_name = getattr(self, 'current_model_name', None)
-        if model_name is None and 'model_name' in dataset_kwargs:
-            model_name = dataset_kwargs['model_name']
-        if model_name is not None:
-            if model_name.startswith("openai-") or "gpt" in model_name.lower():
-                formatter = gpt_formatter
-                print(f"Using GPT formatter for model: {model_name}")
-            elif "llama" in model_name.lower():
-                formatter = llama_formatter
-                print(f"Using Llama formatter for model: {model_name}")
-            else:
-                print("Defaulting to Llama formatter for model: {model_name}")
-                formatter = llama_formatter
-        else:
-            formatter = llama_formatter
+        formatter = None
 
         # Default dataset arguments
         default_kwargs = {
@@ -127,7 +109,6 @@ class CommonEvaluatorPlot:
         dataset_class: Type[Dataset],
         evaluation_function: Callable[[str, str], Dict[str, Any]],
         max_samples: Optional[int] = None,
-        use_plot: bool = False,
         **pipeline_kwargs
     ) -> Dict[str, Any]:
         """
@@ -145,16 +126,13 @@ class CommonEvaluatorPlot:
         """
         print(f"Starting evaluation with model {model_name} on dataset {dataset_class.__name__}")
         print("=" * 60)
-        
-        # Decide pipeline task internally if not set
-        if 'task' not in pipeline_kwargs or not pipeline_kwargs.get('task'):
-            pipeline_kwargs['task'] = "image-text-to-text" if use_plot else "text-generation"
+
 
         # Load model
         pipe = self.load_model(model_name, **pipeline_kwargs)
         
         # Load dataset
-        dataset = self.load_dataset(dataset_class)
+        dataset = self.load_dataset(dataset_class, format_sample_str=False)
         
         # Limit samples if specified
         if max_samples is not None:
@@ -177,26 +155,26 @@ class CommonEvaluatorPlot:
         # Get max_new_tokens for generation (default 1000)
         max_new_tokens = pipeline_kwargs.pop('max_new_tokens', 1000)
         
-        # Process each sample
         for idx in tqdm(range(dataset_size), desc="Processing samples"):
             try:
                 sample = dataset[idx]
                 plot_data = None
 
-                # Clean up prompt for TSQADataset (if needed)
-                if use_plot and hasattr(sample, 'get') and sample.get('prompt'):
-                    plot_data = self.get_plot_from_prompt(sample["prompt"])
-                    pattern = r'The following is the accelerometer data on the [xyz]-axis\n([\-0-9, ]+)'
-                    sample["prompt"] = re.sub(pattern, '', sample["prompt"])
+                if isinstance(sample, dict) and 'time_series' in sample:
+                    plot_data = self.get_plot_from_timeseries(sample["time_series"])
 
-                # Clean up prompt for TSQADataset (if needed)
-                if hasattr(sample, 'get') and sample.get('prompt'):
-                    pattern = r"This is the time series, it has mean (-?\d+\.\d{4}) and std (-?\d+\.\d{4})\."
-                    replacement = "This is the time series:"
-                    sample["prompt"] = re.sub(pattern, replacement, sample["prompt"])
-                
-                # Create input text
-                input_text = sample["prompt"]
+                input_text = """
+You are given accelerometer data in all three dimensions. Your task is to classify the activity based on analysis of the data.
+Instructions:
+- Begin by analyzing the time series without assuming a specific label.
+- Think step-by-step about what the observed patterns suggest regarding movement intensity and behavior.
+- Write your rationale as a single, natural paragraph — do not use bullet points, numbered steps, or section headings.
+- Do **not** mention any class label until the final sentence.
+The following activities (class labels) are possible: lying, sitting, standing, walking, running, cycling, nordic walking, watching TV, computer work, car driving, ascending stairs, descending stairs, vacuum cleaning, ironing, folding laundry, house cleaning, playing soccer, rope jumping
+
+- You MUST end your response with "Answer: <class label>"
+"""
+
                 target_answer = sample["answer"]
                 
                 # Generate prediction
@@ -208,32 +186,24 @@ class CommonEvaluatorPlot:
                         plot_data=plot_data,
                     )
                 else: # For Hugging Face pipelines, convert plot_data (base64) to PIL and pass via images
-                    task = getattr(pipe, "task", None)
-                    if plot_data and task in ("image-to-text", "image-text-to-text"):
-                        try:
-                            img_bytes = base64.b64decode(plot_data)
-                            img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+                    try:
+                        img_bytes = base64.b64decode(plot_data)
+                        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
 
-                            messages = [
-                                {"role": "user", "content": [
-                                    {"type": "image", "image": img}, 
-                                    {"type": "text", "text": input_text}
-                                ]}
-                            ]
-                            outputs = pipe(
-                                text=messages,
-                                max_new_tokens=max_new_tokens,
-                                return_full_text=False,
-                            )
-                        except Exception as e:
-                            raise RuntimeError(f"Failed to decode plot image: {e}")
-
-                    else:
+                        messages = [
+                            {"role": "user", "content": [
+                                {"type": "image", "image": img}, 
+                                {"type": "text", "text": input_text}
+                            ]}
+                        ]
                         outputs = pipe(
-                            input_text,
+                            text=messages,
                             max_new_tokens=max_new_tokens,
                             return_full_text=False,
                         )
+                    except Exception as e:
+                        raise RuntimeError(f"Failed to decode plot image: {e}")
+
                 
                 # Extract generated text
                 if outputs and len(outputs) > 0:
@@ -389,7 +359,6 @@ class CommonEvaluatorPlot:
         dataset_classes: List[Type[Dataset]],
         evaluation_functions: Dict[str, Callable[[str, str], Dict[str, Any]]],
         max_samples: Optional[int] = None,
-        use_plot: bool = False,
         **pipeline_kwargs
     ) -> pd.DataFrame:
         """
@@ -454,7 +423,6 @@ class CommonEvaluatorPlot:
                         dataset_class=dataset_class,
                         evaluation_function=evaluation_function,
                         max_samples=max_samples,
-                        use_plot=use_plot,
                         **pipeline_kwargs
                     )
                     
@@ -508,39 +476,28 @@ class CommonEvaluatorPlot:
         print(f"\nFinal results saved to: {df_filename}")
         return final_df 
 
-    def get_plot_from_prompt(self, prompt: str):
+    def get_plot_from_timeseries(self, time_series):
         """
-        Parse time series data from the prompt and return a base64 image.
+        Create a base64 PNG plot from a list/tuple of 1D numpy arrays (e.g., [x, y, z]).
         """
-        # Parse the time series data from the prompt
-        time_series_data = []
-        
-        # Extract data for each axis using regex
-        axes = ['x-axis', 'y-axis', 'z-axis']
-        for axis in axes:
-            pattern = f"accelerometer data on the {axis}\\n([\\-0-9, ]+)"
-            match = re.search(pattern, prompt.lower())
-            if match:
-                # Extract the data and convert to a list of integers
-                data_str = match.group(1).strip()
-                data_str = data_str.replace(' ', '')
-                data = [int(val.strip()) for val in data_str.split(',') if val.strip()]
-                time_series_data.append(data)
-        
+        # Normalize input to a list of 1D arrays
+        if time_series is None:
+            return None
+        ts_list = list(time_series)
+
         # Create the plot
-        num_series = len(time_series_data)
-        fig, axes = plt.subplots(num_series, 1, figsize=(10, 4 * num_series), sharex=True)        
-        # If there's only one series, axes won't be an array
+        num_series = len(ts_list)
+        fig, axes = plt.subplots(num_series, 1, figsize=(10, 4 * num_series), sharex=True)
         if num_series == 1:
             axes = [axes]
-        
+
         # Plot each time series in its own subplot
         axis_names = {0: 'X-axis', 1: 'Y-axis', 2: 'Z-axis'}
-        for i, series in enumerate(time_series_data):
+        for i, series in enumerate(ts_list):
             axes[i].plot(series, marker='o', linestyle='-', markersize=0)
             axes[i].grid(True, alpha=0.3)
-            axes[i].set_title(f"Accelerometer - {axis_names.get(i)}")
-        
+            axes[i].set_title(f"Accelerometer - {axis_names.get(i, f'Axis {i+1}')}" )
+
         plt.tight_layout()
 
         # Convert plot to base64 image
