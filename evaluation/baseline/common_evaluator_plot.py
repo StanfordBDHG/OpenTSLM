@@ -144,7 +144,7 @@ Instructions:
 - Think step-by-step about what the observed patterns suggest regarding movement intensity and behavior.
 - Write your rationale as a single, natural paragraph — do not use bullet points, numbered steps, or section headings.
 - Do **not** mention any class label until the final sentence.
-The following activities (class labels) are possible: lying, sitting, standing, walking, ascending stairs, descending stairs, running, cycling, nordic walking, ironing, vacuum cleaning, rope jumping,
+The following activities (class labels) are possible: lying, sitting, standing, walking, ascending stairs, descending stairs, running, cycling, nordic walking, ironing, vacuum cleaning, rope jumping
 
 - You MUST end your response with "Answer: <class label>"
 """
