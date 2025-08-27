@@ -1060,7 +1060,7 @@ class CurriculumTrainer:
         """
         return self._train_stage(
             stage_name="stage1_mcq",
-            dataset_class=TSQADataset,
+            dataset_classes=[TSQADataset],
             num_epochs=30,
             lr_encoder=2e-4,
             lr_projector=1e-4,
@@ -1085,7 +1085,7 @@ class CurriculumTrainer:
         """
         return self._train_stage(
             stage_name="stage2_captioning",
-            dataset_class=[M4QADataset],
+            dataset_classes=[M4QADataset],
             num_epochs=60,
             lr_encoder=2e-4,
             lr_projector=1e-4,
@@ -1110,7 +1110,7 @@ class CurriculumTrainer:
 
         return self._train_stage(
             stage_name="stage3_cot",
-            dataset_class=[HARCoTQADataset, SleepEDFCoTQADataset, ECGQACoTQADataset],
+            dataset_classes=[HARCoTQADataset, SleepEDFCoTQADataset, ECGQACoTQADataset],
             num_epochs=25,
             lr_encoder=2e-4,
             lr_projector=1e-4,
