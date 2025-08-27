@@ -8,8 +8,8 @@ import argparse
 from typing import List, Optional, Dict, Any, Callable
 from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.m4.M4QADataset import M4QADataset
-from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
@@ -50,7 +50,6 @@ from model_config import (
     WARMUP_FRAC,
     WEIGHT_DECAY,
 )
-from time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSampler
 
 
 # Global stage configuration - users can modify this to mix and match stages
@@ -194,15 +193,35 @@ class CurriculumTrainer:
             encoder_lr = lr_encoder if lr_encoder is not None else LR_ENCODER
             projector_lr = lr_projector if lr_projector is not None else LR_PROJECTOR
             
-            if self.rank == 0:
-                print(f"📊 Learning rates for {self.model_type}:")
-                print(f"   Encoder LR: {encoder_lr:.2e}")
-                print(f"   Projector LR: {projector_lr:.2e}")
-            
-            return AdamW([
+            param_groups = [
                 {"params": enc_params, "lr": encoder_lr, "weight_decay": WEIGHT_DECAY},
                 {"params": proj_params, "lr": projector_lr, "weight_decay": WEIGHT_DECAY},
-            ])
+            ]
+            
+            # Add LoRA parameters if enabled
+            if hasattr(model, 'lora_enabled') and model.lora_enabled:
+                lora_params = model.get_lora_parameters()
+                if lora_params:
+                    # Use projector LR for LoRA parameters (similar fine-tuning nature)
+                    param_groups.append({
+                        "params": lora_params, 
+                        "lr": projector_lr, 
+                        "weight_decay": WEIGHT_DECAY
+                    })
+                    if self.rank == 0:
+                        print(f"📊 Learning rates for {self.model_type} (with LoRA):")
+                        print(f"   Encoder LR: {encoder_lr:.2e}")
+                        print(f"   Projector LR: {projector_lr:.2e}")
+                        print(f"   LoRA LR: {projector_lr:.2e} ({len(lora_params)} parameters)")
+                else:
+                    raise RuntimeError("LoRA is enabled but no trainable LoRA parameters found. This indicates a LoRA configuration issue.")
+            else:
+                if self.rank == 0:
+                    print(f"📊 Learning rates for {self.model_type}:")
+                    print(f"   Encoder LR: {encoder_lr:.2e}")
+                    print(f"   Projector LR: {projector_lr:.2e}")
+            
+            return AdamW(param_groups)
         else:
             # For Flamingo, use grouped parameters
             params_to_optimize = model.named_parameters()
@@ -240,18 +259,6 @@ class CurriculumTrainer:
         """Create a merged data loader from multiple datasets."""
         merged_ds = ConcatDataset(datasets)
         
-
-
-        return DataLoader(
-                merged_ds,
-                shuffle=shuffle,
-                batch_size=batch_size,
-                collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
-                    batch, patch_size=patch_size
-                ),
-            )
-    
-        # Dont use sampler for now.
         # Use distributed sampler if distributed training is enabled
         if distribute_data and dist.is_initialized():
             sampler = DistributedSampler(
@@ -298,6 +305,9 @@ class CurriculumTrainer:
                 "val_loss": val_loss,
                 "epoch": epoch,
             }
+            
+            # Add LoRA state to checkpoint
+            model.save_lora_state_to_checkpoint(checkpoint)
         else:
             # Handle DDP or single GPU case for EmbedHealthFlamingo
             model_state = model.state_dict()
@@ -314,12 +324,13 @@ class CurriculumTrainer:
         
         torch.save(checkpoint, os.path.join(checkpoint_dir, "best_model.pt"))
     
-    def _load_checkpoint(self, stage: str, optimizer, scheduler):
+    def _load_checkpoint(self, stage: str, optimizer, scheduler, eval_only: bool = False):
         """Load model checkpoint for a specific stage."""
         checkpoint_path = os.path.join(self.results_dir, stage, "checkpoints", "best_model.pt")
         
         if os.path.exists(checkpoint_path):
-            checkpoint = torch.load(checkpoint_path, map_location=self.device)
+            # Always load checkpoint to CPU first to avoid GPU OOM spikes
+            checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
             
             # Get the underlying model (handles DDP wrapping)
             model = self._get_model()
@@ -327,7 +338,18 @@ class CurriculumTrainer:
             if self.model_type == "EmbedHealthSP":
                 model.encoder.load_state_dict(checkpoint["encoder_state"])
                 model.projector.load_state_dict(checkpoint["projector_state"])
-                optimizer.load_state_dict(checkpoint["optimizer_state"])
+                
+                # Load LoRA state using the EmbedHealthSP method (allow missing for backward compatibility)
+                try:
+                    model.load_lora_state_from_checkpoint(checkpoint, allow_missing=True)
+                except RuntimeError as e:
+                    if self.rank == 0:
+                        print(f"❌ Failed to load LoRA state from checkpoint: {e}")
+                    raise
+                
+                # Only load optimizer state when training
+                if not eval_only and optimizer is not None and "optimizer_state" in checkpoint:
+                    optimizer.load_state_dict(checkpoint["optimizer_state"]) 
             else:
                 # Handle DDP or single GPU case for EmbedHealthFlamingo
                 model_state = checkpoint["model_state"]
@@ -353,9 +375,13 @@ class CurriculumTrainer:
                 except Exception as e:
                     raise RuntimeError(f"Failed to load model state from checkpoint for {stage}: {e}")
                 
-                optimizer.load_state_dict(checkpoint["optimizer_state"])
+                # Only load optimizer state when training
+                if not eval_only and optimizer is not None and "optimizer_state" in checkpoint:
+                    optimizer.load_state_dict(checkpoint["optimizer_state"]) 
             
-            scheduler.load_state_dict(checkpoint["scheduler_state"])
+            # Only load scheduler state when training
+            if not eval_only and scheduler is not None and "scheduler_state" in checkpoint:
+                scheduler.load_state_dict(checkpoint["scheduler_state"]) 
             
             return checkpoint.get("epoch", "?"), checkpoint.get("val_loss", float("inf"))
         return None, float("inf")
@@ -387,12 +413,23 @@ class CurriculumTrainer:
                         print(f"⚠️  Skipping previous stage {previous_stage} because checkpoint not found: {checkpoint_path}")
                     return None
                 raise RuntimeError(f"Previous stage {previous_stage} checkpoint not found: {checkpoint_path}")
-            checkpoint = torch.load(checkpoint_path, map_location=self.device)
+            checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
             # Get the underlying model (handles DDP wrapping)
             model = self._get_model()
             if self.model_type == "EmbedHealthSP":
                 model.encoder.load_state_dict(checkpoint["encoder_state"])
                 model.projector.load_state_dict(checkpoint["projector_state"])
+                
+                # Load LoRA state from previous stage (allow missing for stage transitions)
+                try:
+                    loaded_count = model.load_lora_state_from_checkpoint(checkpoint, allow_missing=True)
+                    if loaded_count > 0 and self.rank == 0:
+                        print(f"📥 Loaded LoRA adapters from previous stage: {loaded_count} parameters")
+                except RuntimeError as e:
+                    if self.rank == 0:
+                        print(f"❌ Failed to load LoRA state from previous stage: {e}")
+                    # For previous stage loading, we can be more tolerant of LoRA mismatches
+                    # as stages might have different LoRA configurations
             else:
                 # Handle EmbedHealthFlamingo with graceful loading
                 model_state = checkpoint["model_state"]
@@ -457,7 +494,6 @@ class CurriculumTrainer:
         
         # Set higher max_tokens for generation during evaluation
         max_new_tokens = 30000
-        
         
         with torch.no_grad():
             for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
@@ -546,6 +582,7 @@ class CurriculumTrainer:
                     lr_encoder: float, lr_projector: float, lr_base: float, 
                     metric_func: Callable = None, batch_size: int = None, eval_only: bool = False, sampler=None) -> Dict[str, Any]:
         """Generic training function for any stage."""
+        epoch = None
         # Use provided batch_size or default to global BATCH_SIZE
         if batch_size is None:
             batch_size = BATCH_SIZE
@@ -621,6 +658,9 @@ class CurriculumTrainer:
             
             return metrics
         
+        # Enable LoRA if needed for this stage
+        self._enable_lora_if_needed(stage_name)
+        
         # Initialize optimizer and scheduler
         optimizer = self._get_optimizer(batch_size, lr_encoder, lr_projector, lr_base)
         
@@ -683,7 +723,7 @@ class CurriculumTrainer:
             print(f"🔥 Warmup steps: {warmup_steps}")
         
         # Load previous checkpoint if exists (for resuming current stage)
-        best_epoch, best_val_loss = self._load_checkpoint(stage_name, optimizer, scheduler)
+        best_epoch, best_val_loss = self._load_checkpoint(stage_name, optimizer, scheduler, eval_only=eval_only)
         if best_epoch is not None:
             print(f"📂 Resuming {stage_name} from epoch {best_epoch} (val_loss: {best_val_loss:.4f})")
         else:
@@ -803,10 +843,15 @@ class CurriculumTrainer:
                 print(f"📂 Loaded best checkpoint from epoch {best_epoch} for evaluation.")
         
         if self.rank == 0:
-            print(f"🏁 Training completed for {stage_name}")
-            print(f"   Total epochs run: {epoch}")
-            print(f"   Best validation loss: {best_val_loss:.4f}")
-            print(f"   Epochs without improvement: {epochs_no_improve}")
+            if epoch is None:
+                epoch = best_epoch
+                print(f"🏁 Training completed for {stage_name}")
+                print(f"   Total epochs run: {epoch}")
+            else:
+                print(f"🏁 Training completed for {stage_name}")
+                print(f"   Total epochs run: {epoch}")
+                print(f"   Best validation loss: {best_val_loss:.4f}")
+                print(f"   Epochs without improvement: {epochs_no_improve}")
         
         metrics = self._evaluate_stage(stage_name, test_loader, stage_name, metric_func, best_epoch)
         
@@ -855,7 +900,7 @@ class CurriculumTrainer:
         )
     
     def stage3_cot(self, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
-        """Stage CoT: Chain-of-Thought Reasoning (PAMAP2).
+        """Stage CoT: Chain-of-Thought Reasoning (HAR).
         
         Configuration:
         - Epochs: 100
@@ -863,21 +908,12 @@ class CurriculumTrainer:
         - EmbedHealthFlamingo: base_lr=2e-4
         - Metric: Test loss only (chain-of-thought reasoning)
         """
-        from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
         sampler = None
-        #if not (self.world_size > 1):
-        #    train_dataset = PAMAP2CoTQADataset("train", EOS_TOKEN=self._get_model().get_eos_token())
-        #    labels = [row["label"] for row in train_dataset]
-        #    num_classes = len(set(labels))
-        #    if batch_size is None:
-        #        batch_size = BATCH_SIZE
-        #    if batch_size % num_classes != 0:
-        #        raise ValueError(f"Batch size ({batch_size}) must be divisible #by number of classes ({num_classes}) for BalancedBatchSampler.")
-        #    sampler = BalancedBatchSampler(labels, batch_size)
+        
         return self._train_stage(
             stage_name="stage3_cot",
-            dataset_class=PAMAP2CoTQADataset,
-            num_epochs=11,
+            dataset_class=HARCoTQADataset,
+            num_epochs=25,
             lr_encoder=2e-4,
             lr_projector=1e-4,
             lr_base=2e-4,
@@ -1069,6 +1105,43 @@ class CurriculumTrainer:
         """Check if a checkpoint exists for a specific stage."""
         checkpoint_path = os.path.join(self.results_dir, stage, "checkpoints", "best_model.pt")
         return os.path.exists(checkpoint_path)
+    
+    def _enable_lora_if_needed(self, stage_name: str):
+        """Enable LoRA for EmbedHealthSP models in stages after stage2."""
+        if self.model_type != "EmbedHealthSP":
+            return  # LoRA only for EmbedHealthSP
+        
+        # Get the underlying model (handles DDP wrapping)
+        model = self._get_model()
+        
+        # Enable LoRA for stages after stage2_captioning
+        stages_with_lora = ["stage3_cot", "stage4_sleep_cot"]
+        
+        if stage_name in stages_with_lora:
+            if not getattr(model, 'lora_enabled', False):
+                if self.rank == 0:
+                    print(f"🔧 Enabling LoRA for {stage_name}")
+                try:
+                    model.enable_lora(
+                        lora_r=16,
+                        lora_alpha=32,
+                        lora_dropout=0.0
+                    )
+                    if self.rank == 0:
+                        print(f"✅ LoRA enabled for {stage_name}")
+                except Exception as e:
+                    if self.rank == 0:
+                        print(f"❌ Failed to enable LoRA for {stage_name}: {e}")
+                        print("   Continuing without LoRA...")
+            else:
+                if self.rank == 0:
+                    print(f"✅ LoRA already enabled for {stage_name}")
+        else:
+            if self.rank == 0:
+                if stage_name in ["stage1_mcq", "stage2_captioning"]:
+                    print(f"ℹ️  LoRA disabled for {stage_name} (only enabled for stages 3+)")
+                else:
+                    print(f"ℹ️  LoRA not configured for {stage_name}")
 
 
 def main():

@@ -8,9 +8,9 @@ from collections import Counter
 
 def calculate_f1_score(prediction, ground_truth):
     """Calculate F1 score for classification labels"""
-    # Normalize labels for comparison (lowercase, strip whitespace)
-    pred_normalized = prediction.lower().strip()
-    truth_normalized = ground_truth.lower().strip()
+    # Normalize labels for comparison (lowercase, strip whitespace and trailing punctuation)
+    pred_normalized = prediction.lower().strip().rstrip('.,!?;:')
+    truth_normalized = ground_truth.lower().strip().rstrip('.,!?;:')
     
     # For single prediction vs single ground truth, F1 is binary
     f1 = 1.0 if pred_normalized == truth_normalized else 0.0
@@ -202,7 +202,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = current_dir / "sp_gemma_predictions.jsonl"
-    clean_output = current_dir / "sp_gemma_predictions.clean.jsonl"
+    input_file = current_dir / "har_cot_predictions_llama_flamingo_best.jsonl"
+    clean_output = current_dir / "har_cot_predictions_llama_flamingo_best.clean.jsonl"
     
     parse_rtf_jsonl(input_file, clean_output)
