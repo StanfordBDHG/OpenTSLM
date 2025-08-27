@@ -1155,7 +1155,7 @@ class CurriculumTrainer:
             stages = CURRICULUM_STAGES
 
         # Filter out completed stages
-        incomplete_stages = ["stage3_cot"]
+        incomplete_stages = []
         for stage in stages:
             if self._is_stage_completed(stage):
                 if self.rank == 0:
