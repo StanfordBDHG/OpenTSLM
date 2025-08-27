@@ -33,6 +33,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         cross_attn_every_n_layers: int = 1,
         decoder_layers_attr_name: str = None,
         freeze_lm_embeddings: bool = False,
+        mean_resizing: bool = False,
         **flamingo_kwargs,
     ):
         super().__init__(device)
@@ -45,6 +46,11 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             trust_remote_code=True,
             cache_dir=None,
         )
+
+        # Prefer left padding only for Gemma-family models
+        if "gemma" in llm_id.lower():
+            if getattr(text_tokenizer, "padding_side", None) != "left":
+                text_tokenizer.padding_side = "left"
 
         lang_encoder = AutoModelForCausalLM.from_pretrained(
             llm_id,
@@ -103,7 +109,14 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
 
         decoder_layers_attr_name = _infer_decoder_layers_attr_name(lang_encoder)
         lang_encoder.set_decoder_layers_attr_name(decoder_layers_attr_name)
-        lang_encoder.resize_token_embeddings(len(text_tokenizer))
+        # Resize embeddings after adding tokens. For Gemma, allow optional mean_resizing.
+        if "gemma" in llm_id.lower() and mean_resizing:
+            try:
+                lang_encoder.resize_token_embeddings(len(text_tokenizer), mean_resizing=True)
+            except TypeError:
+                lang_encoder.resize_token_embeddings(len(text_tokenizer))
+        else:
+            lang_encoder.resize_token_embeddings(len(text_tokenizer))
 
         # Fix compatibility for Gemma3Config which has hidden_size in text_config
         if hasattr(lang_encoder.config, "text_config") and hasattr(lang_encoder.config.text_config, "hidden_size"):
