@@ -324,12 +324,13 @@ class CurriculumTrainer:
         
         torch.save(checkpoint, os.path.join(checkpoint_dir, "best_model.pt"))
     
-    def _load_checkpoint(self, stage: str, optimizer, scheduler):
+    def _load_checkpoint(self, stage: str, optimizer, scheduler, eval_only: bool = False):
         """Load model checkpoint for a specific stage."""
         checkpoint_path = os.path.join(self.results_dir, stage, "checkpoints", "best_model.pt")
         
         if os.path.exists(checkpoint_path):
-            checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+            # Always load checkpoint to CPU first to avoid GPU OOM spikes
+            checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
             
             # Get the underlying model (handles DDP wrapping)
             model = self._get_model()
@@ -346,7 +347,9 @@ class CurriculumTrainer:
                         print(f"❌ Failed to load LoRA state from checkpoint: {e}")
                     raise
                 
-                optimizer.load_state_dict(checkpoint["optimizer_state"])
+                # Only load optimizer state when training
+                if not eval_only and optimizer is not None and "optimizer_state" in checkpoint:
+                    optimizer.load_state_dict(checkpoint["optimizer_state"]) 
             else:
                 # Handle DDP or single GPU case for EmbedHealthFlamingo
                 model_state = checkpoint["model_state"]
@@ -372,9 +375,13 @@ class CurriculumTrainer:
                 except Exception as e:
                     raise RuntimeError(f"Failed to load model state from checkpoint for {stage}: {e}")
                 
-                optimizer.load_state_dict(checkpoint["optimizer_state"])
+                # Only load optimizer state when training
+                if not eval_only and optimizer is not None and "optimizer_state" in checkpoint:
+                    optimizer.load_state_dict(checkpoint["optimizer_state"]) 
             
-            scheduler.load_state_dict(checkpoint["scheduler_state"])
+            # Only load scheduler state when training
+            if not eval_only and scheduler is not None and "scheduler_state" in checkpoint:
+                scheduler.load_state_dict(checkpoint["scheduler_state"]) 
             
             return checkpoint.get("epoch", "?"), checkpoint.get("val_loss", float("inf"))
         return None, float("inf")
@@ -406,7 +413,7 @@ class CurriculumTrainer:
                         print(f"⚠️  Skipping previous stage {previous_stage} because checkpoint not found: {checkpoint_path}")
                     return None
                 raise RuntimeError(f"Previous stage {previous_stage} checkpoint not found: {checkpoint_path}")
-            checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
+            checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
             # Get the underlying model (handles DDP wrapping)
             model = self._get_model()
             if self.model_type == "EmbedHealthSP":
@@ -716,7 +723,7 @@ class CurriculumTrainer:
             print(f"🔥 Warmup steps: {warmup_steps}")
         
         # Load previous checkpoint if exists (for resuming current stage)
-        best_epoch, best_val_loss = self._load_checkpoint(stage_name, optimizer, scheduler)
+        best_epoch, best_val_loss = self._load_checkpoint(stage_name, optimizer, scheduler, eval_only=eval_only)
         if best_epoch is not None:
             print(f"📂 Resuming {stage_name} from epoch {best_epoch} (val_loss: {best_val_loss:.4f})")
         else:
