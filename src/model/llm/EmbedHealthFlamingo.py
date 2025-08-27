@@ -38,6 +38,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
     ):
         super().__init__(device)
         print(f"Flamingo Using device: {self.device}")
+        self.llm_id = llm_id
         time_series_encoder = CNNTokenizer().to(device)
 
         text_tokenizer = AutoTokenizer.from_pretrained(
@@ -68,6 +69,9 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         if text_tokenizer.pad_token is None:
             text_tokenizer.add_special_tokens({"pad_token": "<PAD>"})
             text_tokenizer.pad_token = "<PAD>"
+        # Ensure model has pad_token_id set for generation
+        if getattr(lang_encoder.config, "pad_token_id", None) is None and getattr(text_tokenizer, "pad_token_id", None) is not None:
+            lang_encoder.config.pad_token_id = text_tokenizer.pad_token_id
 
         # convert LM to FlamingoLM
         extend_instance(lang_encoder, FlamingoLMMixin)
@@ -255,6 +259,10 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                     batch, include_labels=True
                 )
             
+                # For Gemma-family models, default to greedy unless caller specifies sampling
+                if "gemma" in getattr(self, "llm_id", "").lower() and "do_sample" not in generate_kwargs:
+                    generate_kwargs["do_sample"] = False
+
                 gen_ids = self.llm.generate(
                     vision_x=images,
                     lang_x=input_ids,
