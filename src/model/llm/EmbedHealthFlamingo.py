@@ -37,7 +37,6 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
     ):
         super().__init__(device)
         print(f"Flamingo Using device: {self.device}")
-        self.llm_id = llm_id
         time_series_encoder = CNNTokenizer().to(device)
 
         text_tokenizer = AutoTokenizer.from_pretrained(
@@ -46,7 +45,6 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             trust_remote_code=True,
             cache_dir=None,
         )
-
 
         lang_encoder = AutoModelForCausalLM.from_pretrained(
             llm_id,
@@ -57,13 +55,6 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             attn_implementation='eager'
         )
 
-        # If Gemma multimodal (ConditionalGeneration), unwrap to text-only language model
-        # so we don't stack Flamingo vision on top of an existing vision stack.
-        if "gemma" in llm_id.lower():
-            class_name_lower = lang_encoder.__class__.__name__.lower()
-            if "conditionalgeneration" in class_name_lower and hasattr(lang_encoder, "language_model"):
-                lang_encoder = lang_encoder.language_model
-
         # add Flamingo special tokens to the tokenizer
         text_tokenizer.add_special_tokens(
             {"additional_special_tokens": ["<|endofchunk|>", "<image>"]}
@@ -71,11 +62,6 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         if text_tokenizer.pad_token is None:
             text_tokenizer.add_special_tokens({"pad_token": "<PAD>"})
             text_tokenizer.pad_token = "<PAD>"
-        # Ensure model has pad_token_id set for generation (scope to Gemma only)
-        if "gemma" in llm_id.lower():
-            if getattr(lang_encoder.config, "pad_token_id", None) is None and getattr(text_tokenizer, "pad_token_id", None) is not None:
-                lang_encoder.config.pad_token_id = text_tokenizer.pad_token_id
-                print(f"Gemma model, setting pad_token_id to {text_tokenizer.pad_token_id}")
 
         # convert LM to FlamingoLM
         extend_instance(lang_encoder, FlamingoLMMixin)
@@ -102,11 +88,9 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 if "ConditionalGeneration" in model_class_name:
                     # Gemma3ForConditionalGeneration (multimodal 4B model) - layers are at language_model.layers
                     return "language_model.layers"
-                # Unwrapped text submodule typically exposes layers directly
-                if "TextModel" in model_class_name and hasattr(model, "layers"):
-                    return "layers"
-                # Gemma3ForCausalLM (text-only 1B model) - layers are at standard model.layers
-                return "model.layers"
+                else:
+                    # Gemma3ForCausalLM (text-only 1B model) - layers are at standard model.layers
+                    return "model.layers"
             
             # Original logic for non-Gemma3 models
             for k in __KNOWN_DECODER_LAYERS_ATTR_NAMES:
@@ -119,7 +103,6 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
 
         decoder_layers_attr_name = _infer_decoder_layers_attr_name(lang_encoder)
         lang_encoder.set_decoder_layers_attr_name(decoder_layers_attr_name)
-        # Resize embeddings after adding tokens (no mean_resizing changes to preserve behavior)
         lang_encoder.resize_token_embeddings(len(text_tokenizer))
 
         # Fix compatibility for Gemma3Config which has hidden_size in text_config
