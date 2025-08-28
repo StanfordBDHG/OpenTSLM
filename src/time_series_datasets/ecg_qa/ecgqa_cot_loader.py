@@ -223,12 +223,25 @@ def load_ecg_qa_cot_splits() -> Tuple[Dataset, Dataset, Dataset]:
 
 
 def get_label_distribution(dataset: Dataset) -> Dict[str, int]:
-    """Get the distribution of labels in a dataset."""
+    """Get the distribution of answer labels in the dataset."""
     label_counts = {}
+    
     for sample in dataset:
-        # For ECG-QA, we can use question_type as a label
-        label = sample.get("question_type", "unknown")
+        # Extract the actual answer label from the answer field
+        answer = sample.get("answer", "")
+        if isinstance(answer, str) and answer.strip():
+            # For CoT datasets, the answer field contains the rationale + final answer
+            # Extract the final answer after "Answer: "
+            if "Answer:" in answer:
+                label = answer.split("Answer:")[-1].strip().strip(".")
+            else:
+                # Fallback to the full answer if no "Answer:" found
+                label = answer.strip()
+        else:
+            label = "unknown"
+        
         label_counts[label] = label_counts.get(label, 0) + 1
+    
     return label_counts
 
 

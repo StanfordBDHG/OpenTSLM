@@ -82,7 +82,10 @@ class ECGQACoTQADataset(QADataset):
 
     def _get_answer(self, row) -> str:
         """Get the answer from the row, which is the chain-of-thought reasoning."""
-        return row.get("rationale", "No chain-of-thought reasoning available.")
+        rationale = row.get("rationale")
+        if rationale is None:
+            raise ValueError(f"Sample missing required 'rationale' field: {row}")
+        return rationale
 
     def _get_pre_prompt(self, row) -> str:
         """Generate the pre-prompt explaining the task with clinical context."""

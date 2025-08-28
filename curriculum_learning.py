@@ -1043,7 +1043,7 @@ class CurriculumTrainer:
             init_method=self.dist_url,
             world_size=self.world_size,
             rank=self.rank,
-            timeout=datetime.timedelta(minutes=999),
+            timeout=datetime.timedelta(hours=999),
         )
         
         # Set device for this process
