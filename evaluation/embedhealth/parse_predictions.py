@@ -23,8 +23,14 @@ def calculate_f1_score(prediction, ground_truth):
         'ground_truth_normalized': truth_normalized
     }
 
-def calculate_f1_stats(data_points):
-    """Calculate both macro-F1 and average F1 (micro-F1) statistics"""
+def calculate_f1_stats(data_points, allowed_labels=None):
+    """Calculate both macro-F1 and average F1 (micro-F1) statistics.
+
+    If allowed_labels is provided, predictions not in this set will:
+      - contribute False Negatives to the ground-truth class, and
+      - NOT count as False Positives for any (new) predicted class.
+    This prevents introducing new classes into per-class/macro metrics.
+    """
     if not data_points:
         return {}
     
@@ -34,6 +40,9 @@ def calculate_f1_stats(data_points):
     
     # Group by ground truth class for macro-F1
     class_predictions = {}
+    if allowed_labels:
+        for label in allowed_labels:
+            class_predictions[label] = {"tp": 0, "fp": 0, "fn": 0}
     for point in data_points:
         gt_class = point.get("ground_truth_normalized", "")
         pred_class = point.get("prediction_normalized", "")
@@ -48,10 +57,11 @@ def calculate_f1_stats(data_points):
             # False negative: ground truth class was not predicted
             class_predictions[gt_class]["fn"] += 1
             # False positive: predicted class that wasn't ground truth
-            if pred_class in class_predictions:
-                class_predictions[pred_class]["fp"] += 1
-            else:
-                class_predictions[pred_class] = {"tp": 0, "fp": 1, "fn": 0}
+            if (allowed_labels is None) or (pred_class in (allowed_labels or set())):
+                if pred_class in class_predictions:
+                    class_predictions[pred_class]["fp"] += 1
+                else:
+                    class_predictions[pred_class] = {"tp": 0, "fp": 1, "fn": 0}
     
     # Calculate F1 per class
     class_f1_scores = {}
@@ -119,10 +129,23 @@ def parse_rtf_jsonl(input_file, output_file=None):
     
     extracted_data = extract_structured_data(rtf_content)
     
+    # Determine allowed labels from ground truth values and mark OOV predictions
+    # In rare occasions, it happens that the model predicts an unknown label, such as "ascending" instead of "walking up". We simply include that for now.
+    allowed_labels = {point.get("ground_truth_normalized", "") for point in extracted_data}
+    excluded_count = 0
+    for point in extracted_data:
+        prediction_label = point.get("prediction_normalized", "")
+        is_valid_prediction = prediction_label in allowed_labels
+        point["excluded"] = not is_valid_prediction
+        if not is_valid_prediction:
+            excluded_count += 1
+    
     if extracted_data:
         print(f"Extracted {len(extracted_data)} data points")
+        if excluded_count > 0:
+            print(f"Excluded {excluded_count} predictions not in the label set from metrics")
         
-        # Calculate and display accuracy statistics
+        # Calculate and display accuracy statistics (include all samples)
         accuracy_stats = calculate_accuracy_stats(extracted_data)
         print(f"\nAccuracy Statistics:")
         print(f"Total samples: {accuracy_stats['total_samples']}")
@@ -130,8 +153,8 @@ def parse_rtf_jsonl(input_file, output_file=None):
         print(f"Incorrect predictions: {accuracy_stats['incorrect_predictions']}")
         print(f"Accuracy: {accuracy_stats['accuracy_percentage']:.2f}%")
         
-        # Calculate and display F1 statistics
-        f1_stats = calculate_f1_stats(extracted_data)
+        # Calculate and display F1 statistics (prevent OOV predictions from creating new classes)
+        f1_stats = calculate_f1_stats(extracted_data, allowed_labels=allowed_labels)
         print(f"\nF1 Score Statistics:")
         print(f"Average F1 Score: {f1_stats['average_f1']:.4f}")
         print(f"Macro-F1 Score: {f1_stats['macro_f1']:.4f}")
@@ -202,7 +225,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = current_dir / "har_cot_predictions_llama_flamingo_best.jsonl"
-    clean_output = current_dir / "har_cot_predictions_llama_flamingo_best.clean.jsonl"
+    input_file = current_dir / "har_cot_llama_3b_sp.jsonl"
+    clean_output = current_dir / "har_cot_llama_3b_sp.clean.jsonl"
     
     parse_rtf_jsonl(input_file, clean_output)
