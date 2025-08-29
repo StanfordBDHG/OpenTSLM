@@ -3,6 +3,7 @@ from typing import List, Tuple, Literal
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from time_series_datasets.QADataset import QADataset
 from time_series_datasets.ecg_qa.ecgqa_cot_loader import load_ecg_qa_cot_splits
@@ -219,14 +220,13 @@ Based on your analysis of the ECG data, select your answer from the following op
             # PTB-XL typically has 12 leads, sample at 500Hz for 10 seconds = 5000 samples
             # We want to use 100Hz data for consistency and efficiency
             
-            # Take first few leads (I, II, III, aVR, aVL, aVF) which are most common
+            # Use all available leads for comprehensive analysis
             if len(ecg_signal.shape) == 1:
                 # Single lead case
                 n_leads = 1
             elif len(ecg_signal.shape) == 2:
-                n_leads = min(6, ecg_signal.shape[1])
-                if ecg_signal.shape[1] < 6:
-                    print(f"Warning: ECG file {base_path} has only {ecg_signal.shape[1]} leads, expected at least 6")
+                n_leads = ecg_signal.shape[1]  # Use all available leads
+                print(f"Using all {n_leads} leads from ECG file {base_path}")
             else:
                 raise ValueError(f"Unexpected ECG signal shape {ecg_signal.shape} for file {base_path}")
             
@@ -275,15 +275,13 @@ Based on your analysis of the ECG data, select your answer from the following op
                 if np.any(np.isnan(normalized_signal)) or np.any(np.isinf(normalized_signal)):
                     raise ValueError(f"Invalid values (NaN/Inf) in normalized signal for lead {lead_idx} in file {base_path}")
                 
-                # Create lead name
+                # Create lead name - standard 12-lead ECG names
                 lead_names = ["I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
                 lead_name = lead_names[lead_idx] if lead_idx < len(lead_names) else f"Lead_{lead_idx}"
                 
-                ecg_label = f"ECG Lead {lead_name}"
+                ecg_label = f"This is ECG Lead {lead_name}. It has mean {mean_val:.3f} and std {std_val:.3f}."
                 if len(ecg_paths) > 1:
-                    ecg_label += f" (Recording {i+1})"
-                    
-                ecg_label += f" - sampled at 100Hz, normalized (mean={mean_val:.3f}, std={std_val:.3f})"
+                    ecg_label += f" This is from recording {i+1}."
                 
                 try:
                     ecg_prompts.append(
