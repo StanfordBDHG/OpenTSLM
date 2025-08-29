@@ -67,6 +67,13 @@ class CurriculumTrainer:
     - stage1_mcq: Trains the model on a time-series MCQ dataset (TSQA)
     - stage2_captioning: Trains the model on a time-series captioning dataset (M4 time series captioning)
     - stage3_cot: Trains the model on a chain-of-thought reasoning dataset (PAMAP2 CoT)
+    - stage4_sleep_cot: Trains the model on sleep stage classification with chain-of-thought reasoning
+    - stage5_ecg_cot: Trains the model on ECG QA with chain-of-thought reasoning
+
+    Features:
+    - Automatic loss history tracking saved to loss_history.txt in each stage's checkpoints directory
+    - Loss history is appended to when resuming training, preserving all previous epochs
+    - Displays previous loss history when resuming training
 
     If you run this script, you should be able to reproduce our results from the paper.
     All datasets are automatically downloaded and processed.
@@ -324,6 +331,60 @@ class CurriculumTrainer:
             }
         
         torch.save(checkpoint, os.path.join(checkpoint_dir, "best_model.pt"))
+    
+    def _save_loss_history(self, stage: str, epoch: int, train_loss: float, val_loss: float):
+        """Save loss history to a file for tracking training progress."""
+        if dist.is_initialized() and self.rank != 0:
+            return  # Only save on rank 0 for distributed training
+        
+        checkpoint_dir = os.path.join(self.results_dir, stage, "checkpoints")
+        loss_history_file = os.path.join(checkpoint_dir, "loss_history.txt")
+        
+        # Ensure the directory exists
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        
+        # Create the file with header if it doesn't exist
+        if not os.path.exists(loss_history_file):
+            with open(loss_history_file, "w") as f:
+                f.write("Epoch\tTrain_Loss\tVal_Loss\n")
+                f.write("-" * 30 + "\n")
+        
+        # Append the current epoch's losses
+        with open(loss_history_file, "a") as f:
+            f.write(f"{epoch}\t{train_loss:.6f}\t{val_loss:.6f}\n")
+    
+    def _display_loss_history(self, stage: str):
+        """Display the loss history for a stage if available."""
+        if dist.is_initialized() and self.rank != 0:
+            return  # Only display on rank 0 for distributed training
+        
+        checkpoint_dir = os.path.join(self.results_dir, stage, "checkpoints")
+        loss_history_file = os.path.join(checkpoint_dir, "loss_history.txt")
+        
+        if os.path.exists(loss_history_file):
+            try:
+                with open(loss_history_file, "r") as f:
+                    lines = f.readlines()
+                
+                if len(lines) > 2:  # More than just header
+                    print(f"📊 Previous loss history for {stage}:")
+                    print("   Epoch\tTrain_Loss\tVal_Loss")
+                    print("   " + "-" * 30)
+                    
+                    # Show last 5 epochs (or all if less than 5)
+                    start_idx = max(2, len(lines) - 5)  # Skip header lines
+                    for line in lines[start_idx:]:
+                        if line.strip() and not line.startswith("-"):
+                            parts = line.strip().split("\t")
+                            if len(parts) == 3:
+                                epoch, train_loss, val_loss = parts
+                                print(f"   {epoch}\t{train_loss}\t{val_loss}")
+                    
+                    if len(lines) > 7:  # More than 5 epochs
+                        print(f"   ... and {len(lines) - 7} more epochs")
+                    print()
+            except Exception as e:
+                print(f"⚠️  Could not read loss history: {e}")
     
     def _load_checkpoint(self, stage: str, optimizer, scheduler, eval_only: bool = False):
         """Load model checkpoint for a specific stage."""
@@ -727,6 +788,8 @@ class CurriculumTrainer:
         best_epoch, best_val_loss = self._load_checkpoint(stage_name, optimizer, scheduler, eval_only=eval_only)
         if best_epoch is not None:
             print(f"📂 Resuming {stage_name} from epoch {best_epoch} (val_loss: {best_val_loss:.4f})")
+            # Display previous loss history if available
+            self._display_loss_history(stage_name)
         else:
             print(f"🆕 Starting fresh training for {stage_name}")
             best_val_loss = float("inf")  # Ensure proper initialization
@@ -802,6 +865,9 @@ class CurriculumTrainer:
                 if self.rank == 0:
                     tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}")
                     tqdm.write(f"Epoch {epoch} — best  loss: {best_val_loss:.4f}")
+                
+                # Save loss history for this epoch
+                self._save_loss_history(stage_name, epoch, avg_train_loss, avg_val_loss)
                 
                 # Early stopping - all ranks need to make the same decision
                 should_save = avg_val_loss + 1e-4 < best_val_loss
