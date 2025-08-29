@@ -159,7 +159,9 @@ def load_ecg_qa_cot_splits() -> Tuple[Dataset, Dataset, Dataset]:
             raise FileNotFoundError(f"CoT split file not found: {split_file}")
 
         print(f"Loading CoT data for {split_name} split from {split_file}...")
+        print(f"Reading CSV file...")
         df = pd.read_csv(split_file)
+        print(f"CSV loaded: {len(df)} rows, {len(df.columns)} columns")
 
         out: List[Dict] = []
         for idx, row in tqdm(df.iterrows(), total=len(df), desc=f"Processing {split_name} CoT rows"):
@@ -214,8 +216,13 @@ def load_ecg_qa_cot_splits() -> Tuple[Dataset, Dataset, Dataset]:
     test_list = load_split_from_csv("test")
 
     print("Converting to HuggingFace datasets...")
+    
+    # Show progress for dataset conversion
+    print(f"Converting train split ({len(train_list)} samples)...")
     train_dataset = Dataset.from_list(train_list)
+    print(f"Converting validation split ({len(val_list)} samples)...")
     val_dataset = Dataset.from_list(val_list)
+    print(f"Converting test split ({len(test_list)} samples)...")
     test_dataset = Dataset.from_list(test_list)
 
     print("ECG-QA CoT dataset loading complete!")
