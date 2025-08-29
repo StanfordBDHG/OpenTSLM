@@ -10,6 +10,7 @@ from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.m4.M4QADataset import M4QADataset
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
+from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
@@ -53,7 +54,7 @@ from model_config import (
 
 
 # Global stage configuration - users can modify this to mix and match stages
-CURRICULUM_STAGES = ["stage1_mcq", "stage2_captioning", "stage3_cot", "stage4_sleep_cot"]
+CURRICULUM_STAGES = ["stage1_mcq", "stage2_captioning", "stage3_cot", "stage4_sleep_cot", "stage5_ecg_cot"]
 
 
 class CurriculumTrainer:
@@ -924,10 +925,10 @@ class CurriculumTrainer:
         )
     
     def stage4_sleep_cot(self, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
-        """Stage CoT: Chain-of-Thought Reasoning (SleepEDF).
+        """Stage 4: Chain-of-Thought Reasoning (SleepEDF).
         
         Configuration:
-        - Epochs: 100
+        - Epochs: 60
         - EmbedHealthSP: encoder_lr=2e-4, projector_lr=1e-4
         - EmbedHealthFlamingo: base_lr=2e-4
         - Metric: Test loss only (chain-of-thought reasoning)
@@ -937,6 +938,30 @@ class CurriculumTrainer:
         return self._train_stage(
             stage_name="stage4_sleep_cot",
             dataset_class=SleepEDFCoTQADataset,
+            num_epochs=60,
+            lr_encoder=2e-4,
+            lr_projector=1e-4,
+            lr_base=2e-4,
+            metric_func=None,  # Only test loss for chain-of-thought reasoning
+            batch_size=batch_size,
+            eval_only=eval_only,
+            sampler=sampler
+        )
+    
+    def stage5_ecg_cot(self, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
+        """Stage 5: Chain-of-Thought Reasoning (ECG QA CoT).
+        
+        Configuration:
+        - Epochs: 60
+        - EmbedHealthSP: encoder_lr=2e-4, projector_lr=1e-4
+        - EmbedHealthFlamingo: base_lr=2e-4
+        - Metric: Test loss only (chain-of-thought reasoning)
+        """
+        sampler = None
+        
+        return self._train_stage(
+            stage_name="stage5_ecg_cot",
+            dataset_class=ECGQACoTQADataset,
             num_epochs=60,
             lr_encoder=2e-4,
             lr_projector=1e-4,
@@ -996,6 +1021,10 @@ class CurriculumTrainer:
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage4_sleep_cot":
                 stage_results = self.stage4_sleep_cot(batch_size=batch_size, eval_only=eval_only)
+                results[stage] = stage_results
+                self._mark_stage_completed(stage, stage_results)
+            elif stage == "stage5_ecg_cot":
+                stage_results = self.stage5_ecg_cot(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
             else:
@@ -1115,7 +1144,7 @@ class CurriculumTrainer:
         model = self._get_model()
         
         # Enable LoRA for stages after stage2_captioning
-        stages_with_lora = ["stage3_cot", "stage4_sleep_cot"]
+        stages_with_lora = ["stage3_cot", "stage4_sleep_cot", "stage5_ecg_cot"]
         
         if stage_name in stages_with_lora:
             if not getattr(model, 'lora_enabled', False):
