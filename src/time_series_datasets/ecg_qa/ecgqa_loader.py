@@ -96,7 +96,17 @@ def download_ptbxl():
         with zipfile.ZipFile(ptbxl_zip_path, 'r') as zip_ref:
             # Extract to a temporary directory first
             temp_extract_dir = os.path.join(RAW_DATA_PATH, "temp_ptbxl_extract")
-            zip_ref.extractall(temp_extract_dir)
+            
+            # Get list of files to extract
+            file_list = zip_ref.namelist()
+            total_files = len(file_list)
+            
+            print(f"Extracting {total_files} files from PTB-XL dataset...")
+            from tqdm import tqdm
+            
+            # Extract with progress bar
+            for file_info in tqdm(file_list, desc="Extracting PTB-XL", unit="files"):
+                zip_ref.extract(file_info, temp_extract_dir)
             
             # Find the actual ptb-xl directory (it might be nested)
             extracted_dirs = [d for d in os.listdir(temp_extract_dir) 
