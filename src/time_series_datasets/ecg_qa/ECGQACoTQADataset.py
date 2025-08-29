@@ -191,7 +191,9 @@ Based on your analysis of the ECG data, select your answer from the following op
             ecg_path = get_ptbxl_ecg_path(ecg_id[0]) + ".dat"
             ecg_paths = [ecg_path]
         
-        for i, ecg_path in enumerate(ecg_paths):
+        from tqdm import tqdm
+        
+        for i, ecg_path in enumerate(tqdm(ecg_paths, desc="Loading ECG files", leave=False)):
             # Load ECG data using wfdb
             base_path = ecg_path.replace('.dat', '').replace('.hea', '')
             
@@ -226,11 +228,10 @@ Based on your analysis of the ECG data, select your answer from the following op
                 n_leads = 1
             elif len(ecg_signal.shape) == 2:
                 n_leads = ecg_signal.shape[1]  # Use all available leads
-                print(f"Using all {n_leads} leads from ECG file {base_path}")
             else:
                 raise ValueError(f"Unexpected ECG signal shape {ecg_signal.shape} for file {base_path}")
             
-            for lead_idx in range(n_leads):
+            for lead_idx in tqdm(range(n_leads), desc=f"Processing leads for file {i+1}", leave=False):
                 if len(ecg_signal.shape) > 1:
                     lead_signal = ecg_signal[:, lead_idx]
                 else:

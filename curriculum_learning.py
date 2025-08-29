@@ -464,8 +464,15 @@ class CurriculumTrainer:
                         print(f"⚠️  Skipping previous stage {previous_stage} because metrics file not found: {metrics_file}")
                     return None
                 raise RuntimeError(f"Previous stage {previous_stage} metrics file not found: {metrics_file}")
-            with open(metrics_file, "r") as f:
-                metrics = json.load(f)
+            # Be robust to malformed JSON (e.g., concurrent writes or concatenated JSON)
+            try:
+                with open(metrics_file, "r") as f:
+                    metrics = json.load(f)
+            except Exception as e:
+                if self.rank == 0:
+                    print(f"⚠️  Warning: Could not parse metrics file for {previous_stage} ({metrics_file}): {e}")
+                    print("   Proceeding without previous metrics.")
+                metrics = {}
             # Load the model weights from previous stage
             checkpoint_path = os.path.join(self.results_dir, previous_stage, "checkpoints", "best_model.pt")
             if not os.path.exists(checkpoint_path):
