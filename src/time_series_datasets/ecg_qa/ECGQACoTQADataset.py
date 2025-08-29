@@ -39,6 +39,8 @@ class ECGQACoTQADataset(QADataset):
 
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         """Load the ECG-QA CoT dataset splits."""
+        from tqdm import tqdm
+        
         print("Loading ECG-QA CoT dataset splits...")
         train, val, test = load_ecg_qa_cot_splits()
         
@@ -48,7 +50,7 @@ class ECGQACoTQADataset(QADataset):
             
             def filter_comparison(dataset):
                 filtered_data = []
-                for sample in dataset:
+                for sample in tqdm(dataset, desc="Filtering comparison questions", leave=False):
                     question_type = sample.get("question_type")
                     if question_type is None:
                         raise ValueError(f"Sample missing required 'question_type' field: {sample}")
@@ -226,6 +228,7 @@ Based on your analysis of the ECG data, select your answer from the following op
                 n_leads = 1
             elif len(ecg_signal.shape) == 2:
                 n_leads = ecg_signal.shape[1]  # Use all available leads
+                # Removed debug print to reduce output clutter
             else:
                 raise ValueError(f"Unexpected ECG signal shape {ecg_signal.shape} for file {base_path}")
             
