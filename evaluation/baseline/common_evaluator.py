@@ -227,6 +227,8 @@ class CommonEvaluator:
                         print(f"PREDICTION: {generated_text}")
                         print("=" * 80)
                         first_error_printed = True
+                else:
+                    raise ValueError(f"Unexpectedly found empty outputs")
                 
                 total_samples += 1
                 

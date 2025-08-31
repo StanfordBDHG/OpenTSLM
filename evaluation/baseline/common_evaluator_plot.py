@@ -136,6 +136,8 @@ class CommonEvaluatorPlot(CommonEvaluator):
 
                 if isinstance(sample, dict) and 'time_series' in sample:
                     plot_data = self.get_plot_from_timeseries(sample["time_series"])
+                else:
+                    raise ValueError(f"Sample {sample} does not contain 'time_series' key")
 
                 input_text = """
 You are given accelerometer data in all three dimensions. Your task is to classify the activity based on analysis of the data.
@@ -214,6 +216,8 @@ The following activities (class labels) are possible: lying, sitting, standing, 
                         print(f"PREDICTION: {generated_text}")
                         print("=" * 80)
                         first_error_printed = True
+                else:
+                    raise ValueError(f"Unexpectedly found empty outputs")
                 
                 total_samples += 1
                 
