@@ -353,17 +353,7 @@ class CurriculumTrainer:
                 print(f"   Checkpoint path: {checkpoint_path}")
                 print(f"   Checkpoint size: {sum(p.numel() * p.element_size() for p in self._get_model().parameters()) / 1024**3:.2f} GB")
                 
-                # Try to save to a different location as backup
-                backup_path = os.path.join(checkpoint_dir, f"best_model_backup_{epoch}.pt")
-                try:
-                    print(f"   Trying backup location: {backup_path}")
-                    torch.save(checkpoint, backup_path)
-                    print(f"   ✅ Backup saved successfully")
-                except Exception as backup_e:
-                    print(f"   ❌ Backup also failed: {backup_e}")
-                    raise RuntimeError(f"Both primary and backup checkpoint saving failed: {e}")
-            else:
-                raise
+                raise RuntimeError(f"Failed to save checkpoint: {e}")
     
     def _save_loss_history(self, stage: str, epoch: int, train_loss: float, val_loss: float):
         """Save loss history to a file for tracking training progress."""
