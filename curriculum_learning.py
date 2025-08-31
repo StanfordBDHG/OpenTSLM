@@ -330,7 +330,40 @@ class CurriculumTrainer:
                 "epoch": epoch,
             }
         
-        torch.save(checkpoint, os.path.join(checkpoint_dir, "best_model.pt"))
+        checkpoint_path = os.path.join(checkpoint_dir, "best_model.pt")
+        
+        # Check disk space before saving
+        if self.rank == 0:
+            import shutil
+            total, used, free = shutil.disk_usage(checkpoint_dir)
+            free_gb = free / (1024**3)
+            print(f"💾 Disk space: {free_gb:.2f} GB free in {checkpoint_dir}")
+            
+            # Estimate checkpoint size (rough estimate)
+            estimated_size_gb = sum(p.numel() * p.element_size() for p in self._get_model().parameters()) / (1024**3)
+            if free_gb < estimated_size_gb * 2:  # Need at least 2x the size for safe writing
+                print(f"⚠️  Warning: Low disk space. Need ~{estimated_size_gb:.2f} GB, have {free_gb:.2f} GB free")
+        
+        # Try to save with error handling
+        try:
+            torch.save(checkpoint, checkpoint_path)
+        except Exception as e:
+            if self.rank == 0:
+                print(f"❌ Failed to save checkpoint: {e}")
+                print(f"   Checkpoint path: {checkpoint_path}")
+                print(f"   Checkpoint size: {sum(p.numel() * p.element_size() for p in self._get_model().parameters()) / 1024**3:.2f} GB")
+                
+                # Try to save to a different location as backup
+                backup_path = os.path.join(checkpoint_dir, f"best_model_backup_{epoch}.pt")
+                try:
+                    print(f"   Trying backup location: {backup_path}")
+                    torch.save(checkpoint, backup_path)
+                    print(f"   ✅ Backup saved successfully")
+                except Exception as backup_e:
+                    print(f"   ❌ Backup also failed: {backup_e}")
+                    raise RuntimeError(f"Both primary and backup checkpoint saving failed: {e}")
+            else:
+                raise
     
     def _save_loss_history(self, stage: str, epoch: int, train_loss: float, val_loss: float):
         """Save loss history to a file for tracking training progress."""
@@ -587,6 +620,13 @@ class CurriculumTrainer:
                     # Add time series ID for stage2 captioning
                     if stage == "stage2_captioning" and "id" in sample:
                         result["time_series_id"] = sample["id"]
+                    
+                    # Add template_id and ecg_id for stage5_ecg_cot
+                    if stage == "stage5_ecg_cot":
+                        if "template_id" in sample:
+                            result["template_id"] = sample["template_id"]
+                        if "ecg_id" in sample:
+                            result["ecg_id"] = sample["ecg_id"]
                     
                     results.append(result)
         

@@ -79,7 +79,17 @@ def download_ecg_qa_cot():
         with tarfile.open(cot_zip_path, 'r:gz') as tar_ref:
             # Extract to a temporary directory first
             temp_extract_dir = os.path.join(RAW_DATA_PATH, "temp_ecgqa_cot_extract")
-            tar_ref.extractall(temp_extract_dir)
+            
+            # Get list of members to extract
+            members = tar_ref.getmembers()
+            total_members = len(members)
+            
+            print(f"Extracting {total_members} files from ECG-QA CoT dataset...")
+            from tqdm import tqdm
+            
+            # Extract with progress bar
+            for member in tqdm(members, desc="Extracting ECG-QA CoT", unit="files"):
+                tar_ref.extract(member, temp_extract_dir)
             
             # Find the actual data directory (it might be nested)
             extracted_dirs = [d for d in os.listdir(temp_extract_dir) 
