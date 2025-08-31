@@ -13,6 +13,7 @@ from transformers.pipelines import pipeline
 import matplotlib.pyplot as plt
 from time import sleep
 from PIL import Image
+import pandas as pd
 
 # Add src to path
 sys.path.insert(
@@ -77,11 +78,141 @@ class CommonEvaluatorPlot(CommonEvaluator):
         
         return dataset
     
+    def evaluate_multiple_models(
+        self,
+        model_names: List[str],
+        dataset_classes: List[Type[Dataset]],
+        evaluation_functions: Dict[str, Callable[[str, str], Dict[str, Any]]],
+        plot_functions: Optional[Dict[str, Callable[[Any], str]]] = None,
+        max_samples: Optional[int] = None,
+        **pipeline_kwargs
+    ) -> pd.DataFrame:
+        """
+        Evaluate multiple models on multiple datasets with plotting support.
+        
+        Args:
+            model_names: List of model names to evaluate
+            dataset_classes: List of dataset classes to evaluate on
+            evaluation_functions: Dictionary mapping dataset class names to evaluation functions
+            plot_functions: Optional dict mapping dataset class names to plot functions
+            max_samples: Maximum number of samples per evaluation
+            **pipeline_kwargs: Additional arguments for model pipeline
+            
+        Returns:
+            DataFrame with results for all model-dataset combinations
+        """
+        all_results = []
+        
+        # Generate filename once at the beginning
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        results_dir = os.path.join(current_dir, "..", "results", "baseline")
+        os.makedirs(results_dir, exist_ok=True)
+        df_filename = os.path.join(results_dir, "evaluation_results.csv")
+        print(f"Results will be saved to: {df_filename}")
+        
+        # Load existing results if file exists
+        existing_df = None
+        if os.path.exists(df_filename):
+            try:
+                existing_df = pd.read_csv(df_filename)
+                print(f"Found existing results file with {len(existing_df)} entries")
+            except Exception as e:
+                print(f"Warning: Could not read existing results file: {e}")
+        
+        for model_name in model_names:
+            for dataset_class in dataset_classes:
+                dataset_name = dataset_class.__name__
+                
+                if dataset_name not in evaluation_functions:
+                    print(f"Warning: No evaluation function found for {dataset_name}")
+                    continue
+                
+                # Check if this model-dataset combination already exists in results
+                if existing_df is not None:
+                    existing_result = existing_df[
+                        (existing_df['model'] == model_name) & 
+                        (existing_df['dataset'] == dataset_name)
+                    ]
+                    if not existing_result.empty:
+                        print(f"⏭️  Skipping {model_name} on {dataset_name} (already evaluated)")
+                        continue
+                
+                evaluation_function = evaluation_functions[dataset_name]
+                plot_fn = None
+                if plot_functions is not None and dataset_name in plot_functions:
+                    plot_fn = plot_functions[dataset_name]
+                
+                print(f"\n{'='*80}")
+                print(f"Evaluating {model_name} on {dataset_name}")
+                print(f"{'='*80}")
+                
+                try:
+                    results = self.evaluate_model_on_dataset(
+                        model_name=model_name,
+                        dataset_class=dataset_class,
+                        evaluation_function=evaluation_function,
+                        plot_function=plot_fn,
+                        max_samples=max_samples,
+                        **pipeline_kwargs
+                    )
+                    
+                    # Extract key metrics for DataFrame
+                    row = {
+                        "model": model_name,
+                        "dataset": dataset_name,
+                        "total_samples": results["total_samples"],
+                        "successful_inferences": results["successful_inferences"],
+                        "success_rate": results["success_rate"],
+                    }
+                    
+                    # Add specific metrics
+                    if results["metrics"]:
+                        for metric_name, metric_values in results["metrics"].items():
+                            if isinstance(metric_values, (int, float)):
+                                row[metric_name] = metric_values
+                            else:
+                                row[metric_name] = str(metric_values)
+                    
+                    all_results.append(row)
+                    
+                    # Combine with existing results and save
+                    current_df = pd.DataFrame(all_results)
+                    if existing_df is not None:
+                        # Append new results
+                        final_df = pd.concat([existing_df, current_df], ignore_index=True)
+                    else:
+                        final_df = current_df
+                    
+                    final_df.to_csv(df_filename, index=False)
+                    print(f"✅ Results updated: {df_filename}")
+                    
+                except Exception as e:
+                    print(f"Error evaluating {model_name} on {dataset_name}: {e}")
+                    all_results.append({
+                        "model": model_name,
+                        "dataset": dataset_name,
+                        "status": "Failed",
+                    })
+                    
+                    # Save DataFrame even after errors
+                    current_df = pd.DataFrame(all_results)
+                    if existing_df is not None:
+                        final_df = pd.concat([existing_df, current_df], ignore_index=True)
+                    else:
+                        final_df = current_df
+                    final_df.to_csv(df_filename, index=False)
+                    print(f"⚠️  Results updated (with error): {df_filename}")
+        
+        print(f"\nFinal results saved to: {df_filename}")
+        return final_df
+
     def evaluate_model_on_dataset(
         self,
         model_name: str,
         dataset_class: Type[Dataset],
         evaluation_function: Callable[[str, str], Dict[str, Any]],
+        plot_function: Optional[Callable[[Any], str]] = None,
         max_samples: Optional[int] = None,
         **pipeline_kwargs
     ) -> Dict[str, Any]:
@@ -135,7 +266,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
                 plot_data = None
 
                 if isinstance(sample, dict) and 'time_series' in sample:
-                    plot_data = self.get_plot_from_timeseries(sample["time_series"])
+                    plot_data = plot_function(sample["time_series"])
                 else:
                     raise ValueError(f"Sample {sample} does not contain 'time_series' key")
 
@@ -262,36 +393,3 @@ The following activities (class labels) are possible: lying, sitting, standing, 
                 "metrics": {},
                 "detailed_results": [],
             }
-    
-    
-    def get_plot_from_timeseries(self, time_series):
-        """
-        Create a base64 PNG plot from a list/tuple of 1D numpy arrays (e.g., [x, y, z]).
-        """
-        # Normalize input to a list of 1D arrays
-        if time_series is None:
-            return None
-        ts_list = list(time_series)
-
-        # Create the plot
-        num_series = len(ts_list)
-        fig, axes = plt.subplots(num_series, 1, figsize=(10, 4 * num_series), sharex=True)
-        if num_series == 1:
-            axes = [axes]
-
-        # Plot each time series in its own subplot
-        axis_names = {0: 'X-axis', 1: 'Y-axis', 2: 'Z-axis'}
-        for i, series in enumerate(ts_list):
-            axes[i].plot(series, marker='o', linestyle='-', markersize=0)
-            axes[i].grid(True, alpha=0.3)
-            axes[i].set_title(f"Accelerometer - {axis_names.get(i, f'Axis {i+1}')}" )
-
-        plt.tight_layout()
-
-        # Convert plot to base64 image
-        img_buffer = io.BytesIO()
-        plt.savefig(img_buffer, format='png', bbox_inches='tight', dpi=100)
-        plt.close()
-        img_buffer.seek(0)
-        image_data = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
-        return image_data
