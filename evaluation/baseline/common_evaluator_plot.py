@@ -270,19 +270,8 @@ class CommonEvaluatorPlot(CommonEvaluator):
                 else:
                     raise ValueError(f"Sample {sample} does not contain 'time_series' key")
 
-                input_text = """
-You are given accelerometer data in all three dimensions. Your task is to classify the activity based on analysis of the data.
-Instructions:
-- Begin by analyzing the time series without assuming a specific label.
-- Think step-by-step about what the observed patterns suggest regarding movement intensity and behavior.
-- Write your rationale as a single, natural paragraph — do not use bullet points, numbered steps, or section headings.
-- Do **not** mention any class label until the final sentence.
-The following activities (class labels) are possible: lying, sitting, standing, walking, ascending stairs, descending stairs, running, cycling, nordic walking, ironing, vacuum cleaning, rope jumping
-
-- You MUST end your response with "Answer: <class label>"
-"""
-
                 target_answer = sample["answer"]
+                input_text = sample["post_prompt"]
                 
                 # Generate prediction
                 if isinstance(pipe, OpenAIPipeline):
