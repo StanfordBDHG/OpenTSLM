@@ -1,12 +1,10 @@
 import re
 import sys
-import argparse
 from typing import Dict, Any
 
 from common_evaluator import CommonEvaluator
-from common_evaluator_plot import CommonEvaluatorPlot
-from time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
 from time_series_datasets.har_cot.HARAccQADataset import HARAccQADataset
+
 
 def extract_label_from_prediction(prediction: str) -> str:
     """
@@ -30,9 +28,9 @@ def extract_label_from_prediction(prediction: str) -> str:
     return label.lower()
 
 
-def evaluate_pamap_acc(ground_truth: str, prediction: str) -> Dict[str, Any]:
+def evaluate_har_acc(ground_truth: str, prediction: str) -> Dict[str, Any]:
     """
-    Evaluate PAMAP2AccQADataset predictions against ground truth.
+    Evaluate HARAccQADataset predictions against ground truth.
     Extracts the label from the end of the model's output and compares to ground truth.
     """
     gt_clean = ground_truth.lower().strip()
@@ -42,21 +40,19 @@ def evaluate_pamap_acc(ground_truth: str, prediction: str) -> Dict[str, Any]:
 
 
 def main():
-    """Main function to run PAMAP evaluation."""
-    parser = argparse.ArgumentParser(description="Evaluate models on PAMAP2 Acc QA")
-    parser.add_argument("model_name", help="Model name, e.g., meta-llama/Llama-3.2-1B")
-    parser.add_argument("--plot", action="store_true", help="Enable plotting and image-text evaluation")
-    args = parser.parse_args()
-
-    model_name = args.model_name
-
-    # dataset_classes = [PAMAP2AccQADataset]
+    """Main function to run HAR evaluation."""
+    if len(sys.argv) != 2:
+        print("Usage: python evaluate_har.py <model_name>")
+        print("Example: python evaluate_har.py meta-llama/Llama-3.2-1B")
+        sys.exit(1)
+    
+    model_name = sys.argv[1]
+    
     dataset_classes = [HARAccQADataset]
     evaluation_functions = {
-        "PAMAP2AccQADataset": evaluate_pamap_acc,
-        "HARAccQADataset": evaluate_pamap_acc,
+        "HARAccQADataset": evaluate_har_acc,
     }
-    evaluator = CommonEvaluatorPlot() if args.plot else CommonEvaluator()
+    evaluator = CommonEvaluator()
     results_df = evaluator.evaluate_multiple_models(
         model_names=[model_name],
         dataset_classes=dataset_classes,
@@ -71,4 +67,4 @@ def main():
     return results_df
 
 if __name__ == "__main__":
-    main()
+    main() 
