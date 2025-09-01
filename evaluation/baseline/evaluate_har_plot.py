@@ -7,7 +7,6 @@ from typing import Dict, Any
 
 import matplotlib.pyplot as plt
 
-from common_evaluator import CommonEvaluator
 from common_evaluator_plot import CommonEvaluatorPlot
 from time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
 from time_series_datasets.har_cot.HARAccQADataset import HARAccQADataset

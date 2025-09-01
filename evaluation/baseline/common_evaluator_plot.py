@@ -1,11 +1,8 @@
-import json
 import os
 import io
-import re
 import sys
 import base64
 from typing import Type, Callable, Dict, List, Any, Optional
-from abc import ABC, abstractmethod
 
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -142,6 +139,8 @@ class CommonEvaluatorPlot(CommonEvaluator):
                 plot_fn = None
                 if plot_functions is not None and dataset_name in plot_functions:
                     plot_fn = plot_functions[dataset_name]
+                else:
+                    print(f"Warning: No plot function found for {dataset_name}")
                 
                 print(f"\n{'='*80}")
                 print(f"Evaluating {model_name} on {dataset_name}")
