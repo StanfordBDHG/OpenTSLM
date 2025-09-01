@@ -147,7 +147,7 @@ Please analyze the ECG signal patterns carefully and provide an accurate answer.
         possible_answers = []
         
         if template_id:
-            possible_answers = self.get_possible_answers_for_template(template_id)
+            possible_answers = ECGQADataset.get_possible_answers_for_template(template_id)
         
         if possible_answers:
             answers_text = ", ".join(possible_answers)
@@ -167,7 +167,8 @@ Answer: <your_answer>
         
         return prompt.strip()
 
-    def get_possible_answers_for_template(self, template_id: int) -> List[str]:
+    @staticmethod
+    def get_possible_answers_for_template(template_id: int) -> List[str]:
         """Get possible answers for a specific template ID."""
         try:
             import pandas as pd

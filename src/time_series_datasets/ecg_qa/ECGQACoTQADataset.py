@@ -143,7 +143,7 @@ Look for differences, similarities, and changes between the ECGs to answer the q
         if template_id is None:
             raise ValueError(f"Sample missing required 'template_id' field: {row}")
         
-        possible_answers = self.get_possible_answers_for_template(template_id)
+        possible_answers = ECGQACoTQADataset.get_possible_answers_for_template(template_id)
         
         if possible_answers:
             answers_text = ", ".join(possible_answers)
@@ -161,7 +161,8 @@ Make sure that your last word is the answer. You MUST end your response with "An
         
         return prompt.strip()
 
-    def get_possible_answers_for_template(self, template_id: int) -> List[str]:
+    @staticmethod
+    def get_possible_answers_for_template(template_id: int) -> List[str]:
         """Get possible answers for a specific template ID."""
         try:
             import pandas as pd

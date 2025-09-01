@@ -267,20 +267,11 @@ class CommonEvaluatorPlot(CommonEvaluator):
 
                 if isinstance(sample, dict) and 'time_series' in sample:
                     plot_data = plot_function(sample["time_series"])
+                # Use the dataset's formatted prompt
+                if isinstance(sample, dict) and 'prompt' in sample:
+                    input_text = sample["prompt"]
                 else:
-                    raise ValueError(f"Sample {sample} does not contain 'time_series' key")
-
-                input_text = """
-You are given accelerometer data in all three dimensions. Your task is to classify the activity based on analysis of the data.
-Instructions:
-- Begin by analyzing the time series without assuming a specific label.
-- Think step-by-step about what the observed patterns suggest regarding movement intensity and behavior.
-- Write your rationale as a single, natural paragraph — do not use bullet points, numbered steps, or section headings.
-- Do **not** mention any class label until the final sentence.
-The following activities (class labels) are possible: lying, sitting, standing, walking, ascending stairs, descending stairs, running, cycling, nordic walking, ironing, vacuum cleaning, rope jumping
-
-- You MUST end your response with "Answer: <class label>"
-"""
+                    raise ValueError(f"Sample {idx} does not contain 'prompt' key. Make sure format_sample_str=True when loading the dataset.")
 
                 target_answer = sample["answer"]
                 
