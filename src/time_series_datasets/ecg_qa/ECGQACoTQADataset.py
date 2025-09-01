@@ -3,7 +3,6 @@ from typing import List, Tuple, Literal
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from time_series_datasets.QADataset import QADataset
 from time_series_datasets.ecg_qa.ecgqa_cot_loader import load_ecg_qa_cot_splits
@@ -39,8 +38,6 @@ class ECGQACoTQADataset(QADataset):
 
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         """Load the ECG-QA CoT dataset splits."""
-        from tqdm import tqdm
-        
         print("Loading ECG-QA CoT dataset splits...")
         train, val, test = load_ecg_qa_cot_splits()
         
@@ -50,7 +47,7 @@ class ECGQACoTQADataset(QADataset):
             
             def filter_comparison(dataset):
                 filtered_data = []
-                for sample in tqdm(dataset, desc="Filtering comparison questions", leave=False):
+                for sample in dataset:
                     question_type = sample.get("question_type")
                     if question_type is None:
                         raise ValueError(f"Sample missing required 'question_type' field: {sample}")
@@ -85,10 +82,7 @@ class ECGQACoTQADataset(QADataset):
 
     def _get_answer(self, row) -> str:
         """Get the answer from the row, which is the chain-of-thought reasoning."""
-        rationale = row.get("rationale")
-        if rationale is None:
-            raise ValueError(f"Sample missing required 'rationale' field: {row}")
-        return rationale
+        return row.get("rationale", "No chain-of-thought reasoning available.")
 
     def _get_pre_prompt(self, row) -> str:
         """Generate the pre-prompt explaining the task with clinical context."""
@@ -108,22 +102,39 @@ class ECGQACoTQADataset(QADataset):
         
         base_prompt = f"""You are an expert cardiologist analyzing an ECG (electrocardiogram). 
 
-        Clinical Context: {clinical_context}
+Clinical Context: {clinical_context}
 
-        Your task is to examine the ECG signal and answer the following medical question:
+Your task is to examine the ECG signal and answer the following medical question:
 
-        Question: {question}
+Question: {question}
 
-        Instructions:
-        - Begin by analyzing the time series without assuming a specific answer.
-        - Think step-by-step about what the observed patterns suggest regarding the cardiac condition.
-        - Write your rationale as a single, natural paragraph — do not use bullet points, numbered steps, or section headings.
-        - Do **not** mention any final answer until the very end.
-        - Consider the ECG morphology, intervals, and any abnormalities that relate to the question
-        Please analyze the ECG carefully and provide a clear, definitive answer with your reasoning."""
-                
+Instructions:
+- Begin by analyzing the time series without assuming a specific answer.
+- Think step-by-step about what the observed patterns suggest regarding the cardiac condition.
+- Write your rationale as a single, natural paragraph — do not use bullet points, numbered steps, or section headings.
+- Do **not** mention any final answer until the very end.
+- Consider the ECG morphology, intervals, and any abnormalities that relate to the question."""
         
-        return base_prompt
+        if question_type == "single-verify":
+            task_specific = """
+
+Please analyze the ECG carefully and provide a clear, definitive answer with your reasoning."""
+        
+        elif question_type == "single-choice":
+            task_specific = """
+
+Analyze the patterns, waves, intervals, and any abnormalities to determine the correct answer."""
+        
+        elif question_type.startswith("comparison"):
+            task_specific = """
+
+This question requires comparison between different ECG recordings.
+Look for differences, similarities, and changes between the ECGs to answer the question."""
+        
+        else:
+            raise ValueError(f"Unknown question type: {question_type}. Expected: single-verify, single-choice, or comparison_*")
+        
+        return base_prompt + task_specific
 
     def _get_post_prompt(self, row) -> str:
         """Generate the post-prompt with possible answers and instructions."""
@@ -132,7 +143,7 @@ class ECGQACoTQADataset(QADataset):
         if template_id is None:
             raise ValueError(f"Sample missing required 'template_id' field: {row}")
         
-        possible_answers = self.get_possible_answers_for_template(template_id)
+        possible_answers = ECGQACoTQADataset.get_possible_answers_for_template(template_id)
         
         if possible_answers:
             answers_text = ", ".join(possible_answers)
@@ -143,11 +154,15 @@ Based on your analysis of the ECG data, select your answer from the following op
 - Make sure that your last word is the answer. You MUST end your response with "Answer: "
 """
         else:
-            raise ValueError(f"No possible answers found for template ID: {template_id}")
+            prompt = """
+Based on your analysis of the ECG data, provide your answer.
+Make sure that your last word is the answer. You MUST end your response with "Answer: "
+"""
         
         return prompt.strip()
 
-    def get_possible_answers_for_template(self, template_id: int) -> List[str]:
+    @staticmethod
+    def get_possible_answers_for_template(template_id: int) -> List[str]:
         """Get possible answers for a specific template ID."""
         try:
             import pandas as pd
@@ -222,13 +237,14 @@ Based on your analysis of the ECG data, select your answer from the following op
             # PTB-XL typically has 12 leads, sample at 500Hz for 10 seconds = 5000 samples
             # We want to use 100Hz data for consistency and efficiency
             
-            # Use all available leads for comprehensive analysis
+            # Take first few leads (I, II, III, aVR, aVL, aVF) which are most common
             if len(ecg_signal.shape) == 1:
                 # Single lead case
                 n_leads = 1
             elif len(ecg_signal.shape) == 2:
-                n_leads = ecg_signal.shape[1]  # Use all available leads
-                # Removed debug print to reduce output clutter
+                n_leads = min(6, ecg_signal.shape[1])
+                if ecg_signal.shape[1] < 6:
+                    print(f"Warning: ECG file {base_path} has only {ecg_signal.shape[1]} leads, expected at least 6")
             else:
                 raise ValueError(f"Unexpected ECG signal shape {ecg_signal.shape} for file {base_path}")
             
@@ -277,13 +293,15 @@ Based on your analysis of the ECG data, select your answer from the following op
                 if np.any(np.isnan(normalized_signal)) or np.any(np.isinf(normalized_signal)):
                     raise ValueError(f"Invalid values (NaN/Inf) in normalized signal for lead {lead_idx} in file {base_path}")
                 
-                # Create lead name - standard 12-lead ECG names
+                # Create lead name
                 lead_names = ["I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
                 lead_name = lead_names[lead_idx] if lead_idx < len(lead_names) else f"Lead_{lead_idx}"
                 
-                ecg_label = f"This is ECG Lead {lead_name}. It has mean {mean_val:.3f} and std {std_val:.3f}."
+                ecg_label = f"ECG Lead {lead_name}"
                 if len(ecg_paths) > 1:
-                    ecg_label += f" This is from recording {i+1}."
+                    ecg_label += f" (Recording {i+1})"
+                    
+                ecg_label += f" - sampled at 100Hz, normalized (mean={mean_val:.3f}, std={std_val:.3f})"
                 
                 try:
                     ecg_prompts.append(
