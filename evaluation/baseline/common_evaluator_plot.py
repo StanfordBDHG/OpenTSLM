@@ -271,9 +271,10 @@ class CommonEvaluatorPlot(CommonEvaluator):
                 if isinstance(sample, dict) and 'prompt' in sample:
                     input_text = sample["prompt"]
                 else:
-                    raise ValueError(f"Sample {idx} does not contain 'prompt' key. Make sure format_sample_str=True when loading the dataset.")
+                    raise ValueError(f"Sample {sample} does not contain 'time_series' key")
 
                 target_answer = sample["answer"]
+                input_text = sample["post_prompt"]
                 
                 # Generate prediction
                 if isinstance(pipe, OpenAIPipeline):

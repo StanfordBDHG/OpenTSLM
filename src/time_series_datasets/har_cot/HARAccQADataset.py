@@ -48,7 +48,8 @@ Instructions:
 - Write your rationale as a single, natural paragraph — do not use bullet points, numbered steps, or section headings.
 - Do **not** mention any class label until the final sentence.
 The following activities (class labels) are possible: {activities}
-- You MUST end your response with "Answer: <class label>"        """
+- You MUST end your response with "Answer: <class label>"
+"""
         return text
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
