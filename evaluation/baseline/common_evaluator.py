@@ -1,11 +1,8 @@
 import json
 import os
-import io
 import re
 import sys
-import base64
 from typing import Type, Callable, Dict, List, Any, Optional
-from abc import ABC, abstractmethod
 
 import numpy as np
 import pandas as pd
@@ -98,7 +95,7 @@ class CommonEvaluator:
                 formatter = llama_formatter
                 print(f"Using Llama formatter for model: {model_name}")
             else:
-                print("Defaulting to Llama formatter for model: {model_name}")
+                print(f"Defaulting to Llama formatter for model: {model_name}")
                 formatter = llama_formatter
         else:
             formatter = llama_formatter
