@@ -225,7 +225,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = current_dir / "har_cot_llama_3b_sp.jsonl"
-    clean_output = current_dir / "har_cot_llama_3b_sp.clean.jsonl"
+    input_file = current_dir / "gemma_1b_sp_predictions.jsonl"
+    clean_output = current_dir / "gemma_1b_sp_predictions.clean.jsonl"
     
     parse_rtf_jsonl(input_file, clean_output)
