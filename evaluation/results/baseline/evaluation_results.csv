@@ -1,0 +1,2 @@
+model,dataset,total_samples,successful_inferences,success_rate,accuracy
+openai-gpt-4o,HARAccQADataset,8222,8222,1.0,18.511311116516662
