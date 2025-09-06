@@ -21,7 +21,7 @@ ECG_QA_URL = "https://github.com/Jwoo5/ecg-qa"
 ECG_QA_DIR = os.path.join(RAW_DATA_PATH, "ecg_qa")
 
 # PTB-XL Dataset  
-PTBXL_ZIP_URL = "https://physionet.org/content/ptb-xl/get-zip/1.0.3/"
+PTBXL_ZIP_URL = "https://physionet-open.s3.amazonaws.com/ptb-xl/ptb-xl-1.0.3.zip"
 PTBXL_DIR = os.path.join(RAW_DATA_PATH, "ptbxl")
 PTBXL_RECORDS_DIR = os.path.join(PTBXL_DIR, "records500")
 
