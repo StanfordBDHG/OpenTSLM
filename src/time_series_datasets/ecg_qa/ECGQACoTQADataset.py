@@ -126,8 +126,7 @@ Instructions:
 - Consider the ECG morphology, intervals, and any abnormalities that relate to the question."""
         
         
-        else:
-            raise ValueError(f"Unknown question type: {question_type}. Expected: single-verify, single-choice, single-choose, single-query, or comparison_*")
+
         
         return base_prompt + task_specific
 
