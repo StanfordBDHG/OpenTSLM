@@ -274,14 +274,14 @@ Make sure that your last word is the answer. You MUST end your response with "An
             # PTB-XL typically has 12 leads, sample at 500Hz for 10 seconds = 5000 samples
             # We want to use 100Hz data for consistency and efficiency
             
-            # Take first few leads (I, II, III, aVR, aVL, aVF) which are most common
+            # Load all available leads (typically 12 for standard ECG)
             if len(ecg_signal.shape) == 1:
                 # Single lead case
                 n_leads = 1
             elif len(ecg_signal.shape) == 2:
-                n_leads = min(6, ecg_signal.shape[1])
-                if ecg_signal.shape[1] < 6:
-                    print(f"Warning: ECG file {base_path} has only {ecg_signal.shape[1]} leads, expected at least 6")
+                n_leads = ecg_signal.shape[1]
+                if ecg_signal.shape[1] < 12:
+                    print(f"Warning: ECG file {base_path} has only {ecg_signal.shape[1]} leads, expected 12 for standard ECG")
             else:
                 raise ValueError(f"Unexpected ECG signal shape {ecg_signal.shape} for file {base_path}")
             
@@ -334,11 +334,11 @@ Make sure that your last word is the answer. You MUST end your response with "An
                 lead_names = ["I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
                 lead_name = lead_names[lead_idx] if lead_idx < len(lead_names) else f"Lead_{lead_idx}"
                 
-                ecg_label = f"ECG Lead {lead_name}"
+                ecg_label = f"This is ECG Lead {lead_name}"
                 if len(ecg_paths) > 1:
                     ecg_label += f" (Recording {i+1})"
                     
-                ecg_label += f" - sampled at 100Hz, normalized (mean={mean_val:.3f}, std={std_val:.3f})"
+                ecg_label += f", it has mean {mean_val:.4f} and std {std_val:.4f}:"
                 
                 try:
                     ecg_prompts.append(
