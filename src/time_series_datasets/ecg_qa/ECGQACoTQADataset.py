@@ -128,7 +128,7 @@ Instructions:
         
 
         
-        return base_prompt + task_specific
+        return base_prompt 
 
     def _get_post_prompt(self, row) -> str:
         """Generate the post-prompt with possible answers and instructions."""
