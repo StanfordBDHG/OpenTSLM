@@ -318,7 +318,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = current_dir / "gemma3_flamingo_predictions.jsonl"
-    clean_output = current_dir / "gemma3_flamingo_predictions.clean.jsonl"
+    input_file = current_dir / "gemma3_270m.jsonl"
+    clean_output = current_dir / "gemma3_270m.clean.jsonl"
     
     parse_sleep_cot_jsonl(input_file, clean_output)

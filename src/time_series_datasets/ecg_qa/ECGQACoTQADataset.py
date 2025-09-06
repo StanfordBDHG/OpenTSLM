@@ -315,17 +315,6 @@ Make sure that your last word is the answer. You MUST end your response with "An
         
         return ecg_prompts
 
-    @staticmethod
-    def get_labels() -> List[str]:
-        """Get all possible answer labels for ECG-QA CoT dataset."""
-        # These are common answers in ECG-QA - could be loaded from answers.csv
-        return [
-            "yes", "no", "not sure",
-            "normal", "abnormal", "borderline",
-            "conduction disturbance", "hypertrophy", "ischemia", "infarction",
-            "arrhythmia", "axis deviation", "non-specific changes"
-        ]
-    
     def _format_sample(self, row):
         # Call parent method to get the standard formatted sample
         formatted_sample = super()._format_sample(row)
