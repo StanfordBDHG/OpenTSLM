@@ -265,9 +265,9 @@ class TestECGQACoTQADataset(unittest.TestCase):
             # Should mention mean and std
             self.assertIn('mean', text)
             self.assertIn('std', text)
-            # Should be in natural language format
-            self.assertIn('This is', text)
-            self.assertIn('It has', text)
+            # Should be in natural language format with sampling info
+            self.assertIn('sampled at 100Hz', text)
+            self.assertIn('normalized', text)
         
         self.logger.success("Time series text format tests passed")
 

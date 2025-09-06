@@ -120,7 +120,7 @@ Instructions:
 
 Please analyze the ECG carefully and provide a clear, definitive answer with your reasoning."""
         
-        elif question_type == "single-choice":
+        elif question_type in ["single-choice", "single-choose", "single-query"]:
             task_specific = """
 
 Analyze the patterns, waves, intervals, and any abnormalities to determine the correct answer."""
@@ -132,7 +132,7 @@ This question requires comparison between different ECG recordings.
 Look for differences, similarities, and changes between the ECGs to answer the question."""
         
         else:
-            raise ValueError(f"Unknown question type: {question_type}. Expected: single-verify, single-choice, or comparison_*")
+            raise ValueError(f"Unknown question type: {question_type}. Expected: single-verify, single-choice, single-choose, single-query, or comparison_*")
         
         return base_prompt + task_specific
 
@@ -186,6 +186,43 @@ Make sure that your last word is the answer. You MUST end your response with "An
         except Exception as e:
             print(f"Error loading template answers: {e}")
             return []
+    
+    @staticmethod
+    def get_labels() -> List[str]:
+        """Get all possible answer labels for ECG-QA CoT dataset."""
+        try:
+            from time_series_datasets.ecg_qa.ecgqa_cot_loader import load_ecg_qa_cot_splits
+            
+            # Load the dataset to extract unique labels
+            train, val, test = load_ecg_qa_cot_splits()
+            
+            # Collect all unique labels from all splits
+            all_labels = set()
+            
+            for dataset_split in [train, val, test]:
+                for sample in dataset_split:
+                    answer = sample.get("answer", "")
+                    if isinstance(answer, str) and answer.strip():
+                        # For CoT datasets, the answer field contains the rationale + final answer
+                        # Extract the final answer after "Answer: "
+                        if "Answer:" in answer:
+                            label = answer.split("Answer:")[-1].strip().strip(".")
+                        else:
+                            # Fallback to the full answer if no "Answer:" found
+                            label = answer.strip()
+                        
+                        if label and label != "":
+                            all_labels.add(label)
+            
+            # Convert to sorted list for consistent ordering
+            labels = sorted(list(all_labels))
+            print(f"Extracted {len(labels)} unique labels from ECG-QA CoT dataset")
+            return labels
+            
+        except Exception as e:
+            print(f"Error extracting labels from dataset: {e}")
+            # Fallback to a minimal set if extraction fails
+            return ["yes", "no", "not sure", "none", "normal", "abnormal"]
     
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         """Load ECG data and convert to TextTimeSeriesPrompt format."""
