@@ -125,21 +125,6 @@ Instructions:
 - Do **not** mention any final answer until the very end.
 - Consider the ECG morphology, intervals, and any abnormalities that relate to the question."""
         
-        if question_type == "single-verify":
-            task_specific = """
-
-Please analyze the ECG carefully and provide a clear, definitive answer with your reasoning."""
-        
-        elif question_type in ["single-choice", "single-choose", "single-query"]:
-            task_specific = """
-
-Analyze the patterns, waves, intervals, and any abnormalities to determine the correct answer."""
-        
-        elif question_type.startswith("comparison"):
-            task_specific = """
-
-This question requires comparison between different ECG recordings.
-Look for differences, similarities, and changes between the ECGs to answer the question."""
         
         else:
             raise ValueError(f"Unknown question type: {question_type}. Expected: single-verify, single-choice, single-choose, single-query, or comparison_*")
