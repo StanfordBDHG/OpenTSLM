@@ -207,8 +207,17 @@ class CommonEvaluator:
                     generated_text = outputs[0]["generated_text"].strip()
                     successful_inferences += 1
                     
-                    # Evaluate using custom function
-                    metrics = evaluation_function(target_answer, generated_text)
+                    # Evaluate using custom function (optionally with sample)
+                    try:
+                        import inspect
+                        sig = inspect.signature(evaluation_function)
+                        if len(sig.parameters) >= 3:
+                            metrics = evaluation_function(target_answer, generated_text, sample)
+                        else:
+                            metrics = evaluation_function(target_answer, generated_text)
+                    except Exception:
+                        # Fallback to 2-arg call
+                        metrics = evaluation_function(target_answer, generated_text)
                     all_metrics.append(metrics)
                     
                     # Store detailed results
@@ -219,6 +228,9 @@ class CommonEvaluator:
                         "generated_answer": generated_text,
                         "metrics": metrics,
                     }
+                    # Include template_id if present in sample for downstream analysis
+                    if isinstance(sample, dict) and "template_id" in sample:
+                        result["template_id"] = sample["template_id"]
                     results.append(result)
                     
                     # Print progress for first few samples

@@ -199,39 +199,34 @@ Make sure that your last word is the answer. You MUST end your response with "An
     
     @staticmethod
     def get_labels() -> List[str]:
-        """Get all possible answer labels for ECG-QA CoT dataset."""
+        """Get all possible answer labels from answers_for_each_template.csv."""
         try:
-            from time_series_datasets.ecg_qa.ecgqa_cot_loader import load_ecg_qa_cot_splits
-            
-            # Load the dataset to extract unique labels
-            train, val, test = load_ecg_qa_cot_splits()
-            
-            # Collect all unique labels from all splits
+            import pandas as pd
+            import ast
+            from time_series_datasets.ecg_qa.ecgqa_loader import ECG_QA_DIR
+
+            template_answers_path = os.path.join(ECG_QA_DIR, "ecgqa", "ptbxl", "answers_for_each_template.csv")
+            df = pd.read_csv(template_answers_path)
+
             all_labels = set()
-            
-            for dataset_split in [train, val, test]:
-                for sample in dataset_split:
-                    answer = sample.get("answer", "")
-                    if isinstance(answer, str) and answer.strip():
-                        # For CoT datasets, the answer field contains the rationale + final answer
-                        # Extract the final answer after "Answer: "
-                        if "Answer:" in answer:
-                            label = answer.split("Answer:")[-1].strip().strip(".")
-                        else:
-                            # Fallback to the full answer if no "Answer:" found
-                            label = answer.strip()
-                        
-                        if label and label != "":
-                            all_labels.add(label)
-            
-            # Convert to sorted list for consistent ordering
-            labels = sorted(list(all_labels))
-            print(f"Extracted {len(labels)} unique labels from ECG-QA CoT dataset")
+            for _, row in df.iterrows():
+                classes_str = row.get("classes", "[]")
+                try:
+                    classes = ast.literal_eval(classes_str)
+                    for c in classes:
+                        if isinstance(c, str):
+                            cleaned = c.strip()
+                            if cleaned:
+                                all_labels.add(cleaned)
+                except Exception as e:
+                    print(f"Warning: Failed to parse classes for template {row.get('template_id')}: {e}")
+                    continue
+
+            labels = sorted(all_labels)
+            print(f"Loaded {len(labels)} unique labels from answers_for_each_template.csv")
             return labels
-            
         except Exception as e:
-            print(f"Error extracting labels from dataset: {e}")
-            # Fallback to a minimal set if extraction fails
+            print(f"Error loading labels from CSV: {e}")
             return ["yes", "no", "not sure", "none", "normal", "abnormal"]
     
     # Class-level cache for ECG data
