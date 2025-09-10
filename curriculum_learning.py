@@ -589,15 +589,18 @@ class CurriculumTrainer:
         # Set higher max_tokens for generation during evaluation
         max_new_tokens = 2500
         
-        with torch.no_grad():
-            for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
-             
-                # Compute loss
-                loss = self._get_model().compute_loss(batch)
-                test_loss += loss.item()
-                
-                # Generate predictions with higher max_tokens
-                predictions = self._get_model().generate(batch, max_new_tokens=max_new_tokens)
+        # Prepare streaming writer for test predictions (rank 0 only)
+        results_file = None
+        results_fp = None
+        if self.rank == 0:
+            results_file = os.path.join(self.results_dir, stage_name, "results", "test_predictions.jsonl")
+            # Open in write mode to start a fresh file, then append per-sample
+            results_fp = open(results_file, "w", encoding="utf-8")
+        try:
+            with torch.no_grad():
+                for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
+                    # Generate predictions with higher max_tokens (skip separate loss computation)
+                    predictions = self._get_model().generate(batch, max_new_tokens=max_new_tokens)
                 
                 # Collect results
                 for sample, pred in zip(batch, predictions):
@@ -621,8 +624,16 @@ class CurriculumTrainer:
                             result["ecg_id"] = sample["ecg_id"]
                     
                     results.append(result)
+                    # Stream write each result immediately (rank 0 only)
+                    if results_fp is not None:
+                        results_fp.write(json.dumps(result, ensure_ascii=False) + "\n")
+                        results_fp.flush()
+        finally:
+            if results_fp is not None:
+                results_fp.close()
         
-        avg_test_loss = test_loss / len(test_loader)
+        # Report test loss as NaN since we skip explicit loss computation during evaluation
+        avg_test_loss = float("nan")
         
         # Calculate stage-specific metrics
         metrics = {"test_loss": avg_test_loss}
@@ -636,18 +647,14 @@ class CurriculumTrainer:
         
         # Save results only on rank 0
         if self.rank == 0:
-            results_file = os.path.join(self.results_dir, stage_name, "results", "test_predictions.jsonl")
-            with open(results_file, "w", encoding="utf-8") as f:
-                for row in results:
-                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
-            
             # Save metrics
             metrics_file = os.path.join(self.results_dir, stage_name, "results", "metrics.json")
             with open(metrics_file, "w") as f:
                 json.dump(metrics, f, indent=2)
             
             print(f"✅ {stage_name} evaluation complete:")
-            print(f"   Test predictions saved to: {results_file}")
+            if results_file is not None:
+                print(f"   Test predictions saved to: {results_file}")
             print(f"   Metrics saved to: {metrics_file}")
             print(f"   Max tokens used for generation: {max_new_tokens}")
             for metric, value in metrics.items():
