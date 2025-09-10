@@ -505,6 +505,8 @@ class CurriculumTrainer:
                         print(f"⚠️  Skipping previous stage {previous_stage} because checkpoint not found: {checkpoint_path}")
                     return None
                 raise RuntimeError(f"Previous stage {previous_stage} checkpoint not found: {checkpoint_path}")
+            print("Loading checkpoint from previous stage: ", checkpoint_path, "and model type: ", self.model_type, "and llm_id: ", self.llm_id)
+            print("This might take a while")
             checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
             # Get the underlying model (handles DDP wrapping)
             model = self._get_model()

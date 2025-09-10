@@ -22,7 +22,7 @@ from time_series_datasets.ecg_qa.ecgqa_loader import (
 from tqdm import tqdm
 
 # ECG-QA CoT Repository
-ECG_QA_COT_URL = "https://polybox.ethz.ch/index.php/s/X7A8zH5QmrnQ3ox/download/ecg_qa_cot.zip"
+ECG_QA_COT_URL = "https://polybox.ethz.ch/index.php/s/D5QaJSEw4dXkzXm/download/ecg_qa_cot_final.zip"
 ECG_QA_COT_DIR = os.path.join(RAW_DATA_PATH, "ecg_qa_cot")
 ECG_QA_COT_ZIP = "ecg_qa_cot.zip"
 
