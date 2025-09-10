@@ -94,7 +94,7 @@ def calculate_f1_stats(data_points, allowed_labels=None):
     }
 
 # Path to your JSONL file
-file_path = 'results_gemma_3_1b_pt_EmbedHealthFlamingo_stage1_mcq_results_test_predictions.jsonl'
+file_path = 'runpod_Llama_3_2_1B_RetrainedFromScratchEmbedHealthFlamingo_stage1_mcq_results_test_predictions.jsonl'
 
 # Check if file exists
 if not os.path.exists(file_path):
@@ -109,6 +109,10 @@ if os.path.getsize(file_path) == 0:
 total = 0
 correct = 0
 data_points = []
+labels = ['(a)', '(b)', '(c)']
+label_to_idx = {l: i for i, l in enumerate(labels)}
+confusion = [[0, 0, 0] for _ in range(3)]  # rows: gold, cols: pred
+support = {l: 0 for l in labels}
 
 # Read and process the file
 with open(file_path, 'r', encoding='utf-8') as f:
@@ -124,16 +128,20 @@ with open(file_path, 'r', encoding='utf-8') as f:
             print(f"JSON decode error on line {line_num}: {e}")
             continue
 
-        generated = entry.get("generated", "").strip()
-        gold = entry.get("gold", "").strip()[:3]  # Extract "(a)", "(b)", or "(c)"
+        generated_raw = entry.get("generated", "").strip()
+        gold_raw = entry.get("gold", "").strip()
+
+        # Use only the first three characters for comparison (e.g., "(a)")
+        generated = generated_raw[:3]
+        gold = gold_raw[:3]
 
         total += 1
-        is_correct = gold in generated
+        is_correct = (generated == gold)
         if is_correct:
             correct += 1
         else:
             # Only print incorrect predictions
-            print(f"Line {line_num} - Generated: {generated}, Gold (first 3): {gold}")
+            print(f"Line {line_num} - Generated: {generated_raw} -> {generated}, Gold: {gold_raw} -> {gold}")
         
         # Calculate F1 score for this prediction
         f1_result = calculate_f1_score(generated, gold)
@@ -149,6 +157,13 @@ with open(file_path, 'r', encoding='utf-8') as f:
             "ground_truth_normalized": f1_result['ground_truth_normalized']
         }
         data_points.append(data_point)
+
+        # Update confusion matrix and supports when labels are recognized
+        if gold in label_to_idx and generated in label_to_idx:
+            gi = label_to_idx[gold]
+            pi = label_to_idx[generated]
+            confusion[gi][pi] += 1
+            support[gold] += 1
 
 # Compute and print accuracy
 if total == 0:
@@ -171,3 +186,16 @@ else:
         print(f"\nPer-Class F1 Scores:")
         for class_name, scores in f1_stats['class_f1_scores'].items():
             print(f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
+
+    # Print class supports
+    print("\nClass support (gold counts):")
+    for l in labels:
+        print(f"  {l}: {support.get(l, 0)}")
+
+    # Print confusion matrix
+    print("\nConfusion matrix (rows=gold, cols=pred):")
+    header = "       " + "  ".join(labels)
+    print(header)
+    for i, l in enumerate(labels):
+        row = "  ".join(str(x) for x in confusion[i])
+        print(f"  {l}  {row}")
