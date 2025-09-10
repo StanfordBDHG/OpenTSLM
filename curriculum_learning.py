@@ -596,6 +596,8 @@ class CurriculumTrainer:
             results_file = os.path.join(self.results_dir, stage_name, "results", "test_predictions.jsonl")
             # Open in write mode to start a fresh file, then append per-sample
             results_fp = open(results_file, "w", encoding="utf-8")
+            if not results_fp:
+                raise RuntimeError(f"Failed to open results file: {results_file}")
         try:
             with torch.no_grad():
                 for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
@@ -633,6 +635,7 @@ class CurriculumTrainer:
                 results_fp.close()
         
         # Report test loss as NaN since we skip explicit loss computation during evaluation
+        # Before, we were computing the loss explicitly, but this required to run the model twice, once for loss and once for predictions.
         avg_test_loss = float("nan")
         
         # Calculate stage-specific metrics
