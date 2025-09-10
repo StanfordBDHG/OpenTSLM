@@ -94,7 +94,7 @@ def calculate_f1_stats(data_points, allowed_labels=None):
     }
 
 # Path to your JSONL file
-file_path = 'runpod_Llama_3_2_1B_RetrainedFromScratchEmbedHealthFlamingo_stage1_mcq_results_test_predictions.jsonl'
+file_path = '/Users/planger/Development/EmbedHealth/evaluation/results/baseline/detailed/evaluation_results_openai-gpt-4o_tsqadataset.json'
 
 # Check if file exists
 if not os.path.exists(file_path):
