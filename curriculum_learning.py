@@ -594,6 +594,9 @@ class CurriculumTrainer:
         results_fp = None
         if self.rank == 0:
             results_file = os.path.join(self.results_dir, stage_name, "results", "test_predictions.jsonl")
+            # Ensure directory exists (defensive)
+            os.makedirs(os.path.dirname(results_file), exist_ok=True)
+            print(f"[Eval] rank={self.rank}, world_size={self.world_size}")
             print(f"Saving test predictions to: {results_file}")
             # Open in write mode to start a fresh file, then append per-sample
             results_fp = open(results_file, "w", encoding="utf-8")
@@ -629,8 +632,15 @@ class CurriculumTrainer:
                     results.append(result)
                     # Stream write each result immediately (rank 0 only)
                     if results_fp is not None:
+                        print(f"Writing result to {results_file}")
                         results_fp.write(json.dumps(result, ensure_ascii=False) + "\n")
                         results_fp.flush()
+                        try:
+                            os.fsync(results_fp.fileno())
+                        except Exception:
+                            pass
+                    else:
+                        raise RuntimeError(f"Failed to open results file: {results_file}")
         finally:
             if results_fp is not None:
                 results_fp.close()
