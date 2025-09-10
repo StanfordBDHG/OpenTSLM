@@ -607,40 +607,40 @@ class CurriculumTrainer:
                 for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
                     # Generate predictions with higher max_tokens (skip separate loss computation)
                     predictions = self._get_model().generate(batch, max_new_tokens=max_new_tokens)
-                
-                # Collect results
-                for sample, pred in zip(batch, predictions):
-                    result = {
-                        "pre_prompt": sample["pre_prompt"],
-                        "time_series_text": sample["time_series_text"],
-                        "post_prompt": sample["post_prompt"],
-                        "generated": pred,
-                        "gold": sample["answer"],
-                    }
                     
-                    # Add time series ID for stage2 captioning
-                    if stage == "stage2_captioning" and "id" in sample:
-                        result["time_series_id"] = sample["id"]
-                    
-                    # Add template_id and ecg_id for stage5_ecg_cot
-                    if stage == "stage5_ecg_cot":
-                        if "template_id" in sample:
-                            result["template_id"] = sample["template_id"]
-                        if "ecg_id" in sample:
-                            result["ecg_id"] = sample["ecg_id"]
-                    
-                    results.append(result)
-                    # Stream write each result immediately (rank 0 only)
-                    if results_fp is not None:
-                        print(f"Writing result to {results_file}")
-                        results_fp.write(json.dumps(result, ensure_ascii=False) + "\n")
-                        results_fp.flush()
-                        try:
-                            os.fsync(results_fp.fileno())
-                        except Exception:
-                            pass
-                    else:
-                        raise RuntimeError(f"Failed to open results file: {results_file}")
+                    # Collect results
+                    for sample, pred in zip(batch, predictions):
+                        result = {
+                            "pre_prompt": sample["pre_prompt"],
+                            "time_series_text": sample["time_series_text"],
+                            "post_prompt": sample["post_prompt"],
+                            "generated": pred,
+                            "gold": sample["answer"],
+                        }
+                        
+                        # Add time series ID for stage2 captioning
+                        if stage == "stage2_captioning" and "id" in sample:
+                            result["time_series_id"] = sample["id"]
+                        
+                        # Add template_id and ecg_id for stage5_ecg_cot
+                        if stage == "stage5_ecg_cot":
+                            if "template_id" in sample:
+                                result["template_id"] = sample["template_id"]
+                            if "ecg_id" in sample:
+                                result["ecg_id"] = sample["ecg_id"]
+                        
+                        results.append(result)
+                        # Stream write each result immediately (rank 0 only)
+                        if results_fp is not None:
+                            print(f"Writing result to {results_file}")
+                            results_fp.write(json.dumps(result, ensure_ascii=False) + "\n")
+                            results_fp.flush()
+                            try:
+                                os.fsync(results_fp.fileno())
+                            except Exception:
+                                pass
+                        else:
+                            raise RuntimeError(f"Failed to open results file: {results_file}")
         finally:
             if results_fp is not None:
                 results_fp.close()
