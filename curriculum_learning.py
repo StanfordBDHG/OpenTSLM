@@ -587,7 +587,7 @@ class CurriculumTrainer:
         test_loss = 0.0
         
         # Set higher max_tokens for generation during evaluation
-        max_new_tokens = 1000
+        max_new_tokens = 2500
         
         with torch.no_grad():
             for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
