@@ -594,6 +594,7 @@ class CurriculumTrainer:
         results_fp = None
         if self.rank == 0:
             results_file = os.path.join(self.results_dir, stage_name, "results", "test_predictions.jsonl")
+            print(f"Saving test predictions to: {results_file}")
             # Open in write mode to start a fresh file, then append per-sample
             results_fp = open(results_file, "w", encoding="utf-8")
             if not results_fp:
