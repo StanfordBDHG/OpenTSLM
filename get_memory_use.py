@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Dict, List, Tuple
 
 import torch
+from tqdm.auto import tqdm
 
 # Ensure src is on path
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -96,7 +97,7 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
 
     last_loss = 0.0
     data_len = len(dataset)
-    for i in range(steps):
+    for i in tqdm(range(steps), total=steps, desc="Training", leave=False):
         idx = i % data_len
         sample = dataset[idx]
         batch = extend_time_series_to_match_patch_size_and_aggregate([sample])
