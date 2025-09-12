@@ -27,7 +27,10 @@ from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
-from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
+from time_series_datasets.util import (
+    extend_time_series_to_match_patch_size_and_aggregate,
+)
+from time_series_datasets.simulation.SimulationQADataset import SimulationQADataset
 
 
 def get_device(device_arg: str | None) -> str:
@@ -43,7 +46,6 @@ def measure_peak_cuda_bytes() -> int:
     return int(torch.cuda.max_memory_allocated())
 
 
-
 def get_first_batch(dataset, batch_size: int = 1) -> List[Dict[str, any]]:
     # QADataset returns dict samples compatible with model.compute_loss
     batch: List[Dict[str, any]] = []
@@ -56,19 +58,28 @@ def get_first_batch(dataset, batch_size: int = 1) -> List[Dict[str, any]]:
 
 def build_optimizer(model, model_type: str, base_lr: float = 2e-4):
     if model_type == "EmbedHealthSP":
-        enc_params = [p for p in getattr(model, "encoder").parameters() if p.requires_grad]
-        proj_params = [p for p in getattr(model, "projector").parameters() if p.requires_grad]
+        enc_params = [
+            p for p in getattr(model, "encoder").parameters() if p.requires_grad
+        ]
+        proj_params = [
+            p for p in getattr(model, "projector").parameters() if p.requires_grad
+        ]
         param_groups = []
         if len(enc_params) > 0:
             param_groups.append({"params": enc_params, "weight_decay": 0.1})
         if len(proj_params) > 0:
             param_groups.append({"params": proj_params, "weight_decay": 0.1})
-        return torch.optim.AdamW(param_groups, lr=base_lr) if len(param_groups) > 0 else None
+        return (
+            torch.optim.AdamW(param_groups, lr=base_lr)
+            if len(param_groups) > 0
+            else None
+        )
     # Flamingo-like
     named_params = list(model.named_parameters())
     trainable = list(
         filter(
-            lambda np: np[1].requires_grad and not getattr(np[1], "exclude_from_optimizer", False),
+            lambda np: np[1].requires_grad
+            and not getattr(np[1], "exclude_from_optimizer", False),
             named_params,
         )
     )
@@ -141,7 +152,9 @@ def append_row(path: str, row: List[any]):
         writer.writerow(row)
 
 
-def run_for_dataset(model_name: str, model, dataset_name: str, dataset_obj) -> Dict[str, any]:
+def run_for_dataset(
+    model_name: str, model, dataset_name: str, dataset_obj
+) -> Dict[str, any]:
     result: Dict[str, any] = {
         "model": model_name,
         "dataset": dataset_name,
@@ -163,17 +176,50 @@ def run_for_dataset(model_name: str, model, dataset_name: str, dataset_obj) -> D
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Measure memory use for a single training iteration for a chosen model and dataset.")
-    parser.add_argument("-llm_id", required=True, help="HuggingFace model id for the language model")
-    parser.add_argument("--model", required=True, choices=["EmbedHealthFlamingo", "EmbedHealthSP"], help="Model to instantiate")
+    parser = argparse.ArgumentParser(
+        description="Measure memory use for a single training iteration for a chosen model and dataset."
+    )
+    parser.add_argument(
+        "-llm_id", required=True, help="HuggingFace model id for the language model"
+    )
+    parser.add_argument(
+        "--model",
+        required=True,
+        choices=["EmbedHealthFlamingo", "EmbedHealthSP"],
+        help="Model to instantiate",
+    )
     parser.add_argument(
         "--dataset",
         required=True,
-        choices=["TSQADataset", "HARCoTQADataset", "SleepEDFCoTQADataset", "ECGQACoTQADataset"],
+        choices=[
+            "TSQADataset",
+            "HARCoTQADataset",
+            "SleepEDFCoTQADataset",
+            "ECGQACoTQADataset",
+            "SimulationQADataset",
+        ],
         help="Dataset to use",
     )
-    parser.add_argument("--device", default="cuda", help="Device to run on (e.g., cuda, cuda:0, cpu)")
-    parser.add_argument("--results_csv", default=os.path.join(REPO_DIR, "memory_use.csv"), help="Path to CSV file to append results")
+    parser.add_argument(
+        "--device", default=None, help="Device to run on (e.g., cuda, cuda:0, cpu)"
+    )
+    parser.add_argument(
+        "--length",
+        type=int,
+        default=100,
+        help="Length of time series for SimulationQADataset (default: 100)",
+    )
+    parser.add_argument(
+        "--num_series",
+        type=int,
+        default=1,
+        help="Number of time series for SimulationQADataset (default: 1)",
+    )
+    parser.add_argument(
+        "--results_csv",
+        default=os.path.join(REPO_DIR, "memory_use.csv"),
+        help="Path to CSV file to append results",
+    )
     args = parser.parse_args()
 
     device = get_device(args.device)
@@ -195,8 +241,12 @@ def main():
 
     # Instantiate selected model
     if args.model == "EmbedHealthFlamingo":
-        model = EmbedHealthFlamingo(device=device, llm_id=args.llm_id, cross_attn_every_n_layers=1,
-                gradient_checkpointing=True)
+        model = EmbedHealthFlamingo(
+            device=device,
+            llm_id=args.llm_id,
+            cross_attn_every_n_layers=1,
+            gradient_checkpointing=True,
+        )
         eos = model.get_eos_token()
     elif args.model == "EmbedHealthSP":
         model = EmbedHealthSP(llm_id=args.llm_id, device=device)
@@ -218,15 +268,26 @@ def main():
         dataset = SleepEDFCoTQADataset(split="train", EOS_TOKEN=eos)
         dataset_name = "SleepEDF-CoT"
     elif args.dataset == "ECGQACoTQADataset":
-        dataset = ECGQACoTQADataset(split="train", EOS_TOKEN=eos, max_samples=1, preload_processed_data=False)
+        dataset = ECGQACoTQADataset(
+            split="train", EOS_TOKEN=eos, max_samples=1, preload_processed_data=False
+        )
         dataset_name = "ECG-QA-CoT"
+    elif args.dataset == "SimulationQADataset":
+        dataset = SimulationQADataset(
+            split="train", EOS_TOKEN=eos, length=args.length, num_series=args.num_series
+        )
+        dataset_name = f"Simulation-L{args.length}-N{args.num_series}"
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
 
     # Run one iteration and append results
     res = run_for_dataset(args.model, model, dataset_name, dataset)
     peak_bytes = res["peak_cuda_bytes"]
-    peak_gb = (float(peak_bytes) / (1024.0 ** 3)) if isinstance(peak_bytes, (int, float)) and peak_bytes >= 0 else -1
+    peak_gb = (
+        (float(peak_bytes) / (1024.0**3))
+        if isinstance(peak_bytes, (int, float)) and peak_bytes >= 0
+        else -1
+    )
     append_row(
         args.results_csv,
         [
@@ -237,7 +298,9 @@ def main():
             res["dataset"],
             res["loss"],
             res["peak_cuda_bytes"],
-            f"{peak_gb:.4f}" if isinstance(peak_gb, float) and peak_gb >= 0 else peak_gb,
+            f"{peak_gb:.4f}"
+            if isinstance(peak_gb, float) and peak_gb >= 0
+            else peak_gb,
             res["status"],
             res["error"],
         ],
@@ -248,5 +311,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
