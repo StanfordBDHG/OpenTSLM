@@ -107,6 +107,7 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
     )
 
     pbar = tqdm(total=steps, desc="Training", leave=False)
+    max_peak_bytes = -1
     step = 0
     for batch in loader:
         if optimizer:
@@ -117,13 +118,22 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
             loss.backward()
             optimizer.step()
         last_loss = float(loss.detach().item())
+        # Track peak memory across steps
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            current_peak = int(torch.cuda.max_memory_allocated())
+            if current_peak > max_peak_bytes:
+                max_peak_bytes = current_peak
         step += 1
         pbar.update(1)
         if step >= steps:
             break
     pbar.close()
-
-    peak_bytes = measure_peak_cuda_bytes()
+    
+    if torch.cuda.is_available():
+        peak_bytes = max_peak_bytes
+    else:
+        peak_bytes = -1
     return last_loss, peak_bytes
 
 
