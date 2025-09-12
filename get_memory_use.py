@@ -52,14 +52,8 @@ def get_first_batch(dataset, batch_size: int = 1) -> List[Dict[str, any]]:
     return batch
 
 
-def one_iter_train(model, model_type: str, batch: List[Dict[str, any]]) -> Tuple[float, int]:
-    model.train()
-    # Parameter selection and grouping similar to curriculum_learning.py
-    base_lr = 2e-4
-    optimizer = None
-
+def build_optimizer(model, model_type: str, base_lr: float = 2e-4):
     if model_type == "EmbedHealthSP":
-        # SP: optimize encoder and projector only (LLM is frozen by class init)
         enc_params = [p for p in getattr(model, "encoder").parameters() if p.requires_grad]
         proj_params = [p for p in getattr(model, "projector").parameters() if p.requires_grad]
         param_groups = []
@@ -67,45 +61,56 @@ def one_iter_train(model, model_type: str, batch: List[Dict[str, any]]) -> Tuple
             param_groups.append({"params": enc_params, "weight_decay": 0.1})
         if len(proj_params) > 0:
             param_groups.append({"params": proj_params, "weight_decay": 0.1})
-        if len(param_groups) > 0:
-            optimizer = torch.optim.AdamW(param_groups, lr=base_lr)
-    else:
-        # Flamingo: filter trainable params and split by gated_cross_attn for WD
-        named_params = list(model.named_parameters())
-        trainable = list(
-            filter(
-                lambda np: np[1].requires_grad and not getattr(np[1], "exclude_from_optimizer", False),
-                named_params,
-            )
+        return torch.optim.AdamW(param_groups, lr=base_lr) if len(param_groups) > 0 else None
+    # Flamingo-like
+    named_params = list(model.named_parameters())
+    trainable = list(
+        filter(
+            lambda np: np[1].requires_grad and not getattr(np[1], "exclude_from_optimizer", False),
+            named_params,
         )
+    )
+    params_with_wd, params_without_wd = [], []
+    for name, p in trainable:
+        if "gated_cross_attn" in name:
+            params_with_wd.append(p)
+        else:
+            params_without_wd.append(p)
+    if len(params_with_wd) + len(params_without_wd) == 0:
+        return None
+    return torch.optim.AdamW(
+        [
+            {"params": params_with_wd, "weight_decay": 0.1},
+            {"params": params_without_wd, "weight_decay": 0.0},
+        ],
+        lr=2e-4,
+    )
 
-        params_with_wd, params_without_wd = [], []
-        for name, p in trainable:
-            if "gated_cross_attn" in name:
-                params_with_wd.append(p)
-            else:
-                params_without_wd.append(p)
 
-        if len(params_with_wd) + len(params_without_wd) > 0:
-            optimizer = torch.optim.AdamW(
-                [
-                    {"params": params_with_wd, "weight_decay": 0.1},
-                    {"params": params_without_wd, "weight_decay": 0.0},
-                ],
-                lr=base_lr,
-            )
+def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float, int]:
+    model.train()
+    optimizer = build_optimizer(model, model_type)
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+        torch.cuda.synchronize()
 
-    if optimizer:
-        optimizer.zero_grad(set_to_none=True)
-
-    loss = model.compute_loss(batch)
-    # Backward only if there are trainable params
-    if optimizer and loss.requires_grad:
-        loss.backward()
-        optimizer.step()
+    last_loss = 0.0
+    data_len = len(dataset)
+    for i in range(steps):
+        idx = i % data_len
+        sample = dataset[idx]
+        batch = extend_time_series_to_match_patch_size_and_aggregate([sample])
+        if optimizer:
+            optimizer.zero_grad(set_to_none=True)
+        loss = model.compute_loss(batch)
+        if optimizer and loss.requires_grad:
+            print(f"Backpropagating loss of {loss.item()} for step {i}")
+            loss.backward()
+            optimizer.step()
+        last_loss = float(loss.detach().item())
 
     peak_bytes = measure_peak_cuda_bytes()
-    return float(loss.detach().item()), peak_bytes
+    return last_loss, peak_bytes
 
 
 def ensure_csv(path: str, header: List[str]):
@@ -132,8 +137,9 @@ def run_for_dataset(model_name: str, model, dataset_name: str, dataset_obj) -> D
         "error": "",
     }
     try:
-        batch = get_first_batch(dataset_obj, batch_size=1)
-        loss, peak = one_iter_train(model, model_name, batch)
+        # Train for half an epoch, capped at 10000 steps
+        steps = max(1, min(len(dataset_obj), 10000))
+        loss, peak = train_for_steps(model, model_name, dataset_obj, steps)
         result["loss"] = loss
         result["peak_cuda_bytes"] = peak
     except Exception as e:
