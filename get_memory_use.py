@@ -183,6 +183,9 @@ def main():
     else:
         raise ValueError(f"Unknown model: {args.model}")
 
+    # Make absolutely sure parameters are on the requested device
+    model.to(device)
+
     # Instantiate selected dataset
     if args.dataset == "TSQADataset":
         dataset = TSQADataset(split="train", EOS_TOKEN=eos)
