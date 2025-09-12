@@ -8,6 +8,7 @@ from typing import Dict, List, Tuple
 
 import torch
 from tqdm.auto import tqdm
+from torch.utils.data import DataLoader
 
 # Ensure src is on path
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -96,19 +97,31 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
         torch.cuda.synchronize()
 
     last_loss = 0.0
-    data_len = len(dataset)
-    for i in tqdm(range(steps), total=steps, desc="Training", leave=False):
-        idx = i % data_len
-        sample = dataset[idx]
-        batch = extend_time_series_to_match_patch_size_and_aggregate([sample])
+    # DataLoader with shuffle and collate that pads series
+    loader = DataLoader(
+        dataset,
+        batch_size=1,
+        shuffle=True,
+        collate_fn=lambda b: extend_time_series_to_match_patch_size_and_aggregate(b),
+        drop_last=False,
+    )
+
+    pbar = tqdm(total=steps, desc="Training", leave=False)
+    step = 0
+    for batch in loader:
         if optimizer:
             optimizer.zero_grad(set_to_none=True)
         loss = model.compute_loss(batch)
         if optimizer and loss.requires_grad:
-            print(f"Backpropagating loss of {loss.item()} for step {i}")
+            print(f"Backpropagating loss of {loss.item()} for step {step}")
             loss.backward()
             optimizer.step()
         last_loss = float(loss.detach().item())
+        step += 1
+        pbar.update(1)
+        if step >= steps:
+            break
+    pbar.close()
 
     peak_bytes = measure_peak_cuda_bytes()
     return last_loss, peak_bytes
