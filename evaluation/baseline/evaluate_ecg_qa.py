@@ -46,10 +46,14 @@ def evaluate_ecg_metrics(ground_truth: str, prediction: str, sample: Dict[str, A
 
     # Per-template supported answers (strict)
     if not isinstance(sample, dict):
+        print(f"DEBUG: Sample type: {type(sample)}")
+        print(f"DEBUG: Sample content: {sample}")
         raise ValueError("Sample must be a dict containing 'template_id' for ECG-QA evaluation")
 
     template_id = sample.get("template_id") or sample.get("cot_template_id")
     if template_id is None:
+        print(f"DEBUG: Sample keys: {sample.keys()}")
+        print(f"DEBUG: Sample content: {sample}")
         raise ValueError("Missing 'template_id' in sample for ECG-QA evaluation")
 
     possible_answers = ECGQACoTQADataset.get_possible_answers_for_template(int(template_id))
@@ -228,7 +232,7 @@ def main():
         model_name=model_name,
         dataset_class=ECGQACoTQADataset,
         evaluation_function=evaluate_ecg_metrics,
-        max_samples=None,
+        max_samples=2,
         use_plot=False,
         max_new_tokens=400,
     )

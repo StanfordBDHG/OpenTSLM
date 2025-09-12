@@ -514,6 +514,23 @@ Make sure that your last word is the answer. You MUST end your response with "An
         
         return formatted_sample
 
+    def _format_sample_str(self, time_series_format_function, row):
+        """Override to preserve template_id and other fields needed for evaluation."""
+        # Call parent method to get the basic formatted sample
+        formatted_sample = super()._format_sample_str(time_series_format_function, row)
+        
+        # Add template_id and other fields needed for evaluation
+        if 'template_id' in row:
+            formatted_sample['template_id'] = row['template_id']
+        if 'cot_template_id' in row:
+            formatted_sample['cot_template_id'] = row['cot_template_id']
+        if 'question_type' in row:
+            formatted_sample['question_type'] = row['question_type']
+        if 'question' in row:
+            formatted_sample['question'] = row['question']
+        
+        return formatted_sample
+
 
 if __name__ == "__main__":
     # Test the dataset with limited samples

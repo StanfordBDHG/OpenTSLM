@@ -370,7 +370,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = current_dir / "gemma_sp.jsonl"
-    clean_output = current_dir / "gemma_sp.clean.jsonl"
+    input_file = current_dir / "gemma_1b_sp.jsonl"
+    clean_output = current_dir / "gemma_1b_sp.clean.jsonl"
     
     parse_ecg_qa_cot_jsonl(input_file, clean_output)
