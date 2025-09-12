@@ -167,6 +167,7 @@ def main():
         "dataset",
         "loss",
         "peak_cuda_bytes",
+        "peak_cuda_gb",
         "status",
         "error",
     ]
@@ -204,6 +205,8 @@ def main():
 
     # Run one iteration and append results
     res = run_for_dataset(args.model, model, dataset_name, dataset)
+    peak_bytes = res["peak_cuda_bytes"]
+    peak_gb = (float(peak_bytes) / (1024.0 ** 3)) if isinstance(peak_bytes, (int, float)) and peak_bytes >= 0 else -1
     append_row(
         args.results_csv,
         [
@@ -214,6 +217,7 @@ def main():
             res["dataset"],
             res["loss"],
             res["peak_cuda_bytes"],
+            f"{peak_gb:.4f}" if isinstance(peak_gb, float) and peak_gb >= 0 else peak_gb,
             res["status"],
             res["error"],
         ],
