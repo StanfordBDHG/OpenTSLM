@@ -79,6 +79,7 @@ def calculate_template_f1_stats(data_points):
     total_samples = 0
     total_correct = 0
     total_f1_sum = 0
+    total_macro_f1_weighted_sum = 0
     
     for template_id, points in template_groups.items():
         if not points:
@@ -158,22 +159,34 @@ def calculate_template_f1_stats(data_points):
         total_samples += len(points)
         total_correct += template_correct
         total_f1_sum += template_avg_f1 * len(points)  # Weighted by number of samples
+        total_macro_f1_weighted_sum += macro_f1 * len(points)
     
     # Calculate overall statistics
     overall_accuracy = total_correct / total_samples if total_samples > 0 else 0
     overall_avg_f1 = total_f1_sum / total_samples if total_samples > 0 else 0
     
-    # Calculate weighted macro-F1 across templates
+    # Calculate macro-F1 across templates
     template_macro_f1s = [stats["macro_f1"] for stats in template_stats.values()]
     overall_macro_f1 = sum(template_macro_f1s) / len(template_macro_f1s) if template_macro_f1s else 0
+    overall_macro_f1_weighted = (
+        total_macro_f1_weighted_sum / total_samples if total_samples > 0 else 0
+    )
+
+    # Calculate unweighted average of per-template accuracies
+    template_accuracies = [stats["accuracy"] for stats in template_stats.values()]
+    overall_template_accuracy_avg = (
+        sum(template_accuracies) / len(template_accuracies) if template_accuracies else 0
+    )
     
     return {
         "overall": {
             "total_samples": total_samples,
             "total_templates": len(template_stats),
             "accuracy": overall_accuracy,
+            "template_accuracy_avg": overall_template_accuracy_avg,
             "average_f1": overall_avg_f1,
             "macro_f1": overall_macro_f1,
+            "macro_f1_weighted": overall_macro_f1_weighted,
         },
         "per_template": template_stats,
     }
@@ -221,8 +234,16 @@ def parse_ecg_qa_cot_jsonl(input_file, output_file=None):
         print(f"\nOverall F1 Statistics:")
         overall = f1_stats.get("overall", {})
         print(f"Total templates: {overall.get('total_templates', 0)}")
-        print(f"Average F1 Score: {overall.get('average_f1', 0):.4f}")
-        print(f"Macro-F1 Score: {overall.get('macro_f1', 0):.4f}")
+        print(f"Average F1 Score (sample-weighted): {overall.get('average_f1', 0):.4f}")
+        print(f"Macro-F1 Score (unweighted over templates): {overall.get('macro_f1', 0):.4f}")
+        print(f"Macro-F1 Score (sample-weighted over templates): {overall.get('macro_f1_weighted', 0):.4f}")
+        print(f"Template Accuracy Avg (unweighted): {overall.get('template_accuracy_avg', 0):.4f}")
+
+        # Final single-value summary (aggregated across all templates)
+        print("\nFinal Results (aggregated across all templates):")
+        print(f"Final Accuracy (micro over samples): {overall.get('accuracy', 0):.4f}")
+        print(f"Final F1 (micro over samples): {overall.get('accuracy', 0):.4f}")
+        print(f"Final Macro-F1 (weighted by template size): {overall.get('macro_f1_weighted', 0):.4f}")
         
         # Display per-template statistics
         per_template = f1_stats.get("per_template", {})
@@ -247,6 +268,15 @@ def parse_ecg_qa_cot_jsonl(input_file, output_file=None):
                 f.write(json.dumps(item, indent=2) + "\n")
         
         print(f"\nData saved to {output_file}")
+
+        # Print concise overall stats at the end as a final summary
+        print("\n==== Final Summary (end of run) ====")
+        print(f"Samples: {accuracy_stats['total_samples']}")
+        print(f"Accuracy (micro): {overall.get('accuracy', 0):.4f}")
+        print(f"F1 (micro): {overall.get('accuracy', 0):.4f}")
+        print(f"Macro-F1 (unweighted): {overall.get('macro_f1', 0):.4f}")
+        print(f"Macro-F1 (weighted): {overall.get('macro_f1_weighted', 0):.4f}")
+        print(f"Template Accuracy Avg (unweighted): {overall.get('template_accuracy_avg', 0):.4f}")
         return extracted_data
     else:
         print("No data could be extracted from the file.")
@@ -340,7 +370,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = current_dir / "gemma_flamingo.jsonl"
-    clean_output = current_dir / "gemma_flamingo.clean.jsonl"
+    input_file = current_dir / "gemma_sp.jsonl"
+    clean_output = current_dir / "gemma_sp.clean.jsonl"
     
     parse_ecg_qa_cot_jsonl(input_file, clean_output)
