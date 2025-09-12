@@ -134,11 +134,11 @@ def main():
 
     # Instantiate selected model
     if args.model == "EmbedHealthFlamingo":
-        model = EmbedHealthFlamingo(device=device, llm_id=args.llm_id)
+        model = EmbedHealthFlamingo(device=device, llm_id=args.llm_id, cross_attn_every_n_layers=1,
+                gradient_checkpointing=True)
         eos = model.get_eos_token()
     elif args.model == "EmbedHealthSP":
-        model = EmbedHealthSP(llm_id=args.llm_id, device=device, cross_attn_every_n_layers=1,
-                gradient_checkpointing=True)
+        model = EmbedHealthSP(llm_id=args.llm_id, device=device)
         eos = model.get_eos_token()
     else:
         raise ValueError(f"Unknown model: {args.model}")
