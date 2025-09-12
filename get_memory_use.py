@@ -140,6 +140,12 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
     max_reserved_bytes = -1
     max_nvml_bytes = -1
     step = 0
+    # Initialize postfix
+    pbar.set_postfix({
+        "alloc_gb": 0.0,
+        "res_gb": 0.0,
+        "nvml_gb": 0.0,
+    })
     for batch in loader:
         if optimizer:
             optimizer.zero_grad(set_to_none=True)
@@ -161,6 +167,14 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
             nvml_bytes = nvml_current_process_bytes()
             if nvml_bytes > max_nvml_bytes:
                 max_nvml_bytes = nvml_bytes
+            # Update progress bar postfix in GB
+            def _to_gb(val: int) -> float:
+                return float(val) / (1024.0 ** 3) if isinstance(val, (int, float)) and val >= 0 else 0.0
+            pbar.set_postfix({
+                "alloc_gb": f"{_to_gb(max_peak_bytes):.2f}",
+                "res_gb": f"{_to_gb(max_reserved_bytes):.2f}",
+                "nvml_gb": f"{_to_gb(max_nvml_bytes):.2f}",
+            })
         step += 1
         pbar.update(1)
         if step >= steps:
