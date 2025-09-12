@@ -25,6 +25,7 @@ from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
 
 
 def get_device(device_arg: str | None) -> str:
@@ -46,14 +47,53 @@ def get_first_batch(dataset, batch_size: int = 1) -> List[Dict[str, any]]:
     batch: List[Dict[str, any]] = []
     for i in range(min(batch_size, len(dataset))):
         batch.append(dataset[i])
+    # Ensure time series tensors are padded and converted
+    batch = extend_time_series_to_match_patch_size_and_aggregate(batch)
     return batch
 
 
-def one_iter_train(model, batch: List[Dict[str, any]]) -> Tuple[float, int]:
+def one_iter_train(model, model_type: str, batch: List[Dict[str, any]]) -> Tuple[float, int]:
     model.train()
-    params = [p for p in model.parameters() if p.requires_grad]
-    # Fallback to a tiny learning rate; we only do a single step
-    optimizer = torch.optim.AdamW(params, lr=1e-4) if len(params) > 0 else None
+    # Parameter selection and grouping similar to curriculum_learning.py
+    base_lr = 2e-4
+    optimizer = None
+
+    if model_type == "EmbedHealthSP":
+        # SP: optimize encoder and projector only (LLM is frozen by class init)
+        enc_params = [p for p in getattr(model, "encoder").parameters() if p.requires_grad]
+        proj_params = [p for p in getattr(model, "projector").parameters() if p.requires_grad]
+        param_groups = []
+        if len(enc_params) > 0:
+            param_groups.append({"params": enc_params, "weight_decay": 0.1})
+        if len(proj_params) > 0:
+            param_groups.append({"params": proj_params, "weight_decay": 0.1})
+        if len(param_groups) > 0:
+            optimizer = torch.optim.AdamW(param_groups, lr=base_lr)
+    else:
+        # Flamingo: filter trainable params and split by gated_cross_attn for WD
+        named_params = list(model.named_parameters())
+        trainable = list(
+            filter(
+                lambda np: np[1].requires_grad and not getattr(np[1], "exclude_from_optimizer", False),
+                named_params,
+            )
+        )
+
+        params_with_wd, params_without_wd = [], []
+        for name, p in trainable:
+            if "gated_cross_attn" in name:
+                params_with_wd.append(p)
+            else:
+                params_without_wd.append(p)
+
+        if len(params_with_wd) + len(params_without_wd) > 0:
+            optimizer = torch.optim.AdamW(
+                [
+                    {"params": params_with_wd, "weight_decay": 0.1},
+                    {"params": params_without_wd, "weight_decay": 0.0},
+                ],
+                lr=base_lr,
+            )
 
     if optimizer:
         optimizer.zero_grad(set_to_none=True)
@@ -93,7 +133,7 @@ def run_for_dataset(model_name: str, model, dataset_name: str, dataset_obj) -> D
     }
     try:
         batch = get_first_batch(dataset_obj, batch_size=1)
-        loss, peak = one_iter_train(model, batch)
+        loss, peak = one_iter_train(model, model_name, batch)
         result["loss"] = loss
         result["peak_cuda_bytes"] = peak
     except Exception as e:
@@ -112,7 +152,7 @@ def main():
         choices=["TSQADataset", "HARCoTQADataset", "SleepEDFCoTQADataset", "ECGQACoTQADataset"],
         help="Dataset to use",
     )
-    parser.add_argument("--device", default=None, help="Device to run on (e.g., cuda, cuda:0, cpu)")
+    parser.add_argument("--device", default="cuda", help="Device to run on (e.g., cuda, cuda:0, cpu)")
     parser.add_argument("--results_csv", default=os.path.join(REPO_DIR, "memory_use.csv"), help="Path to CSV file to append results")
     args = parser.parse_args()
 
