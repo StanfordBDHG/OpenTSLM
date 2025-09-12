@@ -60,14 +60,27 @@ def nvml_current_process_bytes() -> int:
         return -1
     try:
         pynvml.nvmlInit()
-        device_index = torch.cuda.current_device()
-        handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
-        procs = pynvml.nvmlDeviceGetComputeRunningProcesses_v3(handle)
         pid = _os.getpid()
-        for p in procs:
-            if int(p.pid) == pid:
-                return int(p.usedGpuMemory) if p.usedGpuMemory is not None else -1
-        return -1
+        total_bytes = 0
+        found = False
+        device_count = pynvml.nvmlDeviceGetCount()
+        for device_index in range(device_count):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
+            # Try compute procs first
+            try:
+                procs = pynvml.nvmlDeviceGetComputeRunningProcesses_v3(handle)
+            except Exception:
+                procs = []
+            # Fallback to graphics procs
+            try:
+                procs_gfx = pynvml.nvmlDeviceGetGraphicsRunningProcesses_v3(handle)
+            except Exception:
+                procs_gfx = []
+            for p in list(procs) + list(procs_gfx):
+                if int(p.pid) == pid and p.usedGpuMemory is not None and p.usedGpuMemory >= 0:
+                    total_bytes += int(p.usedGpuMemory)
+                    found = True
+        return total_bytes if found else -1
     except Exception:
         return -1
 
