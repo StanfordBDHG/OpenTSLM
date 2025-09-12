@@ -9,6 +9,11 @@ from typing import Dict, List, Tuple
 import torch
 from tqdm.auto import tqdm
 from torch.utils.data import DataLoader
+import os as _os
+
+import pynvml  # type: ignore
+_NVML_AVAILABLE = True
+
 
 # Ensure src is on path
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -41,6 +46,30 @@ def measure_peak_cuda_bytes() -> int:
         return -1
     torch.cuda.synchronize()
     return int(torch.cuda.max_memory_allocated())
+
+
+def measure_peak_cuda_reserved_bytes() -> int:
+    if not torch.cuda.is_available():
+        return -1
+    torch.cuda.synchronize()
+    return int(torch.cuda.max_memory_reserved())
+
+
+def nvml_current_process_bytes() -> int:
+    if not _NVML_AVAILABLE or not torch.cuda.is_available():
+        return -1
+    try:
+        pynvml.nvmlInit()
+        device_index = torch.cuda.current_device()
+        handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
+        procs = pynvml.nvmlDeviceGetComputeRunningProcesses_v3(handle)
+        pid = _os.getpid()
+        for p in procs:
+            if int(p.pid) == pid:
+                return int(p.usedGpuMemory) if p.usedGpuMemory is not None else -1
+        return -1
+    except Exception:
+        return -1
 
 
 
@@ -89,7 +118,7 @@ def build_optimizer(model, model_type: str, base_lr: float = 2e-4):
     )
 
 
-def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float, int]:
+def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float, int, int, int]:
     model.train()
     optimizer = build_optimizer(model, model_type)
     if torch.cuda.is_available():
@@ -108,6 +137,8 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
 
     pbar = tqdm(total=steps, desc="Training", leave=False)
     max_peak_bytes = -1
+    max_reserved_bytes = -1
+    max_nvml_bytes = -1
     step = 0
     for batch in loader:
         if optimizer:
@@ -122,8 +153,14 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
         if torch.cuda.is_available():
             torch.cuda.synchronize()
             current_peak = int(torch.cuda.max_memory_allocated())
+            current_reserved = int(torch.cuda.max_memory_reserved())
             if current_peak > max_peak_bytes:
                 max_peak_bytes = current_peak
+            if current_reserved > max_reserved_bytes:
+                max_reserved_bytes = current_reserved
+            nvml_bytes = nvml_current_process_bytes()
+            if nvml_bytes > max_nvml_bytes:
+                max_nvml_bytes = nvml_bytes
         step += 1
         pbar.update(1)
         if step >= steps:
@@ -132,9 +169,13 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
     
     if torch.cuda.is_available():
         peak_bytes = max_peak_bytes
+        peak_reserved_bytes = max_reserved_bytes
+        nvml_peak_bytes = max_nvml_bytes
     else:
         peak_bytes = -1
-    return last_loss, peak_bytes
+        peak_reserved_bytes = -1
+        nvml_peak_bytes = -1
+    return last_loss, peak_bytes, peak_reserved_bytes, nvml_peak_bytes
 
 
 def ensure_csv(path: str, header: List[str]):
@@ -163,9 +204,11 @@ def run_for_dataset(model_name: str, model, dataset_name: str, dataset_obj) -> D
     try:
         # Train for half an epoch, capped at 10000 steps
         steps = max(1, min(len(dataset_obj), 10000))
-        loss, peak = train_for_steps(model, model_name, dataset_obj, steps)
+        loss, peak, peak_reserved, nvml_peak = train_for_steps(model, model_name, dataset_obj, steps)
         result["loss"] = loss
         result["peak_cuda_bytes"] = peak
+        result["peak_cuda_reserved_bytes"] = peak_reserved
+        result["nvml_peak_bytes"] = nvml_peak
     except Exception as e:
         result["status"] = "error"
         result["error"] = str(e)
@@ -198,6 +241,10 @@ def main():
         "loss",
         "peak_cuda_bytes",
         "peak_cuda_gb",
+        "peak_cuda_reserved_bytes",
+        "peak_cuda_reserved_gb",
+        "nvml_peak_bytes",
+        "nvml_peak_gb",
         "status",
         "error",
     ]
@@ -237,6 +284,10 @@ def main():
     res = run_for_dataset(args.model, model, dataset_name, dataset)
     peak_bytes = res["peak_cuda_bytes"]
     peak_gb = (float(peak_bytes) / (1024.0 ** 3)) if isinstance(peak_bytes, (int, float)) and peak_bytes >= 0 else -1
+    peak_reserved_bytes = res.get("peak_cuda_reserved_bytes", -1)
+    peak_reserved_gb = (float(peak_reserved_bytes) / (1024.0 ** 3)) if isinstance(peak_reserved_bytes, (int, float)) and peak_reserved_bytes >= 0 else -1
+    nvml_peak_bytes = res.get("nvml_peak_bytes", -1)
+    nvml_peak_gb = (float(nvml_peak_bytes) / (1024.0 ** 3)) if isinstance(nvml_peak_bytes, (int, float)) and nvml_peak_bytes >= 0 else -1
     append_row(
         args.results_csv,
         [
@@ -248,6 +299,10 @@ def main():
             res["loss"],
             res["peak_cuda_bytes"],
             f"{peak_gb:.4f}" if isinstance(peak_gb, float) and peak_gb >= 0 else peak_gb,
+            res.get("peak_cuda_reserved_bytes", -1),
+            f"{peak_reserved_gb:.4f}" if isinstance(peak_reserved_gb, float) and peak_reserved_gb >= 0 else peak_reserved_gb,
+            res.get("nvml_peak_bytes", -1),
+            f"{nvml_peak_gb:.4f}" if isinstance(nvml_peak_gb, float) and nvml_peak_gb >= 0 else nvml_peak_gb,
             res["status"],
             res["error"],
         ],
