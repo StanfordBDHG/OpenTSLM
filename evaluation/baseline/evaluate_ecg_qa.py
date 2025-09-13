@@ -232,7 +232,7 @@ def main():
         model_name=model_name,
         dataset_class=ECGQACoTQADataset,
         evaluation_function=evaluate_ecg_metrics,
-        max_samples=2,
+        max_samples=490,
         use_plot=False,
         max_new_tokens=400,
     )

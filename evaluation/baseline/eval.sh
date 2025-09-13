@@ -3,7 +3,7 @@
 # List of models to evaluate
 models=(
     "google/gemma-3-270m"
-    "google/gemma-3-1b"
+    "google/gemma-3-1b-pt"
     "meta-llama/Llama-3.2-1B"
     "meta-llama/Llama-3.2-3B"
     
