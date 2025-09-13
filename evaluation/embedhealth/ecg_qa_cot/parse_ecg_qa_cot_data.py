@@ -293,8 +293,8 @@ def extract_structured_data(input_file):
                 data = json.loads(line.strip())
                 
                 # Extract generated and gold fields - these are required
-                generated_text = data.get('generated')
-                gold_text = data.get('gold')
+                generated_text = data.get('generated_answer')
+                gold_text = data.get('target_answer')
                 
                 if generated_text is None:
                     raise ValueError(f"Missing 'generated' field in line {line_num}")
@@ -303,7 +303,7 @@ def extract_structured_data(input_file):
                 
                 # Extract template_id and ecg_id - these are required for ECG-QA evaluation
                 template_id = data.get('template_id')
-                ecg_id = data.get('ecg_id')
+                ecg_id = data.get('ecg_id', "None")
                 
                 if template_id is None:
                     raise ValueError(f"Missing template_id in line {line_num}")
@@ -370,7 +370,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = current_dir / "gemma_1b_sp.jsonl"
-    clean_output = current_dir / "gemma_1b_sp.clean.jsonl"
+    input_file = current_dir / "evaluation_results_openai-gpt-4o_ecgqacotqadataset.jsonl"
+    clean_output = current_dir / "evaluation_results_openai-gpt-4o_ecgqacotqadataset.clean.jsonl"
     
     parse_ecg_qa_cot_jsonl(input_file, clean_output)
