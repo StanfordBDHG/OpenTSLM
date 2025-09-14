@@ -31,91 +31,69 @@ class SimulationQADataset(QADataset):
         self.length = length
         self.num_series = num_series
 
-        # Generate time series once in constructor
-        self.generated_series_data = self._generate_time_series()
-
         super().__init__(
             split, EOS_TOKEN, format_sample_str, time_series_format_function
         )
 
-    def _generate_time_series(self) -> List[Tuple[torch.Tensor, str]]:
-        """
-        Generate time series data once in constructor.
-        Returns a list of tuples containing (normalized_series, text_description).
-        """
-        series_data = []
-
-        # Generate time series for any num_series value
-        for i in range(self.num_series):
-            # Generate random time series
-            series = torch.tensor(np.random.randn(self.length), dtype=torch.float32)
-
-            # Check for invalid data (very unlikely with random normal data)
-            if torch.isnan(series).any() or torch.isinf(series).any():
-                print(f"❌ Invalid data detected in simulation series {i}")
-                raise ValueError(f"Invalid data detected in series {i}")
-
-            # Normalize the series with better numerical stability
-            mean_val = series.mean().item()
-            std_val = series.std().item()
-
-            # Handle zero or very small standard deviations
-            min_std = 1e-6
-            std_val = max(std_val, min_std)
-
-            normalized_series = (series - mean_val) / std_val
-
-            # Check for NaN/Inf after normalization (very unlikely with random normal data)
-            if (
-                torch.isnan(normalized_series).any()
-                or torch.isinf(normalized_series).any()
-            ):
-                print(f"❌ NaN/Inf detected after normalization in series {i}")
-                raise ValueError(f"NaN/Inf detected after normalization in series {i}")
-
-            # Create descriptive text - use consistent format for all series
-            text_description = f"This is the time series, it has mean {mean_val:.4f} and std {std_val:.4f}."
-
-            series_data.append((normalized_series, text_description))
-
-        return series_data
 
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         """
-        Creates a dataset item with the pre-generated time series data.
-        The time series data was generated once in the constructor.
+        Creates a dataset with 10,000 items, each with random time series data.
+        Each item will have num_series time series of length elements.
         """
-        # Create data structure with pre-generated time series
-        if self.num_series == 1:
-            # Single time series (backward compatibility)
-            normalized_series, text_description = self.generated_series_data[0]
-            data_item = {
-                "Series": normalized_series.tolist(),  # Store the actual generated series
-                "Question": "What is the pattern of this time series?",
-                "Answer": "This is a random pattern with noise.",
-                "Task": "pattern recognition",
-            }
-        else:
-            # Multiple time series - store actual generated data
-            time_series_data = {}
-            for i in range(self.num_series):
-                normalized_series, text_description = self.generated_series_data[i]
-                time_series_data[f"series_{i}"] = normalized_series.tolist()
-
-            data_item = {
-                **time_series_data,
-                "Question": f"What are the patterns of these {self.num_series} time series?",
-                "Answer": f"These are {self.num_series} different synthetic patterns including sinusoidal, trend, and noise components.",
-                "Task": "multi-series pattern recognition",
-            }
-
-        # Create a dataset with single item
-        single_item_dataset = Dataset.from_dict(
-            {key: [value] for key, value in data_item.items()}
-        )
-
+        dataset_size = 10000
+        all_items = []
+        
+        for item_idx in range(dataset_size):
+            # Generate random time series for this item
+            item_data = {}
+            
+            if self.num_series == 1:
+                # Single time series
+                series = torch.tensor(np.random.randn(self.length), dtype=torch.float32)
+                
+                # Normalize the series
+                mean_val = series.mean().item()
+                std_val = max(series.std().item(), 1e-6)
+                normalized_series = (series - mean_val) / std_val
+                
+                item_data = {
+                    "Series": normalized_series.tolist(),
+                    "Question": f"What is the pattern of this time series? (Item {item_idx})",
+                    "Answer": f"This is a random pattern with noise. Mean: {mean_val:.4f}, Std: {std_val:.4f}",
+                    "Task": "pattern recognition",
+                }
+            else:
+                # Multiple time series
+                time_series_data = {}
+                for i in range(self.num_series):
+                    series = torch.tensor(np.random.randn(self.length), dtype=torch.float32)
+                    
+                    # Normalize the series
+                    mean_val = series.mean().item()
+                    std_val = max(series.std().item(), 1e-6)
+                    normalized_series = (series - mean_val) / std_val
+                    
+                    time_series_data[f"series_{i}"] = normalized_series.tolist()
+                
+                item_data = {
+                    **time_series_data,
+                    "Question": f"What are the patterns of these {self.num_series} time series? (Item {item_idx})",
+                    "Answer": f"These are {self.num_series} different synthetic patterns with random noise components.",
+                    "Task": "multi-series pattern recognition",
+                }
+            
+            all_items.append(item_data)
+        
+        # Convert to HuggingFace Dataset format
+        dataset_dict = {}
+        for key in all_items[0].keys():
+            dataset_dict[key] = [item[key] for item in all_items]
+        
+        dataset = Dataset.from_dict(dataset_dict)
+        
         # Return the same dataset for all splits
-        return single_item_dataset, single_item_dataset, single_item_dataset
+        return dataset, dataset, dataset
 
     def _get_answer(self, row) -> str:
         """Get the answer from the data row."""
@@ -131,26 +109,31 @@ class SimulationQADataset(QADataset):
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         """
-        Use pre-generated time series data and convert to TextTimeSeriesPrompt format.
-        The time series were generated once in the constructor and are reused for consistency.
-        Handles both single and multiple time series.
+        Convert the time series data from the current row to TextTimeSeriesPrompt format.
+        Each row now contains its own random time series data.
         """
         prompts = []
 
-        # Use the pre-generated series data
-        for i, (normalized_series, text_description) in enumerate(
-            self.generated_series_data
-        ):
-            prompts.append(
-                TextTimeSeriesPrompt(text_description, normalized_series.tolist())
-            )
+        if self.num_series == 1:
+            # Single time series
+            series_data = row["Series"]
+            text_description = f"This is a random time series with {len(series_data)} data points."
+            prompts.append(TextTimeSeriesPrompt(text_description, series_data))
+        else:
+            # Multiple time series
+            for i in range(self.num_series):
+                series_key = f"series_{i}"
+                if series_key in row:
+                    series_data = row[series_key]
+                    text_description = f"This is time series {i+1} with {len(series_data)} data points."
+                    prompts.append(TextTimeSeriesPrompt(text_description, series_data))
 
         return prompts
 
 
 if __name__ == "__main__":
-    # Example usage - Single time series (backward compatibility)
-    print("=== Single Time Series Dataset ===")
+    # Example usage - Single time series
+    print("=== Single Time Series Dataset (10,000 items) ===")
     dataset_single = SimulationQADataset("train", "", length=50, num_series=1)
     print(f"Dataset length: {len(dataset_single)}")
     sample_single = dataset_single[0]
@@ -159,7 +142,7 @@ if __name__ == "__main__":
     print(f"Answer: {sample_single['answer']}")
     print(f"Number of time series prompts: {len(sample_single['time_series_prompts'])}")
 
-    print("\n=== Multiple Time Series Dataset ===")
+    print("\n=== Multiple Time Series Dataset (10,000 items) ===")
     # Example usage - Multiple time series
     dataset_multi = SimulationQADataset("train", "", length=50, num_series=3)
     print(f"Dataset length: {len(dataset_multi)}")
@@ -182,3 +165,13 @@ if __name__ == "__main__":
     print(f"Train length: {len(train_dataset)}")
     print(f"Val length: {len(val_dataset)}")
     print(f"Test length: {len(test_dataset)}")
+    
+    # Test that different items have different data
+    print("\n=== Testing Randomness ===")
+    item_0 = dataset_single[0]
+    item_100 = dataset_single[100]
+    print(f"Item 0 Series length: {len(item_0['time_series_prompts'][0].time_series)}")
+    print(f"Item 100 Series length: {len(item_100['time_series_prompts'][0].time_series)}")
+    print(f"First 5 values of item 0: {item_0['time_series_prompts'][0].time_series[:5]}")
+    print(f"First 5 values of item 100: {item_100['time_series_prompts'][0].time_series[:5]}")
+    print("Values are different:", item_0['time_series_prompts'][0].time_series[:5] != item_100['time_series_prompts'][0].time_series[:5])
