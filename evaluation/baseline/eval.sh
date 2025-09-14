@@ -2,12 +2,11 @@
 
 # List of models to evaluate
 models=(
-    "openai-gpt-4o"
+    "google/gemma-3-270m"
+    "google/gemma-3-1b-pt"
+    "meta-llama/Llama-3.2-1B"
     "meta-llama/Llama-3.2-3B"
-    "google/gemma-2b"
-    "google/gemma-2-2b"
-    "google/gemma-3-4b-pt"
-    "google/gemma-3-4b-it"
+    
 )
 
 #echo "Starting evaluation of ${#models[@]} models on TSQA dataset..."
@@ -17,16 +16,16 @@ models=(
 #done
 
 
-#echo "Starting evaluation of ${#models[@]} models on PAMAP dataset..."
-#for model in "${models[@]}"; do
-#    echo "Evaluating $model on PAMAP..."
-#    python evaluate_pamap.py "$model"
-#done
-
-echo "Starting evaluation of ${#models[@]} models on SleepEDF CoT dataset..."
+echo "Starting evaluation of ${#models[@]} models on HAR dataset..."
 for model in "${models[@]}"; do
-    echo "Evaluating $model on SleepEDF CoT..."
-    python evaluate_sleep_cot.py "$model"
+    echo "Evaluating $model on PAMAP..."
+    python evaluate_har.py "$model"
 done
+
+#echo "Starting evaluation of ${#models[@]} models on SleepEDF CoT dataset..."
+#for model in "${models[@]}"; do
+#    echo "Evaluating $model on SleepEDF CoT..."
+#    python evaluate_sleep_cot.py "$model"
+#done
 
 echo "All evaluations completed!"

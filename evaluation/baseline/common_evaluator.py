@@ -74,7 +74,7 @@ class CommonEvaluator:
 
     
     def load_dataset(self, dataset_class: Type[Dataset], split: str = "test", 
-                    format_sample_str: bool = True, **dataset_kwargs) -> Dataset:
+                    format_sample_str: bool = True, max_samples: Optional[int] = None, **dataset_kwargs) -> Dataset:
         """
         Load a dataset with proper formatting.
         """
@@ -107,6 +107,10 @@ class CommonEvaluator:
             "format_sample_str": format_sample_str,
             "time_series_format_function": formatter,
         }
+        
+        # Add max_samples if provided
+        if max_samples is not None:
+            default_kwargs["max_samples"] = max_samples
         
         # Update with provided kwargs
         default_kwargs.update(dataset_kwargs)
@@ -144,19 +148,27 @@ class CommonEvaluator:
         pipe = self.load_model(model_name, **pipeline_kwargs)
         
         # Load dataset
-        dataset = self.load_dataset(dataset_class)
+        dataset = self.load_dataset(dataset_class, max_samples=max_samples)
+        
+        # Check for existing results to resume from
+        existing_count = self._get_existing_results_count(model_name, dataset_class.__name__)
+        start_idx = existing_count
         
         # Limit samples if specified
         if max_samples is not None:
             dataset_size = min(len(dataset), max_samples)
-            print(f"Processing first {dataset_size} samples...")
+            print(f"Processing samples {start_idx} to {dataset_size}...")
         else:
             dataset_size = len(dataset)
-            print(f"Processing all {dataset_size} samples...")
+            print(f"Processing samples {start_idx} to {dataset_size}...")
+        
+        if start_idx >= dataset_size:
+            print(f"✅ All {dataset_size} samples already processed!")
+            return self._consolidate_jsonl_results(model_name, dataset_class.__name__)
         
         # Initialize tracking
-        total_samples = 0
-        successful_inferences = 0
+        total_samples = dataset_size
+        successful_inferences = existing_count  # Start with existing count
         all_metrics = []
         results = []
         first_error_printed = False  # Track if we've printed the first error
@@ -167,8 +179,20 @@ class CommonEvaluator:
         # Get max_new_tokens for generation (default 1000)
         max_new_tokens = pipeline_kwargs.pop('max_new_tokens', 1000)
         
-        # Process each sample
-        for idx in tqdm(range(dataset_size), desc="Processing samples"):
+        # Load existing metrics if resuming
+        if start_idx > 0:
+            print(f"📂 Loading existing results from {start_idx} completed samples...")
+            jsonl_file = self._get_jsonl_file_path(model_name, dataset_class.__name__)
+            if os.path.exists(jsonl_file):
+                with open(jsonl_file, "r") as f:
+                    for line in f:
+                        if line.strip():
+                            result = json.loads(line.strip())
+                            all_metrics.append(result["metrics"])
+                            results.append(result)
+        
+        # Process each sample starting from where we left off
+        for idx in tqdm(range(start_idx, dataset_size), desc="Processing samples"):
             try:
                 sample = dataset[idx]
 
@@ -194,8 +218,17 @@ class CommonEvaluator:
                     generated_text = outputs[0]["generated_text"].strip()
                     successful_inferences += 1
                     
-                    # Evaluate using custom function
-                    metrics = evaluation_function(target_answer, generated_text)
+                    # Evaluate using custom function (optionally with sample)
+                    try:
+                        import inspect
+                        sig = inspect.signature(evaluation_function)
+                        if len(sig.parameters) >= 3:
+                            metrics = evaluation_function(target_answer, generated_text, sample)
+                        else:
+                            metrics = evaluation_function(target_answer, generated_text)
+                    except Exception:
+                        # Fallback to 2-arg call
+                        metrics = evaluation_function(target_answer, generated_text)
                     all_metrics.append(metrics)
                     
                     # Store detailed results
@@ -206,7 +239,13 @@ class CommonEvaluator:
                         "generated_answer": generated_text,
                         "metrics": metrics,
                     }
+                    # Include template_id if present in sample for downstream analysis
+                    if isinstance(sample, dict) and "template_id" in sample:
+                        result["template_id"] = sample["template_id"]
                     results.append(result)
+                    
+                    # Save individual result immediately to prevent data loss
+                    self._save_individual_result(result, model_name, dataset_class.__name__)
                     
                     # Print progress for first few samples
                     if idx < 10:
@@ -227,7 +266,7 @@ class CommonEvaluator:
                 else:
                     raise ValueError(f"Unexpectedly found empty outputs")
                 
-                total_samples += 1
+                # total_samples is already set to dataset_size, no need to increment
                 
             except Exception as e:
                 print(f"Error processing sample {idx}: {e}")
@@ -255,8 +294,16 @@ class CommonEvaluator:
             # Print summary
             self._print_summary(final_results)
             
-            # Save results
-            self._save_results(final_results)
+            # Consolidate JSONL results into final JSON file
+            consolidated_file = self._consolidate_jsonl_results(model_name, dataset_class.__name__)
+            if consolidated_file:
+                # Update the consolidated file with correct total_samples
+                with open(consolidated_file, "r") as f:
+                    consolidated_data = json.load(f)
+                consolidated_data["total_samples"] = total_samples
+                consolidated_data["success_rate"] = success_rate
+                with open(consolidated_file, "w") as f:
+                    json.dump(consolidated_data, f, indent=2)
             
             return final_results
         else:
@@ -338,6 +385,96 @@ class CommonEvaluator:
             json.dump(results, f, indent=2)
         
         print(f"\nDetailed results saved to: {results_file}")
+    
+    def _save_individual_result(self, result: Dict[str, Any], model_name: str, dataset_name: str):
+        """Save individual result incrementally to prevent data loss."""
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        detailed_dir = os.path.join(current_dir, "..", "results", "baseline", "detailed")
+        os.makedirs(detailed_dir, exist_ok=True)
+        normalized_model_id = re.sub(r"[^a-z0-9]", "-", model_name.lower())
+        normalized_dataset_name = re.sub(r"[^a-z0-9]", "-", dataset_name.lower())
+        results_file = os.path.join(detailed_dir, f"evaluation_results_{normalized_model_id}_{normalized_dataset_name}.jsonl")
+        
+        # Append individual result as JSONL
+        with open(results_file, "a") as f:
+            json.dump(result, f)
+            f.write("\n")
+    
+    def _consolidate_jsonl_results(self, model_name: str, dataset_name: str) -> str:
+        """Consolidate JSONL results into final JSON file."""
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        detailed_dir = os.path.join(current_dir, "..", "results", "baseline", "detailed")
+        normalized_model_id = re.sub(r"[^a-z0-9]", "-", model_name.lower())
+        normalized_dataset_name = re.sub(r"[^a-z0-9]", "-", dataset_name.lower())
+        
+        jsonl_file = os.path.join(detailed_dir, f"evaluation_results_{normalized_model_id}_{normalized_dataset_name}.jsonl")
+        json_file = os.path.join(detailed_dir, f"evaluation_results_{normalized_model_id}_{normalized_dataset_name}.json")
+        
+        # Read all JSONL results
+        individual_results = []
+        if os.path.exists(jsonl_file):
+            with open(jsonl_file, "r") as f:
+                for line in f:
+                    if line.strip():
+                        individual_results.append(json.loads(line.strip()))
+        
+        # Create consolidated results structure
+        if individual_results:
+            # Calculate aggregate metrics
+            all_metrics = [result["metrics"] for result in individual_results]
+            aggregate_metrics = self._aggregate_metrics(all_metrics)
+            
+            # Calculate success rate
+            successful_inferences = len(individual_results)
+            total_samples = len(individual_results)  # This will be updated by caller
+            
+            consolidated_results = {
+                "model_name": model_name,
+                "dataset_name": dataset_name,
+                "total_samples": total_samples,
+                "successful_inferences": successful_inferences,
+                "success_rate": successful_inferences / total_samples if total_samples > 0 else 0.0,
+                "metrics": aggregate_metrics,
+                "detailed_results": individual_results,
+            }
+            
+            # Save consolidated results
+            with open(json_file, "w") as f:
+                json.dump(consolidated_results, f, indent=2)
+            
+            print(f"\nConsolidated results saved to: {json_file}")
+            return json_file
+        
+        return None
+    
+    def _get_existing_results_count(self, model_name: str, dataset_name: str) -> int:
+        """Get count of existing results from JSONL file for resuming interrupted evaluations."""
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        detailed_dir = os.path.join(current_dir, "..", "results", "baseline", "detailed")
+        normalized_model_id = re.sub(r"[^a-z0-9]", "-", model_name.lower())
+        normalized_dataset_name = re.sub(r"[^a-z0-9]", "-", dataset_name.lower())
+        jsonl_file = os.path.join(detailed_dir, f"evaluation_results_{normalized_model_id}_{normalized_dataset_name}.jsonl")
+        
+        if os.path.exists(jsonl_file):
+            count = 0
+            with open(jsonl_file, "r") as f:
+                for line in f:
+                    if line.strip():
+                        count += 1
+            return count
+        return 0
+    
+    def _get_jsonl_file_path(self, model_name: str, dataset_name: str) -> str:
+        """Get the JSONL file path for a model-dataset combination."""
+        import os
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        detailed_dir = os.path.join(current_dir, "..", "results", "baseline", "detailed")
+        normalized_model_id = re.sub(r"[^a-z0-9]", "-", model_name.lower())
+        normalized_dataset_name = re.sub(r"[^a-z0-9]", "-", dataset_name.lower())
+        return os.path.join(detailed_dir, f"evaluation_results_{normalized_model_id}_{normalized_dataset_name}.jsonl")
     
     def evaluate_multiple_models(
         self,

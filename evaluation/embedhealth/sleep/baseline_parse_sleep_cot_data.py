@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parser for converting sleep COT JSONL files to clean format."""
+"""Parser for converting baseline sleep COT JSON files to clean format."""
 
 import json
 import re
@@ -68,6 +68,7 @@ def _canonicalize_label(text):
     label_set = SUPPORTED_LABELS if SUPPORTED_LABELS else FALLBACK_LABELS
     is_supported = canonical in label_set
     return canonical if canonical else cleaned, is_supported
+
 def calculate_f1_score(prediction, ground_truth):
     """Calculate F1 score for single-label classification with supported labels.
 
@@ -180,8 +181,8 @@ def calculate_accuracy_stats(data_points):
         "accuracy_percentage": accuracy_percentage
     }
 
-def parse_sleep_cot_jsonl(input_file, output_file=None):
-    """Parse sleep COT JSONL file and extract JSON objects."""
+def parse_baseline_sleep_cot_json(input_file, output_file=None):
+    """Parse baseline sleep COT JSON file and extract structured data."""
     if output_file is None:
         input_path = Path(input_file)
         output_file = str(input_path.parent / f"{input_path.stem}.clean.jsonl")
@@ -223,7 +224,6 @@ def parse_sleep_cot_jsonl(input_file, output_file=None):
             print(f"\nPer-Class F1 Scores:")
             for class_name, scores in f1_stats['class_f1_scores'].items():
                 print(f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
-                pass
         
         with open(output_file, 'w', encoding='utf-8') as f:
             for item in extracted_data:
@@ -236,40 +236,45 @@ def parse_sleep_cot_jsonl(input_file, output_file=None):
         return []
 
 def discover_ground_truth_labels(input_file):
-    """Discover actual labels from ground truth data in the JSONL file"""
+    """Discover actual labels from ground truth data in the JSON file"""
     discovered_labels = set()
     
     with open(input_file, 'r', encoding='utf-8') as f:
-        for line in f:
-            try:
-                data = json.loads(line.strip())
-                gold_text = data.get('gold', '')
-                ground_truth_raw = extract_answer(gold_text)
-                gt_canon, _ = _canonicalize_label(ground_truth_raw)
-                if gt_canon:
-                    discovered_labels.add(gt_canon)
-            except (json.JSONDecodeError, Exception):
-                continue
+        data = json.load(f)
+        
+        # Navigate to detailed_results
+        detailed_results = data.get('detailed_results', [])
+        
+        for result in detailed_results:
+            target_answer = result.get('target_answer', '')
+            ground_truth_raw = extract_answer(target_answer)
+            gt_canon, _ = _canonicalize_label(ground_truth_raw)
+            if gt_canon:
+                discovered_labels.add(gt_canon)
     
     return list(discovered_labels)
 
 def extract_structured_data(input_file):
-    """Extract structured data from JSONL file"""
+    """Extract structured data from baseline JSON file"""
     data_points = []
     
     with open(input_file, 'r', encoding='utf-8') as f:
-        for line_num, line in tqdm(enumerate(f, 1)):
+        data = json.load(f)
+        
+        # Navigate to detailed_results
+        detailed_results = data.get('detailed_results', [])
+        
+        for result in tqdm(detailed_results, desc="Processing results"):
             try:
-                # Parse JSON line
-                data = json.loads(line.strip())
-                
-                # Extract generated and gold fields
-                generated_text = data.get('generated', '')
-                gold_text = data.get('gold', '')
+                # Extract fields from the baseline JSON structure
+                sample_idx = result.get('sample_idx', 0)
+                generated_answer = result.get('generated_answer', '')
+                target_answer = result.get('target_answer', '')
                 
                 # Extract answers from both fields
-                model_prediction_raw = extract_answer(generated_text)
-                ground_truth_raw = extract_answer(gold_text)
+                model_prediction_raw = extract_answer(generated_answer)
+                ground_truth_raw = extract_answer(target_answer)
+                
                 # Canonicalize labels and merge stage 4 -> stage 3
                 pred_canon, pred_supported = _canonicalize_label(model_prediction_raw)
                 gt_canon, gt_supported = _canonicalize_label(ground_truth_raw)
@@ -281,7 +286,8 @@ def extract_structured_data(input_file):
                 f1_result = calculate_f1_score(model_prediction_raw, ground_truth_raw)
                 
                 data_point = {
-                    "generated": generated_text,
+                    "sample_idx": sample_idx,
+                    "generated": generated_answer,
                     "model_prediction": model_prediction_raw,
                     "ground_truth": ground_truth_raw,
                     "accuracy": accuracy,
@@ -292,14 +298,10 @@ def extract_structured_data(input_file):
                     "ground_truth_normalized": f1_result['ground_truth_normalized'],
                     "prediction_supported": f1_result['prediction_supported'],
                     "ground_truth_supported": f1_result['ground_truth_supported'],
-                    "line_number": line_num
                 }
                 data_points.append(data_point)
-            except json.JSONDecodeError as e:
-                print(f"Error parsing line {line_num}: {e}")
-                continue
             except Exception as e:
-                print(f"Unexpected error on line {line_num}: {e}")
+                print(f"Error processing sample {result.get('sample_idx', 'unknown')}: {e}")
                 continue
     
     return data_points
@@ -317,8 +319,8 @@ def extract_answer(text):
     return answer
 
 if __name__ == "__main__":
-    current_dir = Path(__file__).parent
-    input_file = current_dir / "llama_1b_flamingo_predictions.jsonl"
-    clean_output = current_dir / "llama_1b_flamingo_predictions.clean.jsonl"
+    # Example usage with the baseline JSON file
+    input_file = "/Users/planger/Development/EmbedHealth/evaluation/results/baseline/detailedold/evaluation_results_meta-llama-llama-3-2-3b_sleepedfcotqadataset.json"
+    output_file = "out.jsonl"
     
-    parse_sleep_cot_jsonl(input_file, clean_output)
+    parse_baseline_sleep_cot_json(input_file, output_file)

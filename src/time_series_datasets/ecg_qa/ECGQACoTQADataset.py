@@ -20,7 +20,8 @@ class ECGQACoTQADataset(QADataset):
     
     def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, 
                  format_sample_str: bool = False, time_series_format_function=None,
-                 max_samples: int = None, exclude_comparison: bool = False):
+                 max_samples: int = None, exclude_comparison: bool = False,
+                 preload_processed_data: bool = True):
         """
         Initialize ECG-QA CoT Dataset.
         
@@ -31,9 +32,11 @@ class ECGQACoTQADataset(QADataset):
             time_series_format_function: Function to format time series data
             max_samples: Maximum number of samples per split (for testing)
             exclude_comparison: If True, exclude comparison questions (question_type starting with "comparison_")
+            preload_processed_data: If True, preload processed ECG data for maximum speed (uses more memory). Default: True
         """
         self.max_samples = max_samples
         self.exclude_comparison = exclude_comparison
+        self.preload_processed_data = preload_processed_data
         super().__init__(split, EOS_TOKEN, format_sample_str, time_series_format_function)
 
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
@@ -78,6 +81,13 @@ class ECGQACoTQADataset(QADataset):
             if len(test) > self.max_samples:
                 test = test.select(range(self.max_samples))
         
+        # Preload ECG data for better performance
+        self.preload_ecg_data([train, val, test])
+        
+        # Optionally preload processed data for maximum performance
+        if self.preload_processed_data:
+            self.preload_processed_ecg_data([train, val, test])
+        
         return train, val, test
 
     def _get_answer(self, row) -> str:
@@ -115,26 +125,10 @@ Instructions:
 - Do **not** mention any final answer until the very end.
 - Consider the ECG morphology, intervals, and any abnormalities that relate to the question."""
         
-        if question_type == "single-verify":
-            task_specific = """
+        
 
-Please analyze the ECG carefully and provide a clear, definitive answer with your reasoning."""
         
-        elif question_type == "single-choice":
-            task_specific = """
-
-Analyze the patterns, waves, intervals, and any abnormalities to determine the correct answer."""
-        
-        elif question_type.startswith("comparison"):
-            task_specific = """
-
-This question requires comparison between different ECG recordings.
-Look for differences, similarities, and changes between the ECGs to answer the question."""
-        
-        else:
-            raise ValueError(f"Unknown question type: {question_type}. Expected: single-verify, single-choice, or comparison_*")
-        
-        return base_prompt + task_specific
+        return base_prompt 
 
     def _get_post_prompt(self, row) -> str:
         """Generate the post-prompt with possible answers and instructions."""
@@ -143,7 +137,7 @@ Look for differences, similarities, and changes between the ECGs to answer the q
         if template_id is None:
             raise ValueError(f"Sample missing required 'template_id' field: {row}")
         
-        possible_answers = self.get_possible_answers_for_template(template_id)
+        possible_answers = ECGQACoTQADataset.get_possible_answers_for_template(template_id)
         
         if possible_answers:
             answers_text = ", ".join(possible_answers)
@@ -161,33 +155,269 @@ Make sure that your last word is the answer. You MUST end your response with "An
         
         return prompt.strip()
 
-    def get_possible_answers_for_template(self, template_id: int) -> List[str]:
+    # Class-level cache for template answers
+    _template_answers_cache = None
+    
+    @classmethod
+    def _load_template_answers_cache(cls):
+        """Load template answers cache once."""
+        if cls._template_answers_cache is None:
+            try:
+                import pandas as pd
+                import ast
+                from time_series_datasets.ecg_qa.ecgqa_loader import ECG_QA_DIR
+                
+                # Load template answers directly
+                template_answers_path = os.path.join(ECG_QA_DIR, "ecgqa", "ptbxl", "answers_for_each_template.csv")
+                template_df = pd.read_csv(template_answers_path)
+                
+                # Build cache dictionary
+                cls._template_answers_cache = {}
+                for _, row in template_df.iterrows():
+                    template_id = row['template_id']
+                    answers_str = row['classes']
+                    try:
+                        cls._template_answers_cache[template_id] = ast.literal_eval(answers_str)
+                    except Exception as e:
+                        print(f"Warning: Failed to parse answers for template {template_id}: {e}")
+                        cls._template_answers_cache[template_id] = []
+                        
+                print(f"Loaded template answers cache with {len(cls._template_answers_cache)} templates")
+                
+            except Exception as e:
+                print(f"Error loading template answers cache: {e}")
+                cls._template_answers_cache = {}
+    
+    @staticmethod
+    def get_possible_answers_for_template(template_id: int) -> List[str]:
         """Get possible answers for a specific template ID."""
+        # Load cache if not already loaded
+        ECGQACoTQADataset._load_template_answers_cache()
+        
+        # Return cached result
+        return ECGQACoTQADataset._template_answers_cache.get(template_id, [])
+    
+    @staticmethod
+    def get_labels() -> List[str]:
+        """Get all possible answer labels from answers_for_each_template.csv."""
         try:
             import pandas as pd
             import ast
             from time_series_datasets.ecg_qa.ecgqa_loader import ECG_QA_DIR
-            
-            # Load template answers directly
+
             template_answers_path = os.path.join(ECG_QA_DIR, "ecgqa", "ptbxl", "answers_for_each_template.csv")
-            template_df = pd.read_csv(template_answers_path)
-            
-            # Find the row for this template_id
-            template_row = template_df[template_df.template_id == template_id]
-            if len(template_row) > 0:
-                # Parse the string list back to actual list
-                answers_str = template_row.iloc[0]['classes']
-                return ast.literal_eval(answers_str)
-            else:
-                print(f"Warning: Template ID {template_id} not found in answers mapping")
-                return []
-                
+            df = pd.read_csv(template_answers_path)
+
+            all_labels = set()
+            for _, row in df.iterrows():
+                classes_str = row.get("classes", "[]")
+                try:
+                    classes = ast.literal_eval(classes_str)
+                    for c in classes:
+                        if isinstance(c, str):
+                            cleaned = c.strip()
+                            if cleaned:
+                                all_labels.add(cleaned)
+                except Exception as e:
+                    print(f"Warning: Failed to parse classes for template {row.get('template_id')}: {e}")
+                    continue
+
+            labels = sorted(all_labels)
+            print(f"Loaded {len(labels)} unique labels from answers_for_each_template.csv")
+            return labels
         except Exception as e:
-            print(f"Error loading template answers: {e}")
-            return []
+            print(f"Error loading labels from CSV: {e}")
+            return ["yes", "no", "not sure", "none", "normal", "abnormal"]
     
+    # Class-level cache for ECG data
+    _ecg_data_cache = {}
+    _processed_ecg_cache = {}  # Cache for processed (downsampled + normalized) signals
+    
+    @classmethod
+    def _load_ecg_data(cls, ecg_path: str) -> Tuple[np.ndarray, str, str]:
+        """Load and cache ECG data for a given path."""
+        if ecg_path not in cls._ecg_data_cache:
+            try:
+                import wfdb
+                
+                # Load ECG data using wfdb
+                base_path = ecg_path.replace('.dat', '').replace('.hea', '')
+                
+                if not os.path.exists(base_path + '.dat'):
+                    raise FileNotFoundError(f"ECG data file not found: {base_path}.dat")
+                
+                if not os.path.exists(base_path + '.hea'):
+                    raise FileNotFoundError(f"ECG header file not found: {base_path}.hea")
+                
+                # Read the ECG record
+                record = wfdb.rdrecord(base_path)
+                
+                # Get the signal data - shape is (samples, leads)
+                ecg_signal = record.p_signal  # Physical signal
+                
+                if ecg_signal is None:
+                    raise ValueError(f"ECG signal is None for file {base_path}")
+                
+                if ecg_signal.shape[0] == 0:
+                    raise ValueError(f"ECG signal is empty (0 samples) for file {base_path}")
+                
+                # Determine frequency info
+                if len(ecg_signal) > 1000:  # Likely 500Hz data
+                    original_freq = "500Hz"
+                    target_freq = "100Hz"
+                else:  # Likely already 100Hz data
+                    original_freq = "100Hz"
+                    target_freq = "100Hz"
+                
+                # Cache the raw signal and frequency info
+                cls._ecg_data_cache[ecg_path] = (ecg_signal, original_freq, target_freq)
+                
+            except Exception as e:
+                raise RuntimeError(f"Failed to read ECG record from {base_path}: {str(e)}")
+        
+        return cls._ecg_data_cache[ecg_path]
+    
+    @classmethod
+    def preload_ecg_data(cls, dataset_splits: List[Dataset]):
+        """Preload ECG data for all samples to improve formatting performance."""
+        print("Preloading ECG data for faster formatting...")
+        
+        # Collect all unique ECG paths
+        ecg_paths = set()
+        for dataset in dataset_splits:
+            for sample in dataset:
+                sample_ecg_paths = sample.get("ecg_paths", [])
+                if sample_ecg_paths:
+                    ecg_paths.update(sample_ecg_paths)
+                else:
+                    # Fallback: construct path from ecg_id
+                    ecg_id = sample.get("ecg_id")
+                    if ecg_id and isinstance(ecg_id, list) and len(ecg_id) > 0:
+                        from time_series_datasets.ecg_qa.ecgqa_loader import get_ptbxl_ecg_path
+                        ecg_path = get_ptbxl_ecg_path(ecg_id[0]) + ".dat"
+                        ecg_paths.add(ecg_path)
+        
+        print(f"Found {len(ecg_paths)} unique ECG files to preload...")
+        
+        # Preload ECG data with progress bar
+        from tqdm import tqdm
+        for ecg_path in tqdm(ecg_paths, desc="Preloading ECG data"):
+            try:
+                cls._load_ecg_data(ecg_path)
+            except Exception as e:
+                print(f"Warning: Failed to preload ECG data from {ecg_path}: {e}")
+        
+        print(f"Preloaded {len(cls._ecg_data_cache)} ECG files")
+    
+    @classmethod
+    def preload_processed_ecg_data(cls, dataset_splits: List[Dataset]):
+        """Preload processed ECG data (downsampled + normalized) for all samples."""
+        print("Preloading processed ECG data for maximum performance...")
+        
+        # Collect all unique ECG paths and lead combinations
+        ecg_lead_combinations = set()
+        for dataset in dataset_splits:
+            for sample in dataset:
+                sample_ecg_paths = sample.get("ecg_paths", [])
+                if sample_ecg_paths:
+                    for ecg_path in sample_ecg_paths:
+                        # Load ECG data to determine number of leads
+                        ecg_signal, _, _ = cls._load_ecg_data(ecg_path)
+                        n_leads = ecg_signal.shape[1] if len(ecg_signal.shape) > 1 else 1
+                        for lead_idx in range(n_leads):
+                            ecg_lead_combinations.add((ecg_path, lead_idx))
+                else:
+                    # Fallback: construct path from ecg_id
+                    ecg_id = sample.get("ecg_id")
+                    if ecg_id and isinstance(ecg_id, list) and len(ecg_id) > 0:
+                        from time_series_datasets.ecg_qa.ecgqa_loader import get_ptbxl_ecg_path
+                        ecg_path = get_ptbxl_ecg_path(ecg_id[0]) + ".dat"
+                        ecg_signal, _, _ = cls._load_ecg_data(ecg_path)
+                        n_leads = ecg_signal.shape[1] if len(ecg_signal.shape) > 1 else 1
+                        for lead_idx in range(n_leads):
+                            ecg_lead_combinations.add((ecg_path, lead_idx))
+        
+        print(f"Found {len(ecg_lead_combinations)} unique ECG lead combinations to preprocess...")
+        
+        # Preprocess ECG leads with progress bar
+        from tqdm import tqdm
+        for ecg_path, lead_idx in tqdm(ecg_lead_combinations, desc="Preprocessing ECG leads"):
+            try:
+                cls._process_ecg_lead(ecg_path, lead_idx)
+            except Exception as e:
+                print(f"Warning: Failed to preprocess ECG lead {lead_idx} from {ecg_path}: {e}")
+        
+        print(f"Preprocessed {len(cls._processed_ecg_cache)} ECG leads")
+    
+    @classmethod
+    def clear_caches(cls):
+        """Clear all caches to free memory."""
+        cls._ecg_data_cache.clear()
+        cls._processed_ecg_cache.clear()
+        cls._template_answers_cache = None
+        print("Cleared all ECG-QA CoT dataset caches")
+    
+    @classmethod
+    def get_cache_stats(cls) -> dict:
+        """Get cache statistics for monitoring."""
+        return {
+            "ecg_data_cache_size": len(cls._ecg_data_cache),
+            "processed_ecg_cache_size": len(cls._processed_ecg_cache),
+            "template_answers_loaded": cls._template_answers_cache is not None,
+            "template_answers_count": len(cls._template_answers_cache) if cls._template_answers_cache else 0
+        }
+    
+    @classmethod
+    def _process_ecg_lead(cls, ecg_path: str, lead_idx: int) -> Tuple[np.ndarray, float, float]:
+        """Process and cache a single ECG lead (downsample + normalize)."""
+        cache_key = f"{ecg_path}:lead_{lead_idx}"
+        
+        if cache_key not in cls._processed_ecg_cache:
+            # Load raw ECG data
+            ecg_signal, original_freq, target_freq = cls._load_ecg_data(ecg_path)
+            
+            # Extract lead signal
+            if len(ecg_signal.shape) > 1:
+                lead_signal = ecg_signal[:, lead_idx]
+            else:
+                lead_signal = ecg_signal
+            
+            if len(lead_signal) == 0:
+                raise ValueError(f"Lead {lead_idx} is empty for file {ecg_path}")
+            
+            # Downsample if needed
+            if len(lead_signal) > 1000:  # Likely 500Hz data
+                downsampled_signal = lead_signal[::5]  # Downsample to 100Hz
+            else:  # Already 100Hz data
+                downsampled_signal = lead_signal
+            
+            if len(downsampled_signal) == 0:
+                raise ValueError(f"Downsampled signal is empty for lead {lead_idx} in file {ecg_path}")
+            
+            # Normalize the signal
+            mean_val = float(np.mean(downsampled_signal))
+            std_val = float(np.std(downsampled_signal))
+            
+            if np.isnan(mean_val) or np.isnan(std_val):
+                raise ValueError(f"NaN values detected in ECG signal statistics for lead {lead_idx} in file {ecg_path}")
+            
+            if std_val > 1e-6:  # Avoid division by zero
+                normalized_signal = (downsampled_signal - mean_val) / std_val
+            else:
+                print(f"Warning: Lead {lead_idx} in file {ecg_path} has very low std deviation ({std_val}), signal may be flat")
+                normalized_signal = downsampled_signal - mean_val
+            
+            # Verify normalized signal is valid
+            if np.any(np.isnan(normalized_signal)) or np.any(np.isinf(normalized_signal)):
+                raise ValueError(f"Invalid values (NaN/Inf) in normalized signal for lead {lead_idx} in file {ecg_path}")
+            
+            # Cache the processed signal and statistics
+            cls._processed_ecg_cache[cache_key] = (normalized_signal, mean_val, std_val)
+        
+        return cls._processed_ecg_cache[cache_key]
+
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
-        """Load ECG data and convert to TextTimeSeriesPrompt format."""
+        """Load ECG data and convert to TextTimeSeriesPrompt format using cached data."""
         
         ecg_prompts = []
         ecg_paths = row.get("ecg_paths")
@@ -208,123 +438,50 @@ Make sure that your last word is the answer. You MUST end your response with "An
             ecg_paths = [ecg_path]
         
         for i, ecg_path in enumerate(ecg_paths):
-            # Load ECG data using wfdb
-            base_path = ecg_path.replace('.dat', '').replace('.hea', '')
+            # Load ECG data to determine number of leads
+            ecg_signal, original_freq, target_freq = self._load_ecg_data(ecg_path)
             
-            if not os.path.exists(base_path + '.dat'):
-                raise FileNotFoundError(f"ECG data file not found: {base_path}.dat")
-            
-            if not os.path.exists(base_path + '.hea'):
-                raise FileNotFoundError(f"ECG header file not found: {base_path}.hea")
-            
-            try:
-                # Read the ECG record
-                import wfdb
-                record = wfdb.rdrecord(base_path)
-            except Exception as e:
-                raise RuntimeError(f"Failed to read ECG record from {base_path}: {str(e)}")
-            
-            # Get the signal data - shape is (samples, leads)
-            ecg_signal = record.p_signal  # Physical signal
-            
-            if ecg_signal is None:
-                raise ValueError(f"ECG signal is None for file {base_path}")
-            
-            if ecg_signal.shape[0] == 0:
-                raise ValueError(f"ECG signal is empty (0 samples) for file {base_path}")
-            
-            # PTB-XL typically has 12 leads, sample at 500Hz for 10 seconds = 5000 samples
-            # We want to use 100Hz data for consistency and efficiency
-            
-            # Take first few leads (I, II, III, aVR, aVL, aVF) which are most common
+            # Load all available leads (typically 12 for standard ECG)
             if len(ecg_signal.shape) == 1:
                 # Single lead case
                 n_leads = 1
             elif len(ecg_signal.shape) == 2:
-                n_leads = min(6, ecg_signal.shape[1])
-                if ecg_signal.shape[1] < 6:
-                    print(f"Warning: ECG file {base_path} has only {ecg_signal.shape[1]} leads, expected at least 6")
+                n_leads = ecg_signal.shape[1]
+                if ecg_signal.shape[1] < 12:
+                    print(f"Warning: ECG file {ecg_path} has only {ecg_signal.shape[1]} leads, expected 12 for standard ECG")
             else:
-                raise ValueError(f"Unexpected ECG signal shape {ecg_signal.shape} for file {base_path}")
+                raise ValueError(f"Unexpected ECG signal shape {ecg_signal.shape} for file {ecg_path}")
             
             for lead_idx in range(n_leads):
-                if len(ecg_signal.shape) > 1:
-                    lead_signal = ecg_signal[:, lead_idx]
-                else:
-                    lead_signal = ecg_signal
-                
-                if len(lead_signal) == 0:
-                    raise ValueError(f"Lead {lead_idx} is empty for file {base_path}")
-                
-                # Use 100Hz data - PTB-XL has both 100Hz and 500Hz versions
-                # If we have 500Hz data, downsample to 100Hz (take every 5th sample)
-                # If we already have 100Hz data, use as is
-                if len(lead_signal) > 1000:  # Likely 500Hz data (5000 samples for 10 seconds)
-                    downsampled_signal = lead_signal[::5]  # Downsample to 100Hz
-                    original_freq = "500Hz"
-                    target_freq = "100Hz"
-                else:  # Likely already 100Hz data (1000 samples for 10 seconds)
-                    downsampled_signal = lead_signal
-                    original_freq = "100Hz"
-                    target_freq = "100Hz"
-                
-                if len(downsampled_signal) == 0:
-                    raise ValueError(f"Downsampled signal is empty for lead {lead_idx} in file {base_path}")
+                # Use cached processed signal
+                normalized_signal, mean_val, std_val = self._process_ecg_lead(ecg_path, lead_idx)
                 
                 # Verify we have exactly 1000 samples (10 seconds at 100Hz)
-                if len(downsampled_signal) != 1000:
-                    print(f"Warning: Lead {lead_idx} in file {base_path} has {len(downsampled_signal)} samples, expected 1000 for 100Hz")
-                
-                # Normalize the signal
-                mean_val = float(np.mean(downsampled_signal))
-                std_val = float(np.std(downsampled_signal))
-                
-                if np.isnan(mean_val) or np.isnan(std_val):
-                    raise ValueError(f"NaN values detected in ECG signal statistics for lead {lead_idx} in file {base_path}")
-                
-                if std_val > 1e-6:  # Avoid division by zero
-                    normalized_signal = (downsampled_signal - mean_val) / std_val
-                else:
-                    print(f"Warning: Lead {lead_idx} in file {base_path} has very low std deviation ({std_val}), signal may be flat")
-                    normalized_signal = downsampled_signal - mean_val
-                
-                # Verify normalized signal is valid
-                if np.any(np.isnan(normalized_signal)) or np.any(np.isinf(normalized_signal)):
-                    raise ValueError(f"Invalid values (NaN/Inf) in normalized signal for lead {lead_idx} in file {base_path}")
+                if len(normalized_signal) != 1000:
+                    print(f"Warning: Lead {lead_idx} in file {ecg_path} has {len(normalized_signal)} samples, expected 1000 for 100Hz")
                 
                 # Create lead name
                 lead_names = ["I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
                 lead_name = lead_names[lead_idx] if lead_idx < len(lead_names) else f"Lead_{lead_idx}"
                 
-                ecg_label = f"ECG Lead {lead_name}"
+                ecg_label = f"This is ECG Lead {lead_name}"
                 if len(ecg_paths) > 1:
                     ecg_label += f" (Recording {i+1})"
                     
-                ecg_label += f" - sampled at 100Hz, normalized (mean={mean_val:.3f}, std={std_val:.3f})"
+                ecg_label += f", it has mean {mean_val:.4f} and std {std_val:.4f}:"
                 
                 try:
                     ecg_prompts.append(
                         TextTimeSeriesPrompt(ecg_label, normalized_signal.tolist())
                     )
                 except Exception as e:
-                    raise RuntimeError(f"Failed to create TextTimeSeriesPrompt for lead {lead_name} in file {base_path}: {str(e)}")
+                    raise RuntimeError(f"Failed to create TextTimeSeriesPrompt for lead {lead_name} in file {ecg_path}: {str(e)}")
         
         if not ecg_prompts:
             raise RuntimeError(f"No ECG prompts were created for sample. ECG paths attempted: {ecg_paths}")
         
         return ecg_prompts
 
-    @staticmethod
-    def get_labels() -> List[str]:
-        """Get all possible answer labels for ECG-QA CoT dataset."""
-        # These are common answers in ECG-QA - could be loaded from answers.csv
-        return [
-            "yes", "no", "not sure",
-            "normal", "abnormal", "borderline",
-            "conduction disturbance", "hypertrophy", "ischemia", "infarction",
-            "arrhythmia", "axis deviation", "non-specific changes"
-        ]
-    
     def _format_sample(self, row):
         # Call parent method to get the standard formatted sample
         formatted_sample = super()._format_sample(row)
@@ -357,6 +514,23 @@ Make sure that your last word is the answer. You MUST end your response with "An
         
         return formatted_sample
 
+    def _format_sample_str(self, time_series_format_function, row):
+        """Override to preserve template_id and other fields needed for evaluation."""
+        # Call parent method to get the basic formatted sample
+        formatted_sample = super()._format_sample_str(time_series_format_function, row)
+        
+        # Add template_id and other fields needed for evaluation
+        if 'template_id' in row:
+            formatted_sample['template_id'] = row['template_id']
+        if 'cot_template_id' in row:
+            formatted_sample['cot_template_id'] = row['cot_template_id']
+        if 'question_type' in row:
+            formatted_sample['question_type'] = row['question_type']
+        if 'question' in row:
+            formatted_sample['question'] = row['question']
+        
+        return formatted_sample
+
 
 if __name__ == "__main__":
     # Test the dataset with limited samples
@@ -369,6 +543,10 @@ if __name__ == "__main__":
         dataset_test = ECGQACoTQADataset(split="test", EOS_TOKEN="", max_samples=5)
         
         print(f"Dataset sizes: Train: {len(dataset)}, Validation: {len(dataset_val)}, Test: {len(dataset_test)}")
+        
+        # Show cache statistics
+        cache_stats = ECGQACoTQADataset.get_cache_stats()
+        print(f"\nCache statistics: {cache_stats}")
         
         if len(dataset) > 0:
             sample = dataset[0]
@@ -394,6 +572,15 @@ if __name__ == "__main__":
                 print("CoT Rationale:", sample['rationale'][:100] + "..." if len(sample['rationale']) > 100 else sample['rationale'])
             if 'cot_question_id' in sample:
                 print("CoT Question ID:", sample['cot_question_id'])
+        
+        # Test performance with processed data preloading
+        print("\nTesting with processed data preloading...")
+        dataset_fast = ECGQACoTQADataset(split="train", EOS_TOKEN="", max_samples=3, preload_processed_data=True)
+        print(f"Fast dataset size: {len(dataset_fast)}")
+        
+        # Show updated cache statistics
+        cache_stats_after = ECGQACoTQADataset.get_cache_stats()
+        print(f"Cache statistics after preloading: {cache_stats_after}")
                 
     except Exception as e:
         print(f"Error testing dataset: {e}")
