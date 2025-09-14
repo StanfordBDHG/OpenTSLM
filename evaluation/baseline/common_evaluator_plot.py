@@ -270,7 +270,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
                     raise ValueError(f"Sample {sample} does not contain 'time_series' key")
 
                 target_answer = sample["answer"]
-                input_text = sample["post_prompt"]
+                input_text = sample["pre_prompt"] + sample["post_prompt"]
                 
                 # Generate prediction
                 if isinstance(pipe, OpenAIPipeline):
