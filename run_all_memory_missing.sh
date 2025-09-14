@@ -16,12 +16,7 @@ MODELS=(
     "EmbedHealthFlamingo"
 )
 
-DATASETS=(
-  "TSQADataset"
-  "HARCoTQADataset"
-  "SleepEDFCoTQADataset"
-  "ECGQACoTQADataset"
-)
+# Only running SimulationQADataset experiments
 
 # LLM IDs
 LLM_IDS=(
@@ -50,20 +45,7 @@ fi
 
 echo "Writing results to: ${RESULTS_FLAG#--results_csv }"
 
-# Run specific datasets for specific model/LLM combinations
-echo "Running specific datasets for specific model/LLM combinations..."
-
-# llama3b EmbedHealthFlamingo for TSQA, HAR, Sleep, ECG_QA
-LLAMA3B="meta-llama/Llama-3.2-3B"
-FLAMINGO_MODEL="EmbedHealthFlamingo"
-SP_MODEL="EmbedHealthSP"
-
-SPECIFIC_DATASETS=(
-  "TSQADataset"
-  "HARCoTQADataset" 
-  "SleepEDFCoTQADataset"
-  "ECGQACoTQADataset"
-)
+# Running only SimulationQADataset experiments
 
 
 # Experiment 1: All 4 LLMs with length=10000 and num_series=1,2,3,4,5
