@@ -32,6 +32,7 @@ from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+from time_series_datasets.simulation.SimulationQADataset import SimulationQADataset
 from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
 
 
@@ -249,10 +250,12 @@ def main():
     parser.add_argument(
         "--dataset",
         required=True,
-        choices=["TSQADataset", "HARCoTQADataset", "SleepEDFCoTQADataset", "ECGQACoTQADataset"],
+        choices=["TSQADataset", "HARCoTQADataset", "SleepEDFCoTQADataset", "ECGQACoTQADataset", "SimulationQADataset"],
         help="Dataset to use",
     )
     parser.add_argument("--device", default="cuda", help="Device to run on (e.g., cuda, cuda:0, cpu)")
+    parser.add_argument("--length", type=int, default=100, help="Length of time series for SimulationQADataset (default: 100)")
+    parser.add_argument("--num_series", type=int, default=1, help="Number of time series for SimulationQADataset (default: 1)")
     parser.add_argument("--results_csv", default=os.path.join(REPO_DIR, "memory_use.csv"), help="Path to CSV file to append results")
     args = parser.parse_args()
 
@@ -304,6 +307,9 @@ def main():
     elif args.dataset == "ECGQACoTQADataset":
         dataset = ECGQACoTQADataset(split="train", EOS_TOKEN=eos, max_samples=1, preload_processed_data=False)
         dataset_name = "ECG-QA-CoT"
+    elif args.dataset == "SimulationQADataset":
+        dataset = SimulationQADataset(split="train", EOS_TOKEN=eos, length=args.length, num_series=args.num_series)
+        dataset_name = f"Simulation-L{args.length}-N{args.num_series}"
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
 
