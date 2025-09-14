@@ -60,27 +60,6 @@ SPECIFIC_DATASETS=(
   "ECGQACoTQADataset"
 )
 
-for dataset in "${SPECIFIC_DATASETS[@]}"; do
-  echo "[RUN] llm_id=$LLAMA3B model=$FLAMINGO_MODEL dataset=$dataset"
-  set +e
-  $PYTHON "$REPO_DIR/get_memory_use.py" -llm_id "$LLAMA3B" --model "$FLAMINGO_MODEL" --dataset "$dataset" $DEVICE_FLAG $RESULTS_FLAG
-  status=$?
-  set -e
-  if [[ $status -ne 0 ]]; then
-    echo "[ERROR] Failed for llm_id=$LLAMA3B model=$FLAMINGO_MODEL dataset=$dataset (exit $status)"
-  fi
-done
-
-# EmbedHealthSP llama3b for ECG_QA
-echo "[RUN] llm_id=$LLAMA3B model=$SP_MODEL dataset=ECGQACoTQADataset"
-set +e
-$PYTHON "$REPO_DIR/get_memory_use.py" -llm_id "$LLAMA3B" --model "$SP_MODEL" --dataset "ECGQACoTQADataset" $DEVICE_FLAG $RESULTS_FLAG
-status=$?
-set -e
-if [[ $status -ne 0 ]]; then
-  echo "[ERROR] Failed for llm_id=$LLAMA3B model=$SP_MODEL dataset=ECGQACoTQADataset (exit $status)"
-fi
-
 
 # Run SimulationQADataset for all model/LLM combinations
 echo "Running SimulationQADataset for all combinations..."
