@@ -44,11 +44,7 @@ def evaluate_har_acc(ground_truth: str, prediction: str) -> Dict[str, Any]:
 
 
 def main():
-<<<<<<< HEAD
     """Main function to run HAR evaluation."""
-=======
-    """Main function to run HAR CoT evaluation."""
->>>>>>> RealLast/ECG-QA-Integration
     if len(sys.argv) != 2:
         print("Usage: python evaluate_har.py <model_name>")
         print("Example: python evaluate_har.py meta-llama/Llama-3.2-1B")
@@ -56,15 +52,9 @@ def main():
     
     model_name = sys.argv[1]
     
-<<<<<<< HEAD
     dataset_classes = [HARAccQADataset]
     evaluation_functions = {
         "HARAccQADataset": evaluate_har_acc,
-=======
-    dataset_classes = [HARCoTQADataset]
-    evaluation_functions = {
-        "HARCoTQADataset": evaluate_har_acc,
->>>>>>> RealLast/ECG-QA-Integration
     }
     evaluator = CommonEvaluator()
     results_df = evaluator.evaluate_multiple_models(

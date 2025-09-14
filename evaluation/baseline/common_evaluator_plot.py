@@ -305,8 +305,17 @@ class CommonEvaluatorPlot(CommonEvaluator):
                     generated_text = outputs[0]["generated_text"].strip()
                     successful_inferences += 1
                     
-                    # Evaluate using custom function
-                    metrics = evaluation_function(target_answer, generated_text)
+                    # Evaluate using custom function (optionally with sample)
+                    try:
+                        import inspect
+                        sig = inspect.signature(evaluation_function)
+                        if len(sig.parameters) >= 3:
+                            metrics = evaluation_function(target_answer, generated_text, sample)
+                        else:
+                            metrics = evaluation_function(target_answer, generated_text)
+                    except Exception:
+                        # Fallback to 2-arg call
+                        metrics = evaluation_function(target_answer, generated_text)
                     all_metrics.append(metrics)
                     
                     # Store detailed results
