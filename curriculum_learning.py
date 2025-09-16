@@ -858,7 +858,7 @@ class CurriculumTrainer:
             shuffle=False,
             batch_size=1,
             patch_size=PATCH_SIZE,
-            distribute_data=False  # Don't distribute test
+            distribute_data=self.world_size > 1
         )
         
         # Scheduler
