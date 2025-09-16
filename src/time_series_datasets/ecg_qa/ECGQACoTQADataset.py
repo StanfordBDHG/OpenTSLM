@@ -512,6 +512,15 @@ Make sure that your last word is the answer. You MUST end your response with "An
         if 'clinical_contexts' in row:
             formatted_sample['clinical_contexts'] = row['clinical_contexts']
         
+        # Store the ground-truth answer according to ECG-QA and possible answers for this template
+        if 'answer' in row:
+            formatted_sample['correct_answer'] = row['answer']
+        if 'template_id' in row and row['template_id'] is not None:
+            try:
+                formatted_sample['possible_answers'] = ECGQACoTQADataset.get_possible_answers_for_template(row['template_id'])
+            except Exception:
+                formatted_sample['possible_answers'] = []
+        
         return formatted_sample
 
     def _format_sample_str(self, time_series_format_function, row):
@@ -528,6 +537,10 @@ Make sure that your last word is the answer. You MUST end your response with "An
             formatted_sample['question_type'] = row['question_type']
         if 'question' in row:
             formatted_sample['question'] = row['question']
+        
+        # Also include correct answer and possible answers to aid evaluation
+        if 'answer' in row:
+            formatted_sample['correct_answer'] = row['answer']
         
         return formatted_sample
 

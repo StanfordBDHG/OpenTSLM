@@ -257,7 +257,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     # Example usage with the baseline JSON file
-    input_file = "/Users/planger/Development/EmbedHealth/evaluation/results/baseline/detailed/evaluation_results_meta-llama-llama-3-2-3b_harcotqadataset.json"
+    input_file = "/Users/planger/Development/EmbedHealth/evaluation/results_chatgpt/baseline/detailed/evaluation_results_openai-gpt-4o_pamap2accqadataset.json"
     output_file = "out.jsonl"
 
     parse_baseline_json(input_file, output_file)

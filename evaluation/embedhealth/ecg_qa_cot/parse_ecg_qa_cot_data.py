@@ -293,8 +293,8 @@ def extract_structured_data(input_file):
                 data = json.loads(line.strip())
                 
                 # Extract generated and gold fields - these are required
-                generated_text = data.get('generated')
-                gold_text = data.get('gold')
+                generated_text = data.get('generated_answer')
+                gold_text = data.get('target_answer')
                 
                 if generated_text is None:
                     raise ValueError(f"Missing 'generated' field in line {line_num}")
@@ -370,7 +370,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = current_dir / "llama3b_sp_predictions.jsonl"
-    clean_output = current_dir / "llama3b_sp_predictions.clean.jsonl"
+    input_file = current_dir / "/Users/planger/Development/EmbedHealth/evaluation/results/baseline/detailed_runpod_final_run/evaluation_results_google-gemma-3-1b-pt_ecgqacotqadataset.jsonl"
+    clean_output = current_dir / "output.jsonl"
     
     parse_ecg_qa_cot_jsonl(input_file, clean_output)

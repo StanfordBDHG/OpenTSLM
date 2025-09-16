@@ -81,7 +81,7 @@ class TransformerMLPEncoder(TimeSeriesEncoderBase):
         N = x.size(1)
         if N > self.pos_embed.size(1):
             raise ValueError(
-                f"Too many patches {N}; max supported is {self.pos_embed.size(1)}"
+                f"Time series of length {N*4} is too long; max supported is {self.pos_embed.size(1)*4}. Change max_patches parameter in {__file__}"
             )
         pos = self.pos_embed[:, :N, :]
         x = x + pos

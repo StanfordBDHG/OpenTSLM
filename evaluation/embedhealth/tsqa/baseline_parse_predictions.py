@@ -155,7 +155,7 @@ def parse_baseline_json(input_path: str):
 if __name__ == "__main__":
     # Default path: update if needed
     input_file = \
-        "/Users/planger/Development/EmbedHealth/evaluation/results/baseline_pod/evaluation_results_meta-llama-llama-3-2-3b_tsqadataset.json"
+        "/Users/planger/Development/EmbedHealth/evaluation/results/baseline/detailed_runpod_final_run/evaluation_results_google-gemma-3-1b-pt_tsqadataset.json"
     parse_baseline_json(input_file)
 
 
