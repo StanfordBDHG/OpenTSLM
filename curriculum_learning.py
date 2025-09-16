@@ -941,7 +941,7 @@ class CurriculumTrainer:
                 val_loss = 0.0
                 self.model.eval()
                 with torch.no_grad():
-                    for batch in val_loader:
+                    for batch in tqdm(val_loader, desc=f"Validating {stage_name}", disable=self.rank != 0):
                         val_loss += self._get_model().compute_loss(batch).item()
                 
                 avg_val_loss = val_loss / len(val_loader)
