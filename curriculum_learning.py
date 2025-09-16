@@ -582,7 +582,7 @@ class CurriculumTrainer:
         test_loss = 0.0
         
         # Set higher max_tokens for generation during evaluation
-        max_new_tokens = 1500
+        max_new_tokens = 2000
         
         # Prepare per-rank streaming writer for test predictions
         results_file_rank = os.path.join(self.results_dir, stage_name, "results", f"test_predictions_rank_{self.rank if dist.is_initialized() else 0}.jsonl")
