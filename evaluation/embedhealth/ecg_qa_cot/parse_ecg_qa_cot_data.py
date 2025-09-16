@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from collections import Counter, defaultdict
 from tqdm import tqdm
+import csv
 
 # Add the src directory to the path to import from the dataset class
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'src'))
@@ -263,6 +264,33 @@ def parse_ecg_qa_cot_jsonl(input_file, output_file=None):
                         if scores['tp'] + scores['fp'] + scores['fn'] > 0:  # Only show classes with samples
                             print(f"      {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
         
+        # Output mistakes: predicted vs ground truth
+        mistakes = [d for d in extracted_data if not d.get('accuracy', False)]
+        print(f"\nIncorrect predictions: {len(mistakes)}")
+        if mistakes:
+            print("\nExamples of mistakes (predicted vs ground truth):")
+            for m in mistakes:
+                print(
+                    f"  line {m.get('line_number')} | template {m.get('template_id')} | ecg {m.get('ecg_id')}: "
+                    f"pred='{m.get('prediction_normalized')}' vs gt='{m.get('ground_truth_normalized')}'"
+                )
+            # Also write a CSV with full details
+            mistakes_file = str(Path(output_file).with_name("mistakes.csv"))
+            with open(mistakes_file, 'w', newline='', encoding='utf-8') as mf:
+                writer = csv.writer(mf)
+                writer.writerow([
+                    'line_number', 'template_id', 'ecg_id',
+                    'prediction_normalized', 'ground_truth_normalized',
+                    'model_prediction_raw', 'ground_truth_raw'
+                ])
+                for m in mistakes:
+                    writer.writerow([
+                        m.get('line_number'), m.get('template_id'), m.get('ecg_id'),
+                        m.get('prediction_normalized'), m.get('ground_truth_normalized'),
+                        m.get('model_prediction'), m.get('ground_truth')
+                    ])
+            print(f"\nSaved detailed mistakes to {mistakes_file}")
+        
         with open(output_file, 'w', encoding='utf-8') as f:
             for item in extracted_data:
                 f.write(json.dumps(item, indent=2) + "\n")
@@ -293,8 +321,8 @@ def extract_structured_data(input_file):
                 data = json.loads(line.strip())
                 
                 # Extract generated and gold fields - these are required
-                generated_text = data.get('generated_answer')
-                gold_text = data.get('target_answer')
+                generated_text = data.get('generated')
+                gold_text = data.get('gold')
                 
                 if generated_text is None:
                     raise ValueError(f"Missing 'generated' field in line {line_num}")
@@ -370,7 +398,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = current_dir / "/Users/planger/Development/EmbedHealth/evaluation/results/baseline/detailed_runpod_final_run/evaluation_results_google-gemma-3-1b-pt_ecgqacotqadataset.jsonl"
+    input_file = current_dir / "llama1b_flamingo_predictions.jsonl"
     clean_output = current_dir / "output.jsonl"
     
     parse_ecg_qa_cot_jsonl(input_file, clean_output)
