@@ -19,25 +19,41 @@ class SleepEDFCoTQADataset(QADataset):
         return row["rationale"]
 
     def _get_pre_prompt(self, _row) -> str:
-        text = """
-        You are given a 30-second EEG time series segment. Your task is to classify the sleep stage based on analysis of the data.
-
-        Instructions:
-        - Analyze the data objectively without presuming a particular label.
-        - Reason carefully and methodically about what the signal patterns suggest regarding sleep stage.
-        - Write your reasoning as a single, coherent paragraph. Do not use bullet points, lists, or section headers.
-        - Only reveal the correct class at the very end.
-        - Never state that you are uncertain or unable to classify the data. You must always provide a rationale and a final answer.
-
-        
-        """
-        return text
+        return ""
 
     def _get_post_prompt(self, _row) -> str:
-        return """Possible sleep stages are:
-        Wake, Non-REM stage 1, Non-REM stage 2, Non-REM stage 3, REM sleep, Movement
+        return """
+You are an expert in sleep physiology and EEG interpretation. You are given only an image of a 30-second EEG segment (Fpz–Cz channel) from a de-identified, publicly available research dataset. 
 
-        - Please now write your rationale. Make sure that your last word is the answer. You MUST end your response with "Answer: """
+Your task is to directly classify the most likely sleep stage based only on the EEG trace in the image. Do not ask for more information and do not wait for additional input — you must provide your best possible classification every time.
+
+Steps:
+1. Analyze the EEG trace in the image:
+   - Identify dominant frequency bands (alpha, theta, delta, beta).
+   - Look for presence or absence of sleep-specific graphoelements (sleep spindles, K-complexes, slow waves).
+   - Note signal amplitude and stability.
+   - Identify artifacts or irregularities.
+
+2. Map the observed features to one of the sleep stages:
+   - Wake: alpha rhythm (8-12 Hz), low-amplitude mixed-frequency, eye-blink or movement artifacts possible.
+   - Non-REM stage 1: low-voltage mixed-frequency, attenuation of alpha, slow rolling eye movements.
+   - Non-REM stage 2: presence of sleep spindles (11-16 Hz) and/or K-complexes, generally stable background.
+   - Non-REM stage 3: high-amplitude slow waves (delta, 0.5-2 Hz, >20% of epoch).
+   - REM sleep: low-amplitude mixed-frequency (theta dominant), sawtooth waves possible, no spindles or K-complexes.
+   - Movement: prominent artifacts obscuring the EEG signal.
+
+3. Always provide your answer in this exact structure:
+   - **Dominant frequency/activity:** [e.g., alpha, theta, delta, mixed]
+   - **Key graphoelements observed:** [spindles / K-complexes / slow waves / none]
+   - **Signal characteristics:** [amplitude, stability, artifacts]
+   - **Most likely sleep stage:** [Wake / Non-REM stage 1 / Non-REM stage 2 / Non-REM stage 3 / REM sleep / Movement]
+   - **Confidence level:** [low / medium / high]
+
+Rules:
+- You must give a classification even if the image is unclear — in that case, state limitations but still provide your best guess.
+- Never respond with a question.
+- Always end with: "Answer: <sleep stage>"
+"""
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         series = np.array(row["time_series"], dtype=np.float32)
