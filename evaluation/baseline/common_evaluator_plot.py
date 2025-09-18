@@ -399,8 +399,30 @@ class CommonEvaluatorPlot(CommonEvaluator):
                 
                 total_samples += 1
                 
+                # Save results every 100 samples
+                if total_samples % 2 == 0:
+                    # Calculate current aggregate metrics
+                    current_aggregate_metrics = self._aggregate_metrics(all_metrics) if all_metrics else {}
+                    current_success_rate = successful_inferences / total_samples if total_samples > 0 else 0.0
+                    
+                    # Prepare intermediate results
+                    intermediate_results = {
+                        "model_name": model_name,
+                        "dataset_name": dataset_class.__name__,
+                        "total_samples": total_samples,
+                        "successful_inferences": successful_inferences,
+                        "success_rate": current_success_rate,
+                        "metrics": current_aggregate_metrics,
+                        "detailed_results": results,
+                    }
+                    
+                    # Save intermediate results
+                    self._save_results(intermediate_results)
+                    print(f"💾 Intermediate results saved after {total_samples} samples")
+                
             except Exception as e:
                 print(f"Error processing sample {idx}: {e}")
+                total_samples += 1
                 continue
         
         # Calculate aggregate metrics
