@@ -299,40 +299,13 @@ class CommonEvaluatorPlot(CommonEvaluator):
                             # as it should handle the image processing internally
                             try:
                                 outputs = pipe(
-                                    text=f"<start_of_image> {input_text}",
+                                    text=f"{sample["pre_prompt"]} <start_of_image> {sample[post_prompt]}",
                                     images=img,
                                     max_new_tokens=max_new_tokens,
                                     return_full_text=False,
                                 )
-                            except Exception as pipeline_error:
-                                # If pipeline fails, try to access processor directly
-                                processor = getattr(pipe, 'processor', None)
-                                if processor is None:
-                                    # Last resort: raise the original error
-                                    raise pipeline_error
-                                
-                                model = pipe.model
-                                prompt = "<start_of_image>" + input_text
-                                model_inputs = processor(text=prompt, images=img, return_tensors="pt").to(model.device)
-                                
-                                # Generate with proper parameters
-                                with torch.no_grad():
-                                    generated_ids = model.generate(
-                                        **model_inputs,
-                                        max_new_tokens=max_new_tokens,
-                                        do_sample=False,
-                                        pad_token_id=processor.tokenizer.eos_token_id,
-                                    )
-                                
-                                # Decode only the new tokens
-                                input_len = model_inputs["input_ids"].shape[-1]
-                                generated_text = processor.tokenizer.decode(
-                                    generated_ids[0][input_len:], 
-                                    skip_special_tokens=True
-                                ).strip()
-                                
-                                # Format as pipeline output for consistency
-                                outputs = [{"generated_text": generated_text}]
+                            except Exception as e:
+                                raise RuntimeError(f"Failed to call pretrained pipeline: {e}")
                         else:
                             # For instruction-tuned models, use chat template format
                             messages = [
@@ -400,7 +373,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
                 total_samples += 1
                 
                 # Save results every 100 samples
-                if total_samples % 2 == 0:
+                if total_samples % 50 == 0:
                     # Calculate current aggregate metrics
                     current_aggregate_metrics = self._aggregate_metrics(all_metrics) if all_metrics else {}
                     current_success_rate = successful_inferences / total_samples if total_samples > 0 else 0.0

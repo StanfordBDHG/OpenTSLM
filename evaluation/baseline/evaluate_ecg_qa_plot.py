@@ -285,7 +285,7 @@ def main():
         dataset_class=ECGQACoTQADataset,
         evaluation_function=evaluate_ecg_metrics,
         plot_function=generate_ecg_plot,
-        max_samples=10,
+        max_samples=10000,
         max_new_tokens=400,
     )
 
