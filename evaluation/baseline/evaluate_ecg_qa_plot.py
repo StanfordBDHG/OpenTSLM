@@ -2,6 +2,8 @@ import re
 import sys
 import io
 import base64
+import os
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 import matplotlib.pyplot as plt
@@ -120,7 +122,17 @@ def generate_ecg_plot(time_series: List[List[float]]) -> str:
     axes[-1].set_xlabel("Time (samples)")
 
     plt.tight_layout()
+    
+    # Save plot to disk instead of showing it
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    results_dir = os.path.join(current_dir, "..", "results", "baseline", "plots")
+    os.makedirs(results_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    filename = f"ecg_plot_{timestamp}.png"
+    file_path = os.path.join(results_dir, filename)
+    plt.savefig(file_path, format="png", bbox_inches="tight", dpi=110)
 
+    # Also save to buffer for returning base64 to caller
     img_buffer = io.BytesIO()
     plt.savefig(img_buffer, format="png", bbox_inches="tight", dpi=110)
     plt.close()
@@ -273,7 +285,7 @@ def main():
         dataset_class=ECGQACoTQADataset,
         evaluation_function=evaluate_ecg_metrics,
         plot_function=generate_ecg_plot,
-        max_samples=490,
+        max_samples=10,
         max_new_tokens=400,
     )
 

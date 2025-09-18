@@ -4,6 +4,7 @@ import sys
 import base64
 from typing import Type, Callable, Dict, List, Any, Optional
 
+import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers.pipelines import pipeline
@@ -51,7 +52,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
 
     
     def load_dataset(self, dataset_class: Type[Dataset], split: str = "test", 
-                    format_sample_str: bool = True, **dataset_kwargs) -> Dataset:
+                    format_sample_str: bool = True, max_samples: Optional[int] = None, **dataset_kwargs) -> Dataset:
         """
         Load a dataset with proper formatting.
         """
@@ -66,6 +67,9 @@ class CommonEvaluatorPlot(CommonEvaluator):
             "format_sample_str": format_sample_str,
             "time_series_format_function": formatter,
         }
+        # Add max_samples if provided
+        if max_samples is not None:
+            default_kwargs["max_samples"] = max_samples
         
         # Update with provided kwargs
         default_kwargs.update(dataset_kwargs)
@@ -236,7 +240,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
         pipe = self.load_model(model_name, **pipeline_kwargs)
         
         # Load dataset
-        dataset = self.load_dataset(dataset_class, format_sample_str=False)
+        dataset = self.load_dataset(dataset_class, format_sample_str=False, max_samples=max_samples)
         
         # Limit samples if specified
         if max_samples is not None:
@@ -285,17 +289,63 @@ class CommonEvaluatorPlot(CommonEvaluator):
                         img_bytes = base64.b64decode(plot_data)
                         img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
 
-                        messages = [
-                            {"role": "user", "content": [
-                                {"type": "image", "image": img}, 
-                                {"type": "text", "text": input_text}
-                            ]}
-                        ]
-                        outputs = pipe(
-                            text=messages,
-                            max_new_tokens=max_new_tokens,
-                            return_full_text=False,
-                        )
+                        # Check if this is a pretrained model (pt) vs instruction-tuned (it)
+                        if "pt" in model_name.lower() and "gemma" in model_name.lower():
+                            # For pretrained Gemma models, use model and processor directly
+                            # to avoid pipeline issues with chat templates
+                            model = pipe.model
+                            
+                            # For pretrained Gemma models, try to use the pipeline directly
+                            # as it should handle the image processing internally
+                            try:
+                                outputs = pipe(
+                                    text=f"<start_of_image> {input_text}",
+                                    images=img,
+                                    max_new_tokens=max_new_tokens,
+                                    return_full_text=False,
+                                )
+                            except Exception as pipeline_error:
+                                # If pipeline fails, try to access processor directly
+                                processor = getattr(pipe, 'processor', None)
+                                if processor is None:
+                                    # Last resort: raise the original error
+                                    raise pipeline_error
+                                
+                                model = pipe.model
+                                prompt = "<start_of_image>" + input_text
+                                model_inputs = processor(text=prompt, images=img, return_tensors="pt").to(model.device)
+                                
+                                # Generate with proper parameters
+                                with torch.no_grad():
+                                    generated_ids = model.generate(
+                                        **model_inputs,
+                                        max_new_tokens=max_new_tokens,
+                                        do_sample=False,
+                                        pad_token_id=processor.tokenizer.eos_token_id,
+                                    )
+                                
+                                # Decode only the new tokens
+                                input_len = model_inputs["input_ids"].shape[-1]
+                                generated_text = processor.tokenizer.decode(
+                                    generated_ids[0][input_len:], 
+                                    skip_special_tokens=True
+                                ).strip()
+                                
+                                # Format as pipeline output for consistency
+                                outputs = [{"generated_text": generated_text}]
+                        else:
+                            # For instruction-tuned models, use chat template format
+                            messages = [
+                                {"role": "user", "content": [
+                                    {"type": "image", "image": img}, 
+                                    {"type": "text", "text": input_text}
+                                ]}
+                            ]
+                            outputs = pipe(
+                                text=messages,
+                                max_new_tokens=max_new_tokens,
+                                return_full_text=False,
+                            )
                     except Exception as e:
                         raise RuntimeError(f"Failed to decode plot image: {e}")
 
