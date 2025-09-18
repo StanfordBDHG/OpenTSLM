@@ -69,7 +69,7 @@ def normalize_label(s: str) -> str:
         return f"({m.group(1).lower()})"
 
     # 2) Look for patterns like "a)" or "B." anywhere in the string
-    m = re.search(r"\b([a-eA-E])[)\.]\b?", s)
+    m = re.search(r"\b([a-eA-E])[)\.]\b", s)
     if m:
         return f"({m.group(1).lower()})"
 

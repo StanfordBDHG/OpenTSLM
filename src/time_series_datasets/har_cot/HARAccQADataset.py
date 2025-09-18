@@ -41,7 +41,6 @@ class HARAccQADataset(QADataset):
     def _get_post_prompt(self, _row) -> str:
         activities = ", ".join(self.get_labels())
         text = f"""
-You are given accelerometer data in all three dimensions. Your task is to classify the activity based on analysis of the data.
 Instructions:
 - Begin by analyzing the time series without assuming a specific label.
 - Think step-by-step about what the observed patterns suggest regarding movement intensity and behavior.
