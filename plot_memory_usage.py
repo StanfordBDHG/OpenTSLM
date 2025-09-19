@@ -29,7 +29,7 @@ def parse_model_name(llm_id, model_type):
     return base_name, type_name
 
 
-def plot_memory_usage(csv_file="memory_use.csv"):
+def plot_memory_usage(csv_file="memory_simulation.csv"):
     df = pd.read_csv(csv_file)
 
     # Replace -1 with 50GB

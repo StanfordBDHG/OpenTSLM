@@ -93,7 +93,7 @@ def extract_clinical_context(pre_prompt: str) -> str:
     return "Clinical context not available"
 
 def extract_question_from_prompt(pre_prompt: str) -> str:
-    """Extract the question from pre_prompt"""
+    """Extract the question from pre_prompt - this is the authoritative question for each sample"""
     if 'Question: ' in pre_prompt:
         question_start = pre_prompt.find('Question: ')
         question_end = pre_prompt.find('\n\n', question_start)
@@ -261,6 +261,7 @@ def create_doctor_evaluation_dataset():
     """Main function to create the doctor evaluation dataset"""
     
     print("Creating doctor evaluation dataset...")
+    print("Note: Each template_id can have multiple different questions - using the specific question from each sample")
     
     # Create output directory
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -308,7 +309,7 @@ def create_doctor_evaluation_dataset():
                 
                 # Extract information
                 clinical_context = extract_clinical_context(prediction['pre_prompt'])
-                question = extract_question_from_prompt(prediction['pre_prompt'])
+                question = extract_question_from_prompt(prediction['pre_prompt'])  # Use the specific question from this sample
                 model_output = prediction['generated']
                 correct_answer = prediction['correct_answer']
                 
