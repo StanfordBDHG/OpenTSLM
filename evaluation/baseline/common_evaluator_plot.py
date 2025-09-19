@@ -4,6 +4,7 @@ import sys
 import base64
 from typing import Type, Callable, Dict, List, Any, Optional
 
+import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers.pipelines import pipeline
@@ -51,7 +52,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
 
     
     def load_dataset(self, dataset_class: Type[Dataset], split: str = "test", 
-                    format_sample_str: bool = True, **dataset_kwargs) -> Dataset:
+                    format_sample_str: bool = True, max_samples: Optional[int] = None, **dataset_kwargs) -> Dataset:
         """
         Load a dataset with proper formatting.
         """
@@ -66,6 +67,9 @@ class CommonEvaluatorPlot(CommonEvaluator):
             "format_sample_str": format_sample_str,
             "time_series_format_function": formatter,
         }
+        # Add max_samples if provided
+        if max_samples is not None:
+            default_kwargs["max_samples"] = max_samples
         
         # Update with provided kwargs
         default_kwargs.update(dataset_kwargs)
@@ -236,7 +240,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
         pipe = self.load_model(model_name, **pipeline_kwargs)
         
         # Load dataset
-        dataset = self.load_dataset(dataset_class, format_sample_str=False)
+        dataset = self.load_dataset(dataset_class, format_sample_str=False, max_samples=max_samples)
         
         # Limit samples if specified
         if max_samples is not None:
@@ -273,7 +277,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
                     raise ValueError(f"Sample {sample} does not contain 'time_series' key")
 
                 target_answer = sample["answer"]
-                input_text = sample["post_prompt"]
+                input_text = sample["pre_prompt"] + sample["post_prompt"]
                 
                 # Generate prediction
                 if isinstance(pipe, OpenAIPipeline):
@@ -288,17 +292,36 @@ class CommonEvaluatorPlot(CommonEvaluator):
                         img_bytes = base64.b64decode(plot_data)
                         img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
 
-                        messages = [
-                            {"role": "user", "content": [
-                                {"type": "image", "image": img}, 
-                                {"type": "text", "text": input_text}
-                            ]}
-                        ]
-                        outputs = pipe(
-                            text=messages,
-                            max_new_tokens=max_new_tokens,
-                            return_full_text=False,
-                        )
+                        # Check if this is a pretrained model (pt) vs instruction-tuned (it)
+                        if "pt" in model_name.lower() and "gemma" in model_name.lower():
+                            # For pretrained Gemma models, use model and processor directly
+                            # to avoid pipeline issues with chat templates
+                            model = pipe.model
+                            
+                            # For pretrained Gemma models, try to use the pipeline directly
+                            # as it should handle the image processing internally
+                            try:
+                                outputs = pipe(
+                                    text=f"{sample['pre_prompt']} <start_of_image> {sample['post_prompt']}",
+                                    images=img,
+                                    max_new_tokens=max_new_tokens,
+                                    return_full_text=False,
+                                )
+                            except Exception as e:
+                                raise RuntimeError(f"Failed to call pretrained pipeline: {e}")
+                        else:
+                            # For instruction-tuned models, use chat template format
+                            messages = [
+                                {"role": "user", "content": [
+                                    {"type": "image", "image": img}, 
+                                    {"type": "text", "text": input_text}
+                                ]}
+                            ]
+                            outputs = pipe(
+                                text=messages,
+                                max_new_tokens=max_new_tokens,
+                                return_full_text=False,
+                            )
                     except Exception as e:
                         raise RuntimeError(f"Failed to decode plot image: {e}")
 
@@ -308,8 +331,17 @@ class CommonEvaluatorPlot(CommonEvaluator):
                     generated_text = outputs[0]["generated_text"].strip()
                     successful_inferences += 1
                     
-                    # Evaluate using custom function
-                    metrics = evaluation_function(target_answer, generated_text)
+                    # Evaluate using custom function (optionally with sample)
+                    try:
+                        import inspect
+                        sig = inspect.signature(evaluation_function)
+                        if len(sig.parameters) >= 3:
+                            metrics = evaluation_function(target_answer, generated_text, sample)
+                        else:
+                            metrics = evaluation_function(target_answer, generated_text)
+                    except Exception:
+                        # Fallback to 2-arg call
+                        metrics = evaluation_function(target_answer, generated_text)
                     all_metrics.append(metrics)
                     
                     # Store detailed results
@@ -343,8 +375,30 @@ class CommonEvaluatorPlot(CommonEvaluator):
                 
                 total_samples += 1
                 
+                # Save results every 100 samples
+                if total_samples % 50 == 0:
+                    # Calculate current aggregate metrics
+                    current_aggregate_metrics = self._aggregate_metrics(all_metrics) if all_metrics else {}
+                    current_success_rate = successful_inferences / total_samples if total_samples > 0 else 0.0
+                    
+                    # Prepare intermediate results
+                    intermediate_results = {
+                        "model_name": model_name,
+                        "dataset_name": dataset_class.__name__,
+                        "total_samples": total_samples,
+                        "successful_inferences": successful_inferences,
+                        "success_rate": current_success_rate,
+                        "metrics": current_aggregate_metrics,
+                        "detailed_results": results,
+                    }
+                    
+                    # Save intermediate results
+                    self._save_results(intermediate_results)
+                    print(f"💾 Intermediate results saved after {total_samples} samples")
+                
             except Exception as e:
                 print(f"Error processing sample {idx}: {e}")
+                total_samples += 1
                 continue
         
         # Calculate aggregate metrics

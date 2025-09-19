@@ -38,9 +38,16 @@ class QADataset(Dataset, ABC):
 
             format_function = partial(self._format_sample_str, time_series_format_function) if format_sample_str else self._format_sample
            
-            self.__class__._train_dataset = list(map(format_function, train))
-            self.__class__._validation_dataset = list(map(format_function, val))
-            self.__class__._test_dataset = list(map(format_function, test))
+            from tqdm import tqdm
+            
+            print("Formatting training samples...")
+            self.__class__._train_dataset = list(tqdm(map(format_function, train), total=len(train), desc="Training samples"))
+            
+            print("Formatting validation samples...")
+            self.__class__._validation_dataset = list(tqdm(map(format_function, val), total=len(val), desc="Validation samples"))
+            
+            print("Formatting test samples...")
+            self.__class__._test_dataset = list(tqdm(map(format_function, test), total=len(test), desc="Test samples"))
 
             self.__class__.loaded = True
 

@@ -9,7 +9,7 @@ from typing import Tuple, Dict, List
 from datasets import Dataset
 import sys
 import os
-import tarfile
+import zipfile
 import tempfile
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -22,9 +22,9 @@ from time_series_datasets.ecg_qa.ecgqa_loader import (
 from tqdm import tqdm
 
 # ECG-QA CoT Repository
-ECG_QA_COT_URL = "https://polybox.ethz.ch/index.php/s/FJfRg5eKHjzjik5/download/ecg_qa_cot.tar.gz"
+ECG_QA_COT_URL = "https://polybox.ethz.ch/index.php/s/D5QaJSEw4dXkzXm/download/ecg_qa_cot_final.zip"
 ECG_QA_COT_DIR = os.path.join(RAW_DATA_PATH, "ecg_qa_cot")
-ECG_QA_COT_TAR = "ecg_qa_cot.tar.gz"
+ECG_QA_COT_ZIP = "ecg_qa_cot.zip"
 
 
 def ensure_directory_exists(directory: str):
@@ -34,19 +34,19 @@ def ensure_directory_exists(directory: str):
 
 def does_ecg_qa_cot_exist():
     """Check if ECG-QA CoT data exists locally."""
-    return os.path.exists(ECG_QA_COT_DIR) and os.path.exists(os.path.join(ECG_QA_COT_DIR, "data"))
+    return os.path.exists(ECG_QA_COT_DIR) and os.path.exists(os.path.join(ECG_QA_COT_DIR, "ecg_qa_cot_train.csv"))
 
 
 def download_ecg_qa_cot():
     """Download ECG-QA CoT data from polybox."""
     ensure_directory_exists(RAW_DATA_PATH)
-    cot_zip_path = os.path.join(RAW_DATA_PATH, ECG_QA_COT_TAR)
+    cot_zip_path = os.path.join(RAW_DATA_PATH, ECG_QA_COT_ZIP)
     
     print(f"Downloading ECG-QA CoT data to {ECG_QA_COT_DIR}...")
     
-    # Download the tar.gz file if it doesn't exist
+    # Download the zip file if it doesn't exist
     if not os.path.exists(cot_zip_path):
-        print(f"Downloading ECG-QA CoT tar.gz file from {ECG_QA_COT_URL}...")
+        print(f"Downloading ECG-QA CoT zip file from {ECG_QA_COT_URL}...")
         
         try:
             # Use wget for large files (more reliable for big downloads)
@@ -72,14 +72,24 @@ def download_ecg_qa_cot():
                             print(f"\rDownload progress: {progress:.1f}%", end="", flush=True)
             print()  # New line after progress
     
-    # Extract the tar.gz file if the target directory doesn't exist
+    # Extract the zip file if the target directory doesn't exist
     if not os.path.exists(ECG_QA_COT_DIR):
         print("Extracting ECG-QA CoT data...")
         
-        with tarfile.open(cot_zip_path, 'r:gz') as tar_ref:
+        with zipfile.ZipFile(cot_zip_path, 'r') as zip_ref:
             # Extract to a temporary directory first
             temp_extract_dir = os.path.join(RAW_DATA_PATH, "temp_ecgqa_cot_extract")
-            tar_ref.extractall(temp_extract_dir)
+            
+            # Get list of files to extract
+            file_list = zip_ref.namelist()
+            total_files = len(file_list)
+            
+            print(f"Extracting {total_files} files from ECG-QA CoT dataset...")
+            from tqdm import tqdm
+            
+            # Extract with progress bar
+            for file_info in tqdm(file_list, desc="Extracting ECG-QA CoT", unit="files"):
+                zip_ref.extract(file_info, temp_extract_dir)
             
             # Find the actual data directory (it might be nested)
             extracted_dirs = [d for d in os.listdir(temp_extract_dir) 
@@ -159,7 +169,9 @@ def load_ecg_qa_cot_splits() -> Tuple[Dataset, Dataset, Dataset]:
             raise FileNotFoundError(f"CoT split file not found: {split_file}")
 
         print(f"Loading CoT data for {split_name} split from {split_file}...")
+        print(f"Reading CSV file...")
         df = pd.read_csv(split_file)
+        print(f"CSV loaded: {len(df)} rows, {len(df.columns)} columns")
 
         out: List[Dict] = []
         for idx, row in tqdm(df.iterrows(), total=len(df), desc=f"Processing {split_name} CoT rows"):
@@ -214,8 +226,13 @@ def load_ecg_qa_cot_splits() -> Tuple[Dataset, Dataset, Dataset]:
     test_list = load_split_from_csv("test")
 
     print("Converting to HuggingFace datasets...")
+    
+    # Show progress for dataset conversion
+    print(f"Converting train split ({len(train_list)} samples)...")
     train_dataset = Dataset.from_list(train_list)
+    print(f"Converting validation split ({len(val_list)} samples)...")
     val_dataset = Dataset.from_list(val_list)
+    print(f"Converting test split ({len(test_list)} samples)...")
     test_dataset = Dataset.from_list(test_list)
 
     print("ECG-QA CoT dataset loading complete!")
@@ -223,12 +240,25 @@ def load_ecg_qa_cot_splits() -> Tuple[Dataset, Dataset, Dataset]:
 
 
 def get_label_distribution(dataset: Dataset) -> Dict[str, int]:
-    """Get the distribution of labels in a dataset."""
+    """Get the distribution of answer labels in the dataset."""
     label_counts = {}
+    
     for sample in dataset:
-        # For ECG-QA, we can use question_type as a label
-        label = sample.get("question_type", "unknown")
+        # Extract the actual answer label from the answer field
+        answer = sample.get("answer", "")
+        if isinstance(answer, str) and answer.strip():
+            # For CoT datasets, the answer field contains the rationale + final answer
+            # Extract the final answer after "Answer: "
+            if "Answer:" in answer:
+                label = answer.split("Answer:")[-1].strip().strip(".")
+            else:
+                # Fallback to the full answer if no "Answer:" found
+                label = answer.strip()
+        else:
+            label = "unknown"
+        
         label_counts[label] = label_counts.get(label, 0) + 1
+    
     return label_counts
 
 
