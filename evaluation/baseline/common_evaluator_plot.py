@@ -299,7 +299,8 @@ class CommonEvaluatorPlot(CommonEvaluator):
                             # as it should handle the image processing internally
                             try:
                                 outputs = pipe(
-                                    text=f"{sample['pre_prompt']} <start_of_image> {sample['post_prompt']}",
+                                    # text=f"{sample['pre_prompt']} <start_of_image> {sample['post_prompt']}",
+                                    text=f"<start_of_image> this is",
                                     images=img,
                                     max_new_tokens=max_new_tokens,
                                     return_full_text=False,
