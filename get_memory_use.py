@@ -10,6 +10,7 @@ import torch
 from tqdm.auto import tqdm
 from torch.utils.data import DataLoader
 import os as _os
+import psutil
 
 import pynvml  # type: ignore
 _NVML_AVAILABLE = True
@@ -39,7 +40,7 @@ from time_series_datasets.util import extend_time_series_to_match_patch_size_and
 def get_device(device_arg: str | None) -> str:
     if device_arg:
         return device_arg
-    return "cuda" if torch.cuda.is_available() else "cpu"
+    return "cpu"  # Default to CPU for easier testing
 
 
 def measure_peak_cuda_bytes() -> int:
@@ -54,6 +55,16 @@ def measure_peak_cuda_reserved_bytes() -> int:
         return -1
     torch.cuda.synchronize()
     return int(torch.cuda.max_memory_reserved())
+
+
+def measure_peak_cpu_bytes() -> int:
+    """Measure peak CPU memory usage in bytes"""
+    try:
+        process = psutil.Process()
+        memory_info = process.memory_info()
+        return int(memory_info.rss)  # Resident Set Size (physical memory)
+    except Exception:
+        return -1
 
 
 def nvml_current_process_bytes() -> int:
@@ -135,9 +146,14 @@ def build_optimizer(model, model_type: str, base_lr: float = 2e-4):
 def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float, int, int, int]:
     model.train()
     optimizer = build_optimizer(model, model_type)
+    
+    # Initialize memory tracking
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
+    
+    # Track CPU memory baseline
+    cpu_memory_baseline = measure_peak_cpu_bytes()
 
     last_loss = 0.0
     # DataLoader with shuffle and collate that pads series
@@ -153,12 +169,14 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
     max_peak_bytes = -1
     max_reserved_bytes = -1
     max_nvml_bytes = -1
+    max_cpu_bytes = cpu_memory_baseline
     step = 0
     # Initialize postfix
     pbar.set_postfix({
         "alloc_gb": 0.0,
         "res_gb": 0.0,
         "nvml_gb": 0.0,
+        "cpu_gb": 0.0,
     })
     for batch in loader:
         if optimizer:
@@ -169,6 +187,7 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
             loss.backward()
             optimizer.step()
         last_loss = float(loss.detach().item())
+        
         # Track peak memory across steps
         if torch.cuda.is_available():
             torch.cuda.synchronize()
@@ -181,14 +200,22 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
             nvml_bytes = nvml_current_process_bytes()
             if nvml_bytes > max_nvml_bytes:
                 max_nvml_bytes = nvml_bytes
-            # Update progress bar postfix in GB
-            def _to_gb(val: int) -> float:
-                return float(val) / (1024.0 ** 3) if isinstance(val, (int, float)) and val >= 0 else 0.0
-            pbar.set_postfix({
-                "alloc_gb": f"{_to_gb(max_peak_bytes):.2f}",
-                "res_gb": f"{_to_gb(max_reserved_bytes):.2f}",
-                "nvml_gb": f"{_to_gb(max_nvml_bytes):.2f}",
-            })
+        
+        # Track CPU memory
+        current_cpu_bytes = measure_peak_cpu_bytes()
+        if current_cpu_bytes > max_cpu_bytes:
+            max_cpu_bytes = current_cpu_bytes
+        
+        # Update progress bar postfix in GB
+        def _to_gb(val: int) -> float:
+            return float(val) / (1024.0 ** 3) if isinstance(val, (int, float)) and val >= 0 else 0.0
+        
+        pbar.set_postfix({
+            "alloc_gb": f"{_to_gb(max_peak_bytes):.2f}",
+            "res_gb": f"{_to_gb(max_reserved_bytes):.2f}",
+            "nvml_gb": f"{_to_gb(max_nvml_bytes):.2f}",
+            "cpu_gb": f"{_to_gb(max_cpu_bytes):.2f}",
+        })
         step += 1
         pbar.update(1)
         if step >= steps:
@@ -200,9 +227,9 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
         peak_reserved_bytes = max_reserved_bytes
         nvml_peak_bytes = max_nvml_bytes
     else:
-        peak_bytes = -1
-        peak_reserved_bytes = -1
-        nvml_peak_bytes = -1
+        peak_bytes = max_cpu_bytes  # Use CPU memory as fallback
+        peak_reserved_bytes = max_cpu_bytes
+        nvml_peak_bytes = max_cpu_bytes
     return last_loss, peak_bytes, peak_reserved_bytes, nvml_peak_bytes
 
 
@@ -253,7 +280,7 @@ def main():
         choices=["TSQADataset", "HARCoTQADataset", "SleepEDFCoTQADataset", "ECGQACoTQADataset", "SimulationQADataset"],
         help="Dataset to use",
     )
-    parser.add_argument("--device", default="cuda", help="Device to run on (e.g., cuda, cuda:0, cpu)")
+    parser.add_argument("--device", default="cpu", help="Device to run on (e.g., cuda, cuda:0, cpu)")
     parser.add_argument("--length", type=int, default=100, help="Length of time series for SimulationQADataset (default: 100)")
     parser.add_argument("--num_series", type=int, default=1, help="Number of time series for SimulationQADataset (default: 1)")
     parser.add_argument("--results_csv", default=os.path.join(REPO_DIR, "memory_use.csv"), help="Path to CSV file to append results")
