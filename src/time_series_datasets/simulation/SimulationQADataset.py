@@ -41,7 +41,7 @@ class SimulationQADataset(QADataset):
         Creates a dataset with 10,000 items, each with random time series data.
         Each item will have num_series time series of length elements.
         """
-        dataset_size = 1000
+        dataset_size = 200
         all_items = []
         
         for item_idx in range(dataset_size):
