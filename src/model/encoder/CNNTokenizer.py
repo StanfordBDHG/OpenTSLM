@@ -13,7 +13,7 @@ class CNNTokenizer(TimeSeriesEncoderBase):
         dropout: float = 0.0,
         transformer_input_dim: int = TRANSFORMER_INPUT_DIM,
         patch_size: int = PATCH_SIZE,
-        max_patches: int = 2051,
+        max_patches: int = 2600,
     ):
         """
         Args:
