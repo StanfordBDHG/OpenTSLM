@@ -231,7 +231,7 @@ def run_for_dataset(model_name: str, model, dataset_name: str, dataset_obj) -> D
     }
     try:
         # Train for half an epoch, capped at 10000 steps
-        steps = max(1, min(len(dataset_obj), 10000))
+        steps = max(1, min(len(dataset_obj), 100))
         loss, peak, peak_reserved, nvml_peak = train_for_steps(model, model_name, dataset_obj, steps)
         result["loss"] = loss
         result["peak_cuda_bytes"] = peak
