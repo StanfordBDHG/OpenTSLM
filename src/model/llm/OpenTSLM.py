@@ -19,14 +19,19 @@ class OpenTSLM:
     Factory class for loading EmbedHealth models from Hugging Face Hub.
 
     Automatically detects model type based on repository ID suffix and returns
-    the appropriate model instance (EmbedHealthSP or EmbedHealthFlamingo).
+    the appropriate model instance (EmbedHealthSP or EmbedHealthFlamingo) with
+    optimal parameters from curriculum learning training.
 
     - Repository IDs ending with "-sp" load EmbedHealthSP models
     - Repository IDs ending with "-flamingo" load EmbedHealthFlamingo models
 
+    The factory automatically applies the same parameters used in curriculum learning:
+    - EmbedHealthSP: Uses default constructor parameters
+    - EmbedHealthFlamingo: cross_attn_every_n_layers=1, gradient_checkpointing=False
+
     Example:
         >>> model = OpenTSLM.load_pretrained("OpenTSLM/gemma-3-270m-pt-sleep-flamingo")
-        >>> # Returns an EmbedHealthFlamingo instance
+        >>> # Returns an EmbedHealthFlamingo instance with optimal parameters
         >>> from prompt.full_prompt import FullPrompt
         >>> prompt = FullPrompt(...)
         >>> response = model.eval_prompt(prompt)
@@ -47,7 +52,7 @@ class OpenTSLM:
             repo_id: Hugging Face repository ID (e.g., "OpenTSLM/gemma-3-270m-pt-sleep-flamingo")
             device: Device to load the model on (default: auto-detect)
             cache_dir: Directory to cache downloaded models (optional)
-            **kwargs: Additional arguments passed to the underlying model
+            **kwargs: Additional arguments passed to the underlying model (will override defaults)
 
         Returns:
             Union[EmbedHealthSP, EmbedHealthFlamingo]: The loaded model instance
@@ -67,13 +72,31 @@ class OpenTSLM:
         print(f"   Base LLM: {base_llm_id}")
         print(f"   Device: {device}")
 
-        # Instantiate the appropriate model class
+        # Get default parameters for each model type
         if model_type == ModelType.SP:
-            model = EmbedHealthSP(llm_id=base_llm_id, device=device, **kwargs)
+            # EmbedHealthSP uses default parameters from curriculum learning
+            default_params = {}
+            # Merge user kwargs with defaults (user kwargs take precedence)
+            model_params = {**default_params, **kwargs}
+            model = EmbedHealthSP(llm_id=base_llm_id, device=device, **model_params)
+
         elif model_type == ModelType.FLAMINGO:
-            model = EmbedHealthFlamingo(device=device, llm_id=base_llm_id, **kwargs)
+            # EmbedHealthFlamingo parameters from curriculum learning
+            default_params = {
+                "cross_attn_every_n_layers": 1,
+                "gradient_checkpointing": False,  # Default to False, can be overridden
+            }
+            # Merge user kwargs with defaults (user kwargs take precedence)
+            model_params = {**default_params, **kwargs}
+            model = EmbedHealthFlamingo(
+                device=device, llm_id=base_llm_id, **model_params
+            )
         else:
             raise ValueError(f"Unknown model type: {model_type}")
+
+        print(
+            f"   Using parameters: {model_params if model_type == ModelType.FLAMINGO else 'defaults'}"
+        )
 
         # Load the checkpoint
         model.load_from_file(checkpoint_path)
