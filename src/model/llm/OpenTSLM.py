@@ -1,9 +1,17 @@
 import torch
 from typing import Optional, Union
+from enum import Enum
 from huggingface_hub import hf_hub_download
 
 from .EmbedHealthSP import EmbedHealthSP
 from .EmbedHealthFlamingo import EmbedHealthFlamingo
+
+
+class ModelType(Enum):
+    """Enumeration of supported model types."""
+
+    SP = "sp"
+    FLAMINGO = "flamingo"
 
 
 class OpenTSLM:
@@ -54,15 +62,15 @@ class OpenTSLM:
         checkpoint_path = cls._download_model_files(repo_id, cache_dir)
         base_llm_id = cls._get_base_llm_id(repo_id)
 
-        print(f"🚀 Loading {model_type.upper()} model...")
+        print(f"🚀 Loading {model_type.value.upper()} model...")
         print(f"   Repository: {repo_id}")
         print(f"   Base LLM: {base_llm_id}")
         print(f"   Device: {device}")
 
         # Instantiate the appropriate model class
-        if model_type == "sp":
+        if model_type == ModelType.SP:
             model = EmbedHealthSP(llm_id=base_llm_id, device=device, **kwargs)
-        elif model_type == "flamingo":
+        elif model_type == ModelType.FLAMINGO:
             model = EmbedHealthFlamingo(device=device, llm_id=base_llm_id, **kwargs)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
@@ -71,7 +79,7 @@ class OpenTSLM:
         model.load_from_file(checkpoint_path)
         model.eval()
 
-        print(f"✅ {model_type.upper()} model loaded successfully!")
+        print(f"✅ {model_type.value.upper()} model loaded successfully!")
         return model
 
     @staticmethod
@@ -88,12 +96,12 @@ class OpenTSLM:
             return "cpu"
 
     @staticmethod
-    def _detect_model_type(repo_id: str) -> str:
+    def _detect_model_type(repo_id: str) -> ModelType:
         """Detect model type from repository ID suffix."""
         if repo_id.endswith("-sp"):
-            return "sp"
+            return ModelType.SP
         elif repo_id.endswith("-flamingo"):
-            return "flamingo"
+            return ModelType.FLAMINGO
         else:
             raise ValueError(
                 f"Repository ID '{repo_id}' must end with either '-sp' or '-flamingo' "
@@ -115,22 +123,11 @@ class OpenTSLM:
             return checkpoint_path
 
         except Exception as e:
-            # Try alternative filename
-            try:
-                checkpoint_path = hf_hub_download(
-                    repo_id=repo_id,
-                    filename="pytorch_model.bin",
-                    cache_dir=cache_dir,
-                    local_files_only=False,
-                )
-                print(f"✅ Downloaded model checkpoint from {repo_id}")
-                return checkpoint_path
-            except Exception as e2:
-                raise RuntimeError(
-                    f"Failed to download model from {repo_id}. "
-                    f"Tried 'best_model.pt' and 'pytorch_model.bin'. "
-                    f"Original error: {e}, Secondary error: {e2}"
-                )
+            raise RuntimeError(
+                f"Failed to download model from {repo_id}. "
+                f"Tried 'best_model.pt' and 'pytorch_model.bin'. "
+                f"Original error: {e}"
+            )
 
     @staticmethod
     def _get_base_llm_id(repo_id: str) -> str:
