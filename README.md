@@ -92,10 +92,9 @@ import torch
 
 # Load a pre-trained model using the factory method
 # Available models can be found at: https://huggingface.co/OpenTSLM
-model = OpenTSLM.load_pretrained("<hugging_face_repo_id>")
-
 # The method returns either an EmbedHealthSP or EmbedHealthFlamingo instance
-# depending on the repository ID suffix
+# depending on the repository ID
+model = OpenTSLM.load_pretrained("<hugging_face_repo_id>")
 
 # Create a prompt with time series data
 prompt = FullPrompt(
