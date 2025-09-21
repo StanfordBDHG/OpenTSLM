@@ -33,7 +33,7 @@ class OpenTSLM:
 
     Example:
         >>> model = OpenTSLM.load_pretrained("OpenTSLM/gemma-3-270m-pt-sleep-flamingo")
-        >>> # Returns an EmbedHealthFlamingo instance with optimal parameters
+        >>>
         >>> from prompt.full_prompt import FullPrompt
         >>> prompt = FullPrompt(...)
         >>> response = model.eval_prompt(prompt)
