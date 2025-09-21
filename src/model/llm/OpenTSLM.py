@@ -105,19 +105,25 @@ class OpenTSLM:
                 )
 
     def _get_base_llm_id(self) -> str:
-        """Get the base LLM ID from the model config or use default."""
-        try:
-            # Try to get the base model from config
-            config = AutoConfig.from_pretrained(self.repo_id)
-            if hasattr(config, "base_model") and config.base_model:
-                return config.base_model
-            elif hasattr(config, "llm_id") and config.llm_id:
-                return config.llm_id
-        except Exception:
-            pass
+        """Get the base LLM ID from static mapping based on repository ID pattern."""
+        repo_name = self.repo_id.split("/")[-1] if "/" in self.repo_id else self.repo_id
 
-        # Default to Llama 3.2 1B
-        return "meta-llama/Llama-3.2-1B"
+        # Extract base model from repository name pattern
+        if repo_name.startswith("llama-3.2-3b"):
+            return "meta-llama/Llama-3.2-3B"
+        elif repo_name.startswith("llama-3.2-1b"):
+            return "meta-llama/Llama-3.2-1B"
+        elif repo_name.startswith("gemma-3-1b"):
+            return "google/gemma-3-1b"
+        elif repo_name.startswith("gemma-3-270m"):
+            return "google/gemma-3-270m"
+        else:
+            # Raise exception if pattern doesn't match
+            raise ValueError(
+                f"Unable to determine base LLM ID from repository name '{repo_name}'. "
+                f"Repository name must start with one of: 'llama-3.2-3b', 'llama-3.2-1b', "
+                f"'gemma-3-1b', or 'gemma-3-270m'."
+            )
 
     def _load_model(self, **kwargs) -> TimeSeriesLLM:
         """Load the appropriate model class and checkpoint."""
