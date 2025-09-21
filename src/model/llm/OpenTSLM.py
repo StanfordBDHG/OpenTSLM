@@ -1,55 +1,81 @@
 import torch
-from typing import List, Dict, Optional
+from typing import Optional, Union
 from huggingface_hub import hf_hub_download
-from transformers import AutoConfig
 
-from .TimeSeriesLLM import TimeSeriesLLM
 from .EmbedHealthSP import EmbedHealthSP
 from .EmbedHealthFlamingo import EmbedHealthFlamingo
-from prompt.full_prompt import FullPrompt
 
 
 class OpenTSLM:
     """
-    Unified interface for loading and using EmbedHealth models from Hugging Face Hub.
+    Factory class for loading EmbedHealth models from Hugging Face Hub.
 
-    Automatically detects model type based on repository ID suffix:
+    Automatically detects model type based on repository ID suffix and returns
+    the appropriate model instance (EmbedHealthSP or EmbedHealthFlamingo).
+
     - Repository IDs ending with "-sp" load EmbedHealthSP models
     - Repository IDs ending with "-flamingo" load EmbedHealthFlamingo models
 
-    Args:
-        repo_id: Hugging Face repository ID (e.g., "OpenTSLM/gemma-3-270m-pt-sleep-flamingo")
-        device: Device to load the model on (default: auto-detect)
-        cache_dir: Directory to cache downloaded models (optional)
-        **kwargs: Additional arguments passed to the underlying model
-
     Example:
-        >>> # Load an model
-        >>> model = OpenTSLM("<hugging_face_repo_id>") # available models can be found under https://huggingface.co/OpenTSLM
-        >>> # Generate predictions
+        >>> model = OpenTSLM.load_pretrained("OpenTSLM/gemma-3-270m-pt-sleep-flamingo")
+        >>> # Returns an EmbedHealthFlamingo instance
         >>> from prompt.full_prompt import FullPrompt
         >>> prompt = FullPrompt(...)
         >>> response = model.eval_prompt(prompt)
     """
 
-    def __init__(
-        self,
+    @classmethod
+    def load_pretrained(
+        cls,
         repo_id: str,
         device: Optional[str] = None,
         cache_dir: Optional[str] = None,
         **kwargs,
-    ):
-        self.repo_id = repo_id
-        self.device = self._get_device(device)
-        self.cache_dir = cache_dir
+    ) -> Union[EmbedHealthSP, EmbedHealthFlamingo]:
+        """
+        Load a pretrained model from Hugging Face Hub.
 
-        # Detect model type from repository ID
-        self.model_type = self._detect_model_type(repo_id)
+        Args:
+            repo_id: Hugging Face repository ID (e.g., "OpenTSLM/gemma-3-270m-pt-sleep-flamingo")
+            device: Device to load the model on (default: auto-detect)
+            cache_dir: Directory to cache downloaded models (optional)
+            **kwargs: Additional arguments passed to the underlying model
 
-        # Download and load the model
-        self.model = self._load_model(**kwargs)
+        Returns:
+            Union[EmbedHealthSP, EmbedHealthFlamingo]: The loaded model instance
 
-    def _get_device(self, device: Optional[str]) -> str:
+        Example:
+            >>> model = OpenTSLM.load_pretrained("OpenTSLM/gemma-3-270m-pt-sleep-flamingo")
+            >>> prompt = FullPrompt(...)
+            >>> response = model.eval_prompt(prompt)
+        """
+        device = cls._get_device(device)
+        model_type = cls._detect_model_type(repo_id)
+        checkpoint_path = cls._download_model_files(repo_id, cache_dir)
+        base_llm_id = cls._get_base_llm_id(repo_id)
+
+        print(f"🚀 Loading {model_type.upper()} model...")
+        print(f"   Repository: {repo_id}")
+        print(f"   Base LLM: {base_llm_id}")
+        print(f"   Device: {device}")
+
+        # Instantiate the appropriate model class
+        if model_type == "sp":
+            model = EmbedHealthSP(llm_id=base_llm_id, device=device, **kwargs)
+        elif model_type == "flamingo":
+            model = EmbedHealthFlamingo(device=device, llm_id=base_llm_id, **kwargs)
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+
+        # Load the checkpoint
+        model.load_from_file(checkpoint_path)
+        model.eval()
+
+        print(f"✅ {model_type.upper()} model loaded successfully!")
+        return model
+
+    @staticmethod
+    def _get_device(device: Optional[str]) -> str:
         """Auto-detect device if not specified."""
         if device is not None:
             return device
@@ -61,7 +87,8 @@ class OpenTSLM:
         else:
             return "cpu"
 
-    def _detect_model_type(self, repo_id: str) -> str:
+    @staticmethod
+    def _detect_model_type(repo_id: str) -> str:
         """Detect model type from repository ID suffix."""
         if repo_id.endswith("-sp"):
             return "sp"
@@ -73,40 +100,42 @@ class OpenTSLM:
                 f"to indicate the model type."
             )
 
-    def _download_model_files(self) -> str:
+    @staticmethod
+    def _download_model_files(repo_id: str, cache_dir: Optional[str] = None) -> str:
         """Download model checkpoint from Hugging Face Hub."""
         try:
             # Download the main model checkpoint file
             checkpoint_path = hf_hub_download(
-                repo_id=self.repo_id,
+                repo_id=repo_id,
                 filename="best_model.pt",
-                cache_dir=self.cache_dir,
+                cache_dir=cache_dir,
                 local_files_only=False,
             )
-            print(f"✅ Downloaded model checkpoint from {self.repo_id}")
+            print(f"✅ Downloaded model checkpoint from {repo_id}")
             return checkpoint_path
 
         except Exception as e:
             # Try alternative filename
             try:
                 checkpoint_path = hf_hub_download(
-                    repo_id=self.repo_id,
+                    repo_id=repo_id,
                     filename="pytorch_model.bin",
-                    cache_dir=self.cache_dir,
+                    cache_dir=cache_dir,
                     local_files_only=False,
                 )
-                print(f"✅ Downloaded model checkpoint from {self.repo_id}")
+                print(f"✅ Downloaded model checkpoint from {repo_id}")
                 return checkpoint_path
             except Exception as e2:
                 raise RuntimeError(
-                    f"Failed to download model from {self.repo_id}. "
+                    f"Failed to download model from {repo_id}. "
                     f"Tried 'best_model.pt' and 'pytorch_model.bin'. "
                     f"Original error: {e}, Secondary error: {e2}"
                 )
 
-    def _get_base_llm_id(self) -> str:
+    @staticmethod
+    def _get_base_llm_id(repo_id: str) -> str:
         """Get the base LLM ID from static mapping based on repository ID pattern."""
-        repo_name = self.repo_id.split("/")[-1] if "/" in self.repo_id else self.repo_id
+        repo_name = repo_id.split("/")[-1] if "/" in repo_id else repo_id
 
         # Extract base model from repository name pattern
         if repo_name.startswith("llama-3.2-3b"):
@@ -124,88 +153,3 @@ class OpenTSLM:
                 f"Repository name must start with one of: 'llama-3.2-3b', 'llama-3.2-1b', "
                 f"'gemma-3-1b', or 'gemma-3-270m'."
             )
-
-    def _load_model(self, **kwargs) -> TimeSeriesLLM:
-        """Load the appropriate model class and checkpoint."""
-        checkpoint_path = self._download_model_files()
-        base_llm_id = self._get_base_llm_id()
-
-        print(f"🚀 Loading {self.model_type.upper()} model...")
-        print(f"   Repository: {self.repo_id}")
-        print(f"   Base LLM: {base_llm_id}")
-        print(f"   Device: {self.device}")
-
-        # Instantiate the appropriate model class
-        if self.model_type == "sp":
-            model = EmbedHealthSP(llm_id=base_llm_id, device=self.device, **kwargs)
-        elif self.model_type == "flamingo":
-            model = EmbedHealthFlamingo(
-                device=self.device, llm_id=base_llm_id, **kwargs
-            )
-        else:
-            raise ValueError(f"Unknown model type: {self.model_type}")
-
-        # Load the checkpoint
-        model.load_from_file(checkpoint_path)
-        model.eval()
-
-        print(f"✅ {self.model_type.upper()} model loaded successfully!")
-        return model
-
-    # Proxy methods to delegate to the underlying model
-    def generate(
-        self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
-    ) -> List[str]:
-        """Generate text for a batch of inputs."""
-        return self.model.generate(batch, max_new_tokens, **generate_kwargs)
-
-    def compute_loss(self, batch: List[Dict[str, any]]) -> torch.Tensor:
-        """Compute loss for a batch of inputs."""
-        return self.model.compute_loss(batch)
-
-    def eval_prompt(self, prompt: FullPrompt, max_new_tokens: int = 30000) -> str:
-        """Evaluate a single prompt and return the generated text."""
-        return self.model.eval_prompt(prompt, max_new_tokens)
-
-    def get_eos_token(self) -> str:
-        """Get the end-of-sequence token."""
-        return self.model.get_eos_token()
-
-    def to(self, device: str):
-        """Move model to device."""
-        self.device = device
-        self.model.to(device)
-        return self
-
-    def eval(self):
-        """Set model to evaluation mode."""
-        self.model.eval()
-        return self
-
-    def train(self, mode: bool = True):
-        """Set model to training mode."""
-        self.model.train(mode)
-        return self
-
-    def parameters(self):
-        """Get model parameters."""
-        return self.model.parameters()
-
-    def named_parameters(self):
-        """Get named model parameters."""
-        return self.model.named_parameters()
-
-    def state_dict(self):
-        """Get model state dictionary."""
-        return self.model.state_dict()
-
-    def load_state_dict(self, state_dict, strict=True):
-        """Load model state dictionary."""
-        return self.model.load_state_dict(state_dict, strict)
-
-    def __getattr__(self, name):
-        """Delegate any other attribute access to the underlying model."""
-        return getattr(self.model, name)
-
-    def __repr__(self):
-        return f"OpenTSLM(repo_id='{self.repo_id}', model_type='{self.model_type}', device='{self.device}')"

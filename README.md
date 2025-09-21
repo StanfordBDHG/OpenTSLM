@@ -81,7 +81,7 @@ python curriculum_learning.py --model EmbedHealthFlamingo --eval_only
 
 ## 🚀 Using Pre-trained Models
 
-EmbedHealth provides a unified interface called `OpenTSLM` for easily loading and using pre-trained models from Hugging Face Hub.
+EmbedHealth provides a factory class called `OpenTSLM` for easily loading pre-trained models from Hugging Face Hub. The `load_pretrained` method automatically detects the model type and returns the appropriate model instance.
 
 ### Quick Usage
 
@@ -90,8 +90,12 @@ from model.llm.OpenTSLM import OpenTSLM
 from prompt.full_prompt import FullPrompt
 import torch
 
-# Load a OpenTSLM model, models can be found under: https://huggingface.co/OpenTSLM
-model = OpenTSLM("<hugging_face_repo_id>")
+# Load a pre-trained model using the factory method
+# Available models can be found at: https://huggingface.co/OpenTSLM
+model = OpenTSLM.load_pretrained("<hugging_face_repo_id>")
+
+# The method returns either an EmbedHealthSP or EmbedHealthFlamingo instance
+# depending on the repository ID suffix
 
 # Create a prompt with time series data
 prompt = FullPrompt(
@@ -101,23 +105,21 @@ prompt = FullPrompt(
     post_prompt="What does this indicate?"
 )
 
-# Generate response
+# Generate response using the loaded model
 response = model.eval_prompt(prompt)
 print(response)
 ```
 
 ### Repository Naming Convention
 
-- Repository IDs ending with `-sp` will load EmbedHealthSP models
-- Repository IDs ending with `-flamingo` will load EmbedHealthFlamingo models
+- Repository IDs ending with `-sp` will load and return `EmbedHealthSP` models
+- Repository IDs ending with `-flamingo` will load and return `EmbedHealthFlamingo` models
 
 ### Features
 
-- **Automatic Model Detection**: Detects model type from repository name
+- **Automatic Model Detection**: Detects model type from repository name suffix
 - **Device Auto-detection**: Automatically selects best available device (CUDA > MPS > CPU)
 - **Hugging Face Integration**: Downloads models directly from Hugging Face Hub
-- **Unified Interface**: Same API for both SP and Flamingo models
-- **Error Handling**: Clear error messages for common issues
 
 ## 📁 Results Structure
 
