@@ -5,15 +5,15 @@
   <img src="assets/eth_cdhi_logo.png" alt="ETH Centre for Digital Health Interventions" height="120">
 </div>
 
-
 ## Installation
 
-1. **Clone the Repository**  
+1. **Clone the Repository**
+
    ```bash
    git clone https://github.com/StanfordBDHG/EmbedHealth.git --recurse-submodules
    ```
 
-2. **Install Dependencies**  
+2. **Install Dependencies**
    ```bash
    pip install -r requirements.txt
    ```
@@ -32,7 +32,7 @@ EmbedHealth uses the Llama 3.2 1B model, which is stored in a Hugging Face repos
    huggingface-cli login
    ```
 
-3. **Create an API Token**  
+3. **Create an API Token**
    - Go to your Hugging Face settings: https://huggingface.co/settings/tokens
    - Generate a new token with `read` scope.
    - Copy the token for CLI login.
@@ -42,13 +42,16 @@ EmbedHealth uses the Llama 3.2 1B model, which is stored in a Hugging Face repos
 EmbedHealth uses curriculum learning with progressive training stages:
 
 ### Training Stages
+
 1. **Stage 1 (MCQ)**: Multiple choice questions on time series data
 2. **Stage 2 (Captioning)**: Generate detailed captions for time series
 
 > **⚠️ MPS/CUDA Compatibility Warning:**
-> 
+>
 > If you are using Apple's MPS (Metal Performance Shaders) backend (e.g., on Mac with Apple Silicon), you may encounter issues with training or inference. **Checkpoints trained with CUDA (NVIDIA GPUs) may not yield good results or may not be fully compatible when loaded and run on MPS.** For best results, use the same device type (CUDA or MPS) for both training and inference. CUDA is preferred in general.
+
 ### Quick Start
+
 ```bash
 # Run full curriculum with EmbedHealthFlamingo
 python curriculum_learning.py --model EmbedHealthSP
@@ -75,6 +78,46 @@ python curriculum_learning.py --model EmbedHealthFlamingo --eval_only
 - `--stages`: Stages to run (`stage1_mcq`, `stage2_captioning`, or both)
 - `--device`: Device to use (`cuda`, `mps`, `cpu`)
 - `--eval_only`: Run evaluation only (requires an existing checkpoint for the stage)
+
+## 🚀 Using Pre-trained Models
+
+EmbedHealth provides a unified interface called `OpenTSLM` for easily loading and using pre-trained models from Hugging Face Hub.
+
+### Quick Usage
+
+```python
+from model.llm.OpenTSLM import OpenTSLM
+from prompt.full_prompt import FullPrompt
+import torch
+
+# Load a OpenTSLM model, models can be found under: https://huggingface.co/OpenTSLM
+model = OpenTSLM("<hugging_face_repo_id>")
+
+# Create a prompt with time series data
+prompt = FullPrompt(
+    pre_prompt="Analyze this time series:",
+    time_series_text=["Heart rate measurement"],
+    time_series=[torch.randn(100)],  # Your time series data
+    post_prompt="What does this indicate?"
+)
+
+# Generate response
+response = model.eval_prompt(prompt)
+print(response)
+```
+
+### Repository Naming Convention
+
+- Repository IDs ending with `-sp` will load EmbedHealthSP models
+- Repository IDs ending with `-flamingo` will load EmbedHealthFlamingo models
+
+### Features
+
+- **Automatic Model Detection**: Detects model type from repository name
+- **Device Auto-detection**: Automatically selects best available device (CUDA > MPS > CPU)
+- **Hugging Face Integration**: Downloads models directly from Hugging Face Hub
+- **Unified Interface**: Same API for both SP and Flamingo models
+- **Error Handling**: Clear error messages for common issues
 
 ## 📁 Results Structure
 
