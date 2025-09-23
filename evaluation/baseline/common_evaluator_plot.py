@@ -270,9 +270,6 @@ class CommonEvaluatorPlot(CommonEvaluator):
 
                 if isinstance(sample, dict) and 'time_series' in sample:
                     plot_data = plot_function(sample["time_series"])
-                # Use the dataset's formatted prompt
-                if isinstance(sample, dict) and 'prompt' in sample:
-                    input_text = sample["prompt"]
                 else:
                     raise ValueError(f"Sample {sample} does not contain 'time_series' key")
 
