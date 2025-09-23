@@ -63,7 +63,7 @@ class SimulationQADataset(QADataset):
 
             item_data = {
                 **time_series_data,
-                "Question": f"You are given different time series. All have the same length of {self.length} data points.",
+                "Question": f"You are given different time series. All have the same length of {self.length} data points. What is the pattern of the time series?",
                 "Answer": "This is a random pattern.",
             }
 
