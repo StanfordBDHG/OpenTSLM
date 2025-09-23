@@ -293,10 +293,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
                         if "pt" in model_name.lower() and "gemma" in model_name.lower():
                             # For pretrained Gemma models, use model and processor directly
                             # to avoid pipeline issues with chat templates
-                            model = pipe.model
-                            
-                            # For pretrained Gemma models, try to use the pipeline directly
-                            # as it should handle the image processing internally
+
                             try:
                                 outputs = pipe(
                                     text=f"{sample['pre_prompt']} <start_of_image> {sample['post_prompt']}",
