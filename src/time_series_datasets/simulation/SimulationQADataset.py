@@ -7,6 +7,9 @@ from prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from time_series_datasets.QADataset import QADataset
 
 
+DATASET_SIZE = 200
+
+
 class SimulationQADataset(QADataset):
     def __init__(
         self,
@@ -35,63 +38,44 @@ class SimulationQADataset(QADataset):
             split, EOS_TOKEN, format_sample_str, time_series_format_function
         )
 
-
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         """
-        Creates a dataset with 10,000 items, each with random time series data.
+        Creates a dataset with 200 items, each with random time series data.
         Each item will have num_series time series of length elements.
         """
-        dataset_size = 200
         all_items = []
-        
-        for item_idx in range(dataset_size):
+
+        for _ in range(DATASET_SIZE):
             # Generate random time series for this item
-            item_data = {}
-            
-            if self.num_series == 1:
-                # Single time series
+            time_series_data = {}
+            for i in range(self.num_series):
                 series = torch.tensor(np.random.randn(self.length), dtype=torch.float32)
-                
+
                 # Normalize the series
                 mean_val = series.mean().item()
                 std_val = max(series.std().item(), 1e-6)
                 normalized_series = (series - mean_val) / std_val
-                
-                item_data = {
-                    "Series": normalized_series.tolist(),
-                    "Question": f"What is the pattern of this time series? (Item {item_idx})",
-                    "Answer": f"This is a random pattern with noise. Mean: {mean_val:.4f}, Std: {std_val:.4f}",
-                    "Task": "pattern recognition",
-                }
-            else:
-                # Multiple time series
-                time_series_data = {}
-                for i in range(self.num_series):
-                    series = torch.tensor(np.random.randn(self.length), dtype=torch.float32)
-                    
-                    # Normalize the series
-                    mean_val = series.mean().item()
-                    std_val = max(series.std().item(), 1e-6)
-                    normalized_series = (series - mean_val) / std_val
-                    
-                    time_series_data[f"series_{i}"] = normalized_series.tolist()
-                
-                item_data = {
-                    **time_series_data,
-                    "Question": f"What are the patterns of these {self.num_series} time series? (Item {item_idx})",
-                    "Answer": f"These are {self.num_series} different synthetic patterns with random noise components.",
-                    "Task": "multi-series pattern recognition",
-                }
-            
+
+                time_series_data[f"series_{i}"] = normalized_series.tolist()
+                time_series_data[f"series_text_{i}"] = (
+                    f"This is a time series with {self.length} data points, mean {mean_val:.4f} and std {std_val:.4f}."
+                )
+
+            item_data = {
+                **time_series_data,
+                "Question": "What are the patterns of the time series?",
+                "Answer": "This is a random pattern.",
+            }
+
             all_items.append(item_data)
-        
+
         # Convert to HuggingFace Dataset format
         dataset_dict = {}
         for key in all_items[0].keys():
             dataset_dict[key] = [item[key] for item in all_items]
-        
+
         dataset = Dataset.from_dict(dataset_dict)
-        
+
         # Return the same dataset for all splits
         return dataset, dataset, dataset
 
@@ -105,7 +89,7 @@ class SimulationQADataset(QADataset):
 
     def _get_post_prompt(self, row) -> str:
         """Get the post-prompt from the data row."""
-        return "Predict the " + row["Task"] + " Answer:"
+        return "Predict the pattern of the time series. Answer:"
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         """
@@ -114,19 +98,13 @@ class SimulationQADataset(QADataset):
         """
         prompts = []
 
-        if self.num_series == 1:
-            # Single time series
-            series_data = row["Series"]
-            text_description = f"This is a random time series with {len(series_data)} data points."
-            prompts.append(TextTimeSeriesPrompt(text_description, series_data))
-        else:
-            # Multiple time series
-            for i in range(self.num_series):
-                series_key = f"series_{i}"
-                if series_key in row:
-                    series_data = row[series_key]
-                    text_description = f"This is time series {i+1} with {len(series_data)} data points."
-                    prompts.append(TextTimeSeriesPrompt(text_description, series_data))
+        for i in range(self.num_series):
+            series_key = f"series_{i}"
+            series_text_key = f"series_text_{i}"
+            if series_key in row and series_text_key in row:
+                series_data = row[series_key]
+                text_description = row[series_text_key]
+                prompts.append(TextTimeSeriesPrompt(text_description, series_data))
 
         return prompts
 
@@ -165,13 +143,23 @@ if __name__ == "__main__":
     print(f"Train length: {len(train_dataset)}")
     print(f"Val length: {len(val_dataset)}")
     print(f"Test length: {len(test_dataset)}")
-    
+
     # Test that different items have different data
     print("\n=== Testing Randomness ===")
     item_0 = dataset_single[0]
     item_100 = dataset_single[100]
     print(f"Item 0 Series length: {len(item_0['time_series_prompts'][0].time_series)}")
-    print(f"Item 100 Series length: {len(item_100['time_series_prompts'][0].time_series)}")
-    print(f"First 5 values of item 0: {item_0['time_series_prompts'][0].time_series[:5]}")
-    print(f"First 5 values of item 100: {item_100['time_series_prompts'][0].time_series[:5]}")
-    print("Values are different:", item_0['time_series_prompts'][0].time_series[:5] != item_100['time_series_prompts'][0].time_series[:5])
+    print(
+        f"Item 100 Series length: {len(item_100['time_series_prompts'][0].time_series)}"
+    )
+    print(
+        f"First 5 values of item 0: {item_0['time_series_prompts'][0].time_series[:5]}"
+    )
+    print(
+        f"First 5 values of item 100: {item_100['time_series_prompts'][0].time_series[:5]}"
+    )
+    print(
+        "Values are different:",
+        item_0["time_series_prompts"][0].time_series[:5]
+        != item_100["time_series_prompts"][0].time_series[:5],
+    )
