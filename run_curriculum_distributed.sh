@@ -3,7 +3,7 @@
 # Distributed Curriculum Learning Launch Script
 # Usage: ./run_curriculum_distributed.sh [model] [num_gpus] [batch_size] [stages] [llm_id]
 
-MODEL=${1:-"EmbedHealthFlamingo"}
+MODEL=${1:-"OpenTSLMFlamingo"}
 NUM_GPUS=${2:-4}
 BATCH_SIZE=${3:-8}
 STAGES=${4:-"stage1_mcq stage2_captioning stage3_cot"}
@@ -31,8 +31,8 @@ if ! command -v nvidia-smi &> /dev/null; then
 fi
 
 # Check if the model type is valid
-if [[ "$MODEL" != "EmbedHealthFlamingo" && "$MODEL" != "EmbedHealthSP" ]]; then
-    echo "❌ Invalid model type: $MODEL. Must be 'EmbedHealthFlamingo' or 'EmbedHealthSP'"
+if [[ "$MODEL" != "OpenTSLMFlamingo" && "$MODEL" != "OpenTSLMSP" ]]; then
+    echo "❌ Invalid model type: $MODEL. Must be 'OpenTSLMFlamingo' or 'OpenTSLMSP'"
     exit 1
 fi
 

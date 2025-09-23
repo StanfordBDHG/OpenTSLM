@@ -12,8 +12,8 @@ PYTHON=python
 
 # Models and datasets to test
 MODELS=(
-    "EmbedHealthSP"
-    "EmbedHealthFlamingo"
+    "OpenTSLMSP"
+    "OpenTSLMFlamingo"
 )
 
 DATASETS=(

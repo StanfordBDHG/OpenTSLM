@@ -19,9 +19,9 @@ def parse_model_name(llm_id, model_type):
     else:
         base_name = llm_id
 
-    if model_type == "EmbedHealthSP":
+    if model_type == "OpenTSLMSP":
         type_name = "SoftPrompt"
-    elif model_type == "EmbedHealthFlamingo":
+    elif model_type == "OpenTSLMFlamingo":
         type_name = "Flamingo"
     else:
         type_name = model_type
@@ -42,7 +42,9 @@ def plot_memory_usage(csv_file="memory_use.csv"):
 
     # Order datasets
     dataset_order = ["TSQA", "HAR-CoT", "SleepEDF-CoT", "ECG-QA-CoT"]
-    df["dataset"] = pd.Categorical(df["dataset"], categories=dataset_order, ordered=True)
+    df["dataset"] = pd.Categorical(
+        df["dataset"], categories=dataset_order, ordered=True
+    )
 
     # Order configs
     config_order = ["SoftPrompt", "Flamingo"]
@@ -97,7 +99,9 @@ def plot_memory_usage(csv_file="memory_use.csv"):
     fig.suptitle("Peak CUDA Reserved Memory by Model, Dataset, and Config", fontsize=16)
 
     plt.tight_layout(rect=[0, 0, 1, 0.92])
-    plt.savefig("memory_usage_facet.png", dpi=300, bbox_inches="tight", facecolor="white")
+    plt.savefig(
+        "memory_usage_facet.png", dpi=300, bbox_inches="tight", facecolor="white"
+    )
     plt.show()
 
 

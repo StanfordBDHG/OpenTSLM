@@ -43,7 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from evaluation.embedhealth.parse_predictions import (
+from evaluation.opentslm.parse_predictions import (
     calculate_f1_score,
     calculate_f1_stats,
     calculate_accuracy_stats,
@@ -113,7 +113,7 @@ def extract_structured_data(obj: Dict) -> List[Dict]:
 
         # Binary exact-match accuracy on normalized labels handled in calculate_f1_score, but keep explicit flag
         f1_result = calculate_f1_score(model_prediction, ground_truth)
-        accuracy = f1_result['f1_score'] == 1.0
+        accuracy = f1_result["f1_score"] == 1.0
 
         # Use canonicalized labels for both values and the normalized fields used by class grouping
         data_point = {
@@ -121,9 +121,9 @@ def extract_structured_data(obj: Dict) -> List[Dict]:
             "model_prediction": model_prediction,
             "ground_truth": ground_truth,
             "accuracy": accuracy,
-            "f1_score": f1_result['f1_score'],
-            "precision": f1_result['precision'],
-            "recall": f1_result['recall'],
+            "f1_score": f1_result["f1_score"],
+            "precision": f1_result["precision"],
+            "recall": f1_result["recall"],
             "prediction_normalized": model_prediction,
             "ground_truth_normalized": ground_truth,
         }
@@ -140,16 +140,16 @@ def main():
         "--detailed-json",
         type=Path,
         required=True,
-        help="Path to a single results JSON file containing 'detailed_results'"
+        help="Path to a single results JSON file containing 'detailed_results'",
     )
     ap.add_argument(
         "--clean-out",
         type=Path,
-        help="Optional path to write clean JSONL of parsed per-sample points"
+        help="Optional path to write clean JSONL of parsed per-sample points",
     )
     args = ap.parse_args()
 
-    with args.detailed_json.open('r', encoding='utf-8') as f:
+    with args.detailed_json.open("r", encoding="utf-8") as f:
         obj = json.load(f)
 
     # Extract per-sample points
@@ -187,9 +187,9 @@ def main():
     print(f"Macro-F1 Score: {f1_stats.get('macro_f1', 0.0):.4f}")
     print(f"Total Classes: {f1_stats.get('total_classes', 0)}")
 
-    if f1_stats.get('class_f1_scores'):
+    if f1_stats.get("class_f1_scores"):
         print(f"\nPer-Class F1 Scores:")
-        for class_name, scores in f1_stats['class_f1_scores'].items():
+        for class_name, scores in f1_stats["class_f1_scores"].items():
             print(
                 f"  {class_name}: F1={scores['f1']:.4f}, "
                 f"P={scores['precision']:.4f}, R={scores['recall']:.4f}"
@@ -197,7 +197,7 @@ def main():
 
     # Optional clean JSONL output
     if args.clean_out:
-        with args.clean_out.open('w', encoding='utf-8') as f:
+        with args.clean_out.open("w", encoding="utf-8") as f:
             for item in data_points:
                 f.write(json.dumps(item, indent=2) + "\n")
         print(f"\nData saved to {args.clean_out}")

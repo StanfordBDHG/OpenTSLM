@@ -12,8 +12,8 @@ PYTHON=python
 
 # Models and datasets to test
 MODELS=(
-    "EmbedHealthSP"
-    "EmbedHealthFlamingo"
+    "OpenTSLMSP"
+    "OpenTSLMFlamingo"
 )
 
 DATASETS=(
@@ -48,10 +48,10 @@ echo "Writing results to: ${RESULTS_FLAG#--results_csv }"
 # Run specific datasets for specific model/LLM combinations
 echo "Running specific datasets for specific model/LLM combinations..."
 
-# llama3b EmbedHealthFlamingo for TSQA, HAR, Sleep, ECG_QA
+# llama3b OpenTSLMFlamingo for TSQA, HAR, Sleep, ECG_QA
 LLAMA3B="meta-llama/Llama-3.2-3B"
-FLAMINGO_MODEL="EmbedHealthFlamingo"
-SP_MODEL="EmbedHealthSP"
+FLAMINGO_MODEL="OpenTSLMFlamingo"
+SP_MODEL="OpenTSLMSP"
 
 SPECIFIC_DATASETS=(
   "TSQADataset"
@@ -71,7 +71,7 @@ for dataset in "${SPECIFIC_DATASETS[@]}"; do
   fi
 done
 
-# EmbedHealthSP llama3b for ECG_QA
+# OpenTSLMSP llama3b for ECG_QA
 echo "[RUN] llm_id=$LLAMA3B model=$SP_MODEL dataset=ECGQACoTQADataset"
 set +e
 $PYTHON "$REPO_DIR/get_memory_use.py" -llm_id "$LLAMA3B" --model "$SP_MODEL" --dataset "ECGQACoTQADataset" $DEVICE_FLAG $RESULTS_FLAG
