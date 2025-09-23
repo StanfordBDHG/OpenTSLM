@@ -58,12 +58,12 @@ class SimulationQADataset(QADataset):
 
                 time_series_data[f"series_{i}"] = normalized_series.tolist()
                 time_series_data[f"series_text_{i}"] = (
-                    f"This is a time series with {self.length} data points, mean {mean_val:.4f} and std {std_val:.4f}."
+                    f"This is a time series with mean {mean_val:.4f} and std {std_val:.4f}."
                 )
 
             item_data = {
                 **time_series_data,
-                "Question": "What are the patterns of the time series?",
+                "Question": f"You are given different time series. All have the same length of {self.length} data points.",
                 "Answer": "This is a random pattern.",
             }
 
