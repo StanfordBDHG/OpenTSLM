@@ -216,8 +216,12 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
             # Y-axis rules
             if cfg == "Flamingo":
                 ax.set_ylim(0, 65)
-            elif j <= 2:
-                ax.set_ylim(0, 25)
+            else:
+                if j <= 2:
+                    ax.set_ylim(0, 25)
+                elif j == 3:
+                    ax.set_ylim(0, 200)
+            
 
     # Legend (global, right side) - create in specified order
     # Get handles and labels from first subplot

@@ -82,11 +82,12 @@ def plot_memory_usage(csv_file="merged_success.csv"):
 
     # Plot
     n_models = len(base_models)
-    fig, axes = plt.subplots(1, n_models, figsize=(3.2 * n_models, 4.5), sharey=True)
+    fig, axes = plt.subplots(1, n_models, figsize=(3.2 * n_models, 3.5), sharey=True)
 
     if n_models == 1:
         axes = [axes]
 
+  
     # Muted, paper-friendly palette
     palette = {
         "SoftPrompt": "#4477AA",  # muted blue
@@ -106,17 +107,18 @@ def plot_memory_usage(csv_file="merged_success.csv"):
             edgecolor="0.3",
             linewidth=0.6,
             dodge=True,
+            width=0.8,
             legend=(ax == axes[0]),   # Show legend only in first subplot
         )
 
         ax.set_title(base_model, fontsize=19, fontweight="bold")
         ax.set_xlabel("", fontsize=18, fontweight="bold")
-        ax.set_ylabel("Peak CUDA Reserved (GB)", fontsize=18, fontweight="bold")
+        ax.set_ylabel("Peak VRAM Usage (GB)", fontsize=18, fontweight="bold")
         ax.tick_params(axis="x", rotation=25)
         ax.set_facecolor("#F8F9FA")
         ax.grid(axis="y", alpha=0.5, linestyle="--", linewidth=0.5)
         ax.set_axisbelow(True)
-        ax.set_ylim(0, 100)
+        ax.set_ylim(0, 110)
         
         # Style the legend in the first subplot
         if ax == axes[0]:
@@ -131,9 +133,10 @@ def plot_memory_usage(csv_file="merged_success.csv"):
 
         # Add value labels with larger font and rotation
         for container in ax.containers:
-            ax.bar_label(container, fmt="%.1f", padding=5, fontsize=15, rotation=90)
+            ax.bar_label(container, fmt="%.1f", padding=2, fontsize=15, rotation=90)
 
     plt.tight_layout(pad=0.5)
+    
     for fmt in ["png", "pdf"]:
         plt.savefig(
             f"memory_usage_facet.{fmt}",

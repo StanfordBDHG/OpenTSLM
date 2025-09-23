@@ -62,12 +62,12 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
     matplotlib.rcParams.update({
         "font.family": "serif",
         "font.serif": ["Palatino", "Times New Roman", "DejaVu Serif"],
-        "font.size": 16,
-        "axes.labelsize": 18,
-        "axes.titlesize": 18,
-        "legend.fontsize": 15,
-        "xtick.labelsize": 15,
-        "ytick.labelsize": 15,
+        "font.size": 18,
+        "axes.labelsize": 20,
+        "axes.titlesize": 20,
+        "legend.fontsize": 17,
+        "xtick.labelsize": 17,
+        "ytick.labelsize": 17,
         "axes.linewidth": 0.6,
         "axes.edgecolor": "0.15",
     })
@@ -102,7 +102,7 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
 
     # One subplot per model (always 4)
     n_models = len(base_model_order)
-    fig, axes = plt.subplots(1, n_models, figsize=(3.2 * n_models, 4.5), sharey=True)
+    fig, axes = plt.subplots(1, n_models, figsize=(3.2 * n_models, 3.2), sharey=True)
 
     if n_models == 1:
         axes = [axes]
@@ -139,7 +139,7 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
                 ok_df["total_length"], ok_df["peak_cuda_reserved_gb"],
                 label=cfg,
                 color=color,
-                linewidth=3.0,
+                linewidth=4.0,
                 alpha=0.9,
             )
 
@@ -155,7 +155,7 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
                     [last_ok["peak_cuda_reserved_gb"], OOM_THRESHOLD * 1.05],
                     color=color,
                     linestyle="--",
-                    linewidth=1.5,
+                    linewidth=2.5,
                     alpha=0.8,
                 )
 
@@ -164,8 +164,8 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
                     first_oom["total_length"], OOM_THRESHOLD * 1.05,
                     color="red",
                     marker="x",
-                    s=70,
-                    linewidth=2,
+                    s=80,
+                    linewidth=3,
                     zorder=5,
                 )
                 ax.text(
@@ -175,12 +175,12 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
                 )
 
         # Titles & labels
-        ax.set_title(base_model, fontsize=17, fontweight="bold")
+        ax.set_title(base_model, fontsize=19, fontweight="bold")
         
         # Only show axis labels on specific subplots
         if ax == axes[0]:  # Leftmost subplot
-            ax.set_ylabel("Peak CUDA Reserved (GB)", fontsize=16, fontweight="bold")
-            ax.set_xlabel("Total Sequence Length (N × L)", fontsize=16, fontweight="bold")
+            ax.set_ylabel("Peak VRAM Usage (GB)", fontsize=18, fontweight="bold")
+            ax.set_xlabel("Total Sequence Length (N × L)", fontsize=18, fontweight="bold")
         else:
             ax.set_ylabel("")
             ax.set_xlabel("")
@@ -188,11 +188,11 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
         ax.grid(True, which="major", linestyle="-", linewidth=0.4, alpha=0.5)
         ax.grid(True, which="minor", linestyle=":", linewidth=0.3, alpha=0.3)
         ax.minorticks_on()
-        ax.tick_params(axis="both", labelsize=15)
+        ax.tick_params(axis="both", labelsize=17)
 
         # Legend only in first subplot
         if ax == axes[0]:
-            leg = ax.legend(title=None, fontsize=15, loc="best", frameon=True,
+            leg = ax.legend(title=None, fontsize=17, loc="best", frameon=True,
                             framealpha=0.95, edgecolor="0.3")
             for text in leg.get_texts():
                 text.set_fontweight("bold")
