@@ -1,8 +1,10 @@
 from datasets import Dataset
 from typing import List, Tuple
+
+import numpy as np
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from time_series_datasets.QADataset import QADataset
-from time_series_datasets.pamap2.PAMAP2Dataset import PAMAP2Dataset
+from time_series_datasets.pamap2.PAMAP2Dataset import PAMAP2Dataset, ACTIVITIY_ID_DICT
 from time_series_datasets.pamap2.pamap2_loader import PAMAP2_DIR
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
@@ -16,6 +18,21 @@ TIME_SERIS_LABELS = [
     "The following is the accelerometer data on the x-axis",
     "The following is the accelerometer data on the y-axis",
     "The following is the accelerometer data on the z-axis",
+]
+
+MAIN_ACTITIVIES = [
+    "lying",
+    "sitting",
+    "standing",
+    "walking",
+    "ascending stairs",
+    "descending stairs",
+    "running",
+    "cycling",
+    "nordic walking",
+    "ironing",
+    "vacuum cleaning",
+    "rope jumping",
 ]
 
 
@@ -51,26 +68,32 @@ class PAMAP2AccQADataset(QADataset):
         return "You are given accelerometer data in all three dimensions, sampled at approximately 100Hz. Your task is to predict the person's activity."
 
     def _get_post_prompt(self, _row) -> str:
-        return "Answer:"
-
+        activities = ", ".join(MAIN_ACTITIVIES)
+        text = f"""
+        Answer ONLY with the activity label.
+        The following activities are possible: {activities}
+        You MUST end your response with 'Answer: <class label>'
+        """
+        return text
+       
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         series = torch.tensor(
-            [
+            np.array([
                 row["time_series"]["handAcc16_1"],
                 row["time_series"]["handAcc16_2"],
                 row["time_series"]["handAcc16_3"],
-            ],
+            ]),
             dtype=torch.float32,
         )
 
         # Downsampling by 2x
         # Since the PAMAP dataset has 100Hz it results in around 50 Hz which should be fine for further processing
         series = series[:, ::2]
-        print(series.shape)
+        #print(series.shape)
 
-        means = series.mean(dim=0, keepdim=True)  # shape: (n_series, 1)
-        stds = series.std(dim=0, keepdim=True)  # shape: (n_series, 1)
-        series = (series - means) / (stds + 1e-8)  # broadcasts to (n_series, length)
+        #means = series.mean(dim=0, keepdim=True)  # shape: (n_series, 1)
+        #stds = series.std(dim=0, keepdim=True)  # shape: (n_series, 1)
+        #series = (series - means) / (stds + 1e-8)  # broadcasts to (n_series, length)
 
         return [
             TextTimeSeriesPrompt(time_series_label, time_series)

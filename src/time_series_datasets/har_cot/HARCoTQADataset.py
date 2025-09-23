@@ -5,39 +5,33 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from time_series_datasets.QADataset import QADataset
-from time_series_datasets.pamap2.pamap2_cot_loader import load_pamap2_cot_splits
+from time_series_datasets.har_cot.har_cot_loader import load_har_cot_splits
 import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
-from collections import defaultdict
 import numpy as np
-from torch.utils.data import Sampler
-from time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSampler
-
 
 TIME_SERIES_LABELS = [
     "The following is the accelerometer data on the x-axis",
-    "The following is the accelerometer data on the y-axis",
+    "The following is the accelerometer data on the y-axis", 
     "The following is the accelerometer data on the z-axis",
 ]
 
-
-class PAMAP2CoTQADataset(QADataset):
-    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, min_series_length: int = 150):
-        self.min_series_length = min_series_length
-        super().__init__(split, EOS_TOKEN)
+class HARCoTQADataset(QADataset):
+    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, format_sample_str: bool = False, time_series_format_function=None):
+        super().__init__(split, EOS_TOKEN, format_sample_str, time_series_format_function)
     
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         """
-        Load the PAMAP2 CoT dataset splits using the pamap2_cot_loader.
+        Load the HAR CoT dataset splits using the har_cot_loader.
         
         Returns:
             Tuple of (train, validation, test) datasets
         """
-        return load_pamap2_cot_splits(min_series_length=self.min_series_length)
+        return load_har_cot_splits()
 
     def _get_answer(self, row) -> str:
         """
@@ -61,7 +55,6 @@ class PAMAP2CoTQADataset(QADataset):
         Returns:
             Pre-prompt text
         """
-
         text = """
         You are given accelerometer data in all three dimensions. Your task is to classify the activity based on analysis of the data.
 
@@ -72,11 +65,10 @@ class PAMAP2CoTQADataset(QADataset):
         - Do **not** mention any class label until the final sentence.
 
         Possible activity labels are:
-        lying, sitting, standing, walking, running, cycling, nordic walking, watching TV, computer work, car driving, ascending stairs, descending stairs, vacuum cleaning, ironing, folding laundry, house cleaning, playing soccer, rope jumping.
+        biking, lying, running, sitting, standing, walking, walking_down, walking_up.
         
         - Make sure that your last word is the answer. You MUST end your response with "Answer: "
         """
-
         return text
 
     def _get_post_prompt(self, _row) -> str:
@@ -107,14 +99,13 @@ class PAMAP2CoTQADataset(QADataset):
 
         # Check for invalid data
         if torch.isnan(series).any() or torch.isinf(series).any():
-            print(f"❌ Invalid data detected in PAMAP2 sample")
+            print(f"❌ Invalid data detected in HAR CoT sample")
             print(f"Row data: {row}")
             print(f"Series shape: {series.shape}")
             print(f"Series values: {series}")
             print(f"NaN positions: {torch.isnan(series).nonzero()}")
             print(f"Inf positions: {torch.isinf(series).nonzero()}")
-            print(f"Row index: {row['index']}")
-            exit(1)
+            raise ValueError("Invalid data detected")
 
         # Normalize the data with better numerical stability
         means = series.mean(dim=1, keepdim=True)
@@ -137,10 +128,15 @@ class PAMAP2CoTQADataset(QADataset):
             print(f"Normalized series: {series_norm}")
             print(f"NaN positions: {torch.isnan(series_norm).nonzero()}")
             print(f"Inf positions: {torch.isinf(series_norm).nonzero()}")
-            exit(1)
+            raise ValueError("NaN/Inf detected after normalization")
 
         prompts = []
-        for i, (time_series_label, time_series, mean, std) in enumerate(zip(TIME_SERIES_LABELS, series_norm.tolist(), means.squeeze().tolist(), stds.squeeze().tolist())):
+        for i, (time_series_label, time_series, mean, std) in enumerate(zip(
+            TIME_SERIES_LABELS, 
+            series_norm.tolist(), 
+            means.squeeze().tolist(), 
+            stds.squeeze().tolist()
+        )):
             text_prompt = f"{time_series_label}, it has mean {mean:.4f} and std {std:.4f}:"
             prompts.append(TextTimeSeriesPrompt(text_prompt, time_series))
         return prompts
@@ -148,29 +144,18 @@ class PAMAP2CoTQADataset(QADataset):
     @staticmethod
     def get_labels() -> List[str]:
         """
-        Return the list of all possible activity labels for the PAMAP2CoTQADataset.
+        Return the list of all possible activity labels for the HARCoTQADataset.
         """
         return [
-            "lying",
+            "biking",
+            "lying", 
+            "running",
             "sitting",
             "standing",
             "walking",
-            "running",
-            "cycling",
-            "nordic walking",
-            "watching TV",
-            "computer work",
-            "car driving",
-            "ascending stairs",
-            "descending stairs",
-            "vacuum cleaning",
-            "ironing",
-            "folding laundry",
-            "house cleaning",
-            "playing soccer",
-            "rope jumping",
+            "walking_down",
+            "walking_up",
         ]
-
 
     def _format_sample(self, row):
         sample = super()._format_sample(row)
@@ -181,33 +166,21 @@ class PAMAP2CoTQADataset(QADataset):
         return sample
 
 if __name__ == "__main__":
-    dataset = PAMAP2CoTQADataset(split="train", EOS_TOKEN="")
-    dataset_val = PAMAP2CoTQADataset(split="validation", EOS_TOKEN="")
-    dataset_test = PAMAP2CoTQADataset(split="test", EOS_TOKEN="")
+    dataset = HARCoTQADataset(split="train", EOS_TOKEN="")
+    dataset_val = HARCoTQADataset(split="validation", EOS_TOKEN="")
+    dataset_test = HARCoTQADataset(split="test", EOS_TOKEN="")
 
     print(f"Dataset sizes: Train: {len(dataset)}, Validation: {len(dataset_val)}, Test: {len(dataset_test)}")
 
-    # Use BalancedBatchSampler for the training set
-    labels = [row["label"] for row in dataset]
-    num_classes = len(set(labels))
-    batch_size = 4  # You can change this, but it must be divisible by num_classes
-    if batch_size % num_classes != 0:
-        raise ValueError(f"Batch size ({batch_size}) must be divisible by number of classes ({num_classes})")
-    sampler = BalancedBatchSampler(labels, batch_size)
-
-    dataloader = DataLoader(
-        dataset,
-        batch_sampler=sampler,
-        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
-            batch, patch_size=4
-        ),
-    )
-
-    for batch in tqdm(dataloader, total=1):
-        print("Batch keys:", batch[0].keys())
-        print("Batch values:", batch[0]["answer"])
-        # print("Batch time series:", batch[0]["time_series"])
-        print("Batch time series text:", batch[0]["time_series_text"])
-        print("Batch pre prompt:", batch[0]["pre_prompt"])
-        print("Batch post prompt:", batch[0]["post_prompt"])
-        break
+    # Show sample data
+    if len(dataset) > 0:
+        print("\n" + "="*50 + "\n")
+        print("Sample data from training set:")
+        sample = dataset[0]
+        print("Sample keys:", sample.keys())
+        print("Sample label:", sample["label"])
+        print("Sample answer length:", len(sample["answer"]))
+        print("Sample answer preview:", sample["answer"][:200] + "..." if len(sample["answer"]) > 200 else sample["answer"])
+        print("Sample time series text:", sample["time_series_text"] if "time_series_text" in sample else "N/A")
+        print("Sample pre prompt:", sample["pre_prompt"][:200] + "..." if len(sample["pre_prompt"]) > 200 else sample["pre_prompt"])
+        print("Sample post prompt:", sample["post_prompt"]) 

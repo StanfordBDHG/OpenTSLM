@@ -1,0 +1,11 @@
+python evaluate_tsqa.py "google/gemma-3-270m"
+python evaluate_sleep_cot.py "google/gemma-3-270m"
+
+python evaluate_tsqa.py "google/gemma-3-270m"
+python evaluate_sleep_cot.py "google/gemma-3-270m"
+python evaluate_har.py "google/gemma-3-1b-pt"
+
+python evaluate_ecg_qa.py "google/gemma-3-270m"
+python evaluate_ecg_qa.py "google/gemma-3-1b-pt"
+python evaluate_ecg_qa.py "meta-llama/Llama-3.2-1B"
+python evaluate_ecg_qa.py "meta-llama/Llama-3.2-3B"
