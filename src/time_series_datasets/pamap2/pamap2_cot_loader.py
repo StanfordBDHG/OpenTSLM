@@ -17,8 +17,8 @@ COT_CSV = os.path.join(PAMAP_DATA_DIR, "pamap2_cot.csv")
 PAMAP_RELEASE_URL = "https://polybox.ethz.ch/index.php/s/mKJc8aX4nggScfs/download"
 
 
-TEST_FRAC = 0.1
-VAL_FRAC = 0.1
+TEST_FRAC = 0.05
+VAL_FRAC = 0.05
 
 
 def download_and_extract_pamap2():

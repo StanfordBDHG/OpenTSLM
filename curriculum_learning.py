@@ -8,7 +8,9 @@ import argparse
 from typing import List, Optional, Dict, Any, Callable
 from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.m4.M4QADataset import M4QADataset
-from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
+from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
+from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
@@ -52,7 +54,7 @@ from model_config import (
 
 
 # Global stage configuration - users can modify this to mix and match stages
-CURRICULUM_STAGES = ["stage1_mcq", "stage2_captioning", "stage3_cot"]
+CURRICULUM_STAGES = ["stage1_mcq", "stage2_captioning", "stage3_cot", "stage4_sleep_cot", "stage5_ecg_cot"]
 
 
 class CurriculumTrainer:
@@ -65,6 +67,13 @@ class CurriculumTrainer:
     - stage1_mcq: Trains the model on a time-series MCQ dataset (TSQA)
     - stage2_captioning: Trains the model on a time-series captioning dataset (M4 time series captioning)
     - stage3_cot: Trains the model on a chain-of-thought reasoning dataset (PAMAP2 CoT)
+    - stage4_sleep_cot: Trains the model on sleep stage classification with chain-of-thought reasoning
+    - stage5_ecg_cot: Trains the model on ECG QA with chain-of-thought reasoning
+
+    Features:
+    - Automatic loss history tracking saved to loss_history.txt in each stage's checkpoints directory
+    - Loss history is appended to when resuming training, preserving all previous epochs
+    - Displays previous loss history when resuming training
 
     If you run this script, you should be able to reproduce our results from the paper.
     All datasets are automatically downloaded and processed.
@@ -192,15 +201,35 @@ class CurriculumTrainer:
             encoder_lr = lr_encoder if lr_encoder is not None else LR_ENCODER
             projector_lr = lr_projector if lr_projector is not None else LR_PROJECTOR
             
-            if self.rank == 0:
-                print(f"📊 Learning rates for {self.model_type}:")
-                print(f"   Encoder LR: {encoder_lr:.2e}")
-                print(f"   Projector LR: {projector_lr:.2e}")
-            
-            return AdamW([
+            param_groups = [
                 {"params": enc_params, "lr": encoder_lr, "weight_decay": WEIGHT_DECAY},
                 {"params": proj_params, "lr": projector_lr, "weight_decay": WEIGHT_DECAY},
-            ])
+            ]
+            
+            # Add LoRA parameters if enabled
+            if hasattr(model, 'lora_enabled') and model.lora_enabled:
+                lora_params = model.get_lora_parameters()
+                if lora_params:
+                    # Use projector LR for LoRA parameters (similar fine-tuning nature)
+                    param_groups.append({
+                        "params": lora_params, 
+                        "lr": projector_lr, 
+                        "weight_decay": WEIGHT_DECAY
+                    })
+                    if self.rank == 0:
+                        print(f"📊 Learning rates for {self.model_type} (with LoRA):")
+                        print(f"   Encoder LR: {encoder_lr:.2e}")
+                        print(f"   Projector LR: {projector_lr:.2e}")
+                        print(f"   LoRA LR: {projector_lr:.2e} ({len(lora_params)} parameters)")
+                else:
+                    raise RuntimeError("LoRA is enabled but no trainable LoRA parameters found. This indicates a LoRA configuration issue.")
+            else:
+                if self.rank == 0:
+                    print(f"📊 Learning rates for {self.model_type}:")
+                    print(f"   Encoder LR: {encoder_lr:.2e}")
+                    print(f"   Projector LR: {projector_lr:.2e}")
+            
+            return AdamW(param_groups)
         else:
             # For Flamingo, use grouped parameters
             params_to_optimize = model.named_parameters()
@@ -284,6 +313,9 @@ class CurriculumTrainer:
                 "val_loss": val_loss,
                 "epoch": epoch,
             }
+            
+            # Add LoRA state to checkpoint
+            model.save_lora_state_to_checkpoint(checkpoint)
         else:
             # Handle DDP or single GPU case for EmbedHealthFlamingo
             model_state = model.state_dict()
@@ -298,14 +330,92 @@ class CurriculumTrainer:
                 "epoch": epoch,
             }
         
-        torch.save(checkpoint, os.path.join(checkpoint_dir, "best_model.pt"))
+        checkpoint_path = os.path.join(checkpoint_dir, "best_model.pt")
+        
+        # Check disk space before saving
+        if self.rank == 0:
+            import shutil
+            total, used, free = shutil.disk_usage(checkpoint_dir)
+            free_gb = free / (1024**3)
+            print(f"💾 Disk space: {free_gb:.2f} GB free in {checkpoint_dir}")
+            
+            # Estimate checkpoint size (rough estimate)
+            estimated_size_gb = sum(p.numel() * p.element_size() for p in self._get_model().parameters()) / (1024**3)
+            if free_gb < estimated_size_gb * 2:  # Need at least 2x the size for safe writing
+                print(f"⚠️  Warning: Low disk space. Need ~{estimated_size_gb:.2f} GB, have {free_gb:.2f} GB free")
+        
+        # Try to save with error handling
+        try:
+            torch.save(checkpoint, checkpoint_path)
+        except Exception as e:
+            if self.rank == 0:
+                print(f"❌ Failed to save checkpoint: {e}")
+                print(f"   Checkpoint path: {checkpoint_path}")
+                print(f"   Checkpoint size: {sum(p.numel() * p.element_size() for p in self._get_model().parameters()) / 1024**3:.2f} GB")
+                
+                raise RuntimeError(f"Failed to save checkpoint: {e}")
     
-    def _load_checkpoint(self, stage: str, optimizer, scheduler):
+    def _save_loss_history(self, stage: str, epoch: int, train_loss: float, val_loss: float):
+        """Save loss history to a file for tracking training progress."""
+        if dist.is_initialized() and self.rank != 0:
+            return  # Only save on rank 0 for distributed training
+        
+        checkpoint_dir = os.path.join(self.results_dir, stage, "checkpoints")
+        loss_history_file = os.path.join(checkpoint_dir, "loss_history.txt")
+        
+        # Ensure the directory exists
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        
+        # Create the file with header if it doesn't exist
+        if not os.path.exists(loss_history_file):
+            with open(loss_history_file, "w") as f:
+                f.write("Epoch\tTrain_Loss\tVal_Loss\n")
+                f.write("-" * 30 + "\n")
+        
+        # Append the current epoch's losses
+        with open(loss_history_file, "a") as f:
+            f.write(f"{epoch}\t{train_loss:.6f}\t{val_loss:.6f}\n")
+    
+    def _display_loss_history(self, stage: str):
+        """Display the loss history for a stage if available."""
+        if dist.is_initialized() and self.rank != 0:
+            return  # Only display on rank 0 for distributed training
+        
+        checkpoint_dir = os.path.join(self.results_dir, stage, "checkpoints")
+        loss_history_file = os.path.join(checkpoint_dir, "loss_history.txt")
+        
+        if os.path.exists(loss_history_file):
+            try:
+                with open(loss_history_file, "r") as f:
+                    lines = f.readlines()
+                
+                if len(lines) > 2:  # More than just header
+                    print(f"📊 Previous loss history for {stage}:")
+                    print("   Epoch\tTrain_Loss\tVal_Loss")
+                    print("   " + "-" * 30)
+                    
+                    # Show last 5 epochs (or all if less than 5)
+                    start_idx = max(2, len(lines) - 5)  # Skip header lines
+                    for line in lines[start_idx:]:
+                        if line.strip() and not line.startswith("-"):
+                            parts = line.strip().split("\t")
+                            if len(parts) == 3:
+                                epoch, train_loss, val_loss = parts
+                                print(f"   {epoch}\t{train_loss}\t{val_loss}")
+                    
+                    if len(lines) > 7:  # More than 5 epochs
+                        print(f"   ... and {len(lines) - 7} more epochs")
+                    print()
+            except Exception as e:
+                print(f"⚠️  Could not read loss history: {e}")
+    
+    def _load_checkpoint(self, stage: str, optimizer, scheduler, eval_only: bool = False):
         """Load model checkpoint for a specific stage."""
         checkpoint_path = os.path.join(self.results_dir, stage, "checkpoints", "best_model.pt")
         
         if os.path.exists(checkpoint_path):
-            checkpoint = torch.load(checkpoint_path, map_location=self.device)
+            # Always load checkpoint to CPU first to avoid GPU OOM spikes
+            checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
             
             # Get the underlying model (handles DDP wrapping)
             model = self._get_model()
@@ -313,7 +423,18 @@ class CurriculumTrainer:
             if self.model_type == "EmbedHealthSP":
                 model.encoder.load_state_dict(checkpoint["encoder_state"])
                 model.projector.load_state_dict(checkpoint["projector_state"])
-                optimizer.load_state_dict(checkpoint["optimizer_state"])
+                
+                # Load LoRA state using the EmbedHealthSP method (allow missing for backward compatibility)
+                try:
+                    model.load_lora_state_from_checkpoint(checkpoint, allow_missing=True)
+                except RuntimeError as e:
+                    if self.rank == 0:
+                        print(f"❌ Failed to load LoRA state from checkpoint: {e}")
+                    raise
+                
+                # Only load optimizer state when training
+                if not eval_only and optimizer is not None and "optimizer_state" in checkpoint:
+                    optimizer.load_state_dict(checkpoint["optimizer_state"]) 
             else:
                 # Handle DDP or single GPU case for EmbedHealthFlamingo
                 model_state = checkpoint["model_state"]
@@ -339,9 +460,13 @@ class CurriculumTrainer:
                 except Exception as e:
                     raise RuntimeError(f"Failed to load model state from checkpoint for {stage}: {e}")
                 
-                optimizer.load_state_dict(checkpoint["optimizer_state"])
+                # Only load optimizer state when training
+                if not eval_only and optimizer is not None and "optimizer_state" in checkpoint:
+                    optimizer.load_state_dict(checkpoint["optimizer_state"]) 
             
-            scheduler.load_state_dict(checkpoint["scheduler_state"])
+            # Only load scheduler state when training
+            if not eval_only and scheduler is not None and "scheduler_state" in checkpoint:
+                scheduler.load_state_dict(checkpoint["scheduler_state"]) 
             
             return checkpoint.get("epoch", "?"), checkpoint.get("val_loss", float("inf"))
         return None, float("inf")
@@ -362,8 +487,15 @@ class CurriculumTrainer:
                         print(f"⚠️  Skipping previous stage {previous_stage} because metrics file not found: {metrics_file}")
                     return None
                 raise RuntimeError(f"Previous stage {previous_stage} metrics file not found: {metrics_file}")
-            with open(metrics_file, "r") as f:
-                metrics = json.load(f)
+            # Be robust to malformed JSON (e.g., concurrent writes or concatenated JSON)
+            try:
+                with open(metrics_file, "r") as f:
+                    metrics = json.load(f)
+            except Exception as e:
+                if self.rank == 0:
+                    print(f"⚠️  Warning: Could not parse metrics file for {previous_stage} ({metrics_file}): {e}")
+                    print("   Proceeding without previous metrics.")
+                metrics = {}
             # Load the model weights from previous stage
             checkpoint_path = os.path.join(self.results_dir, previous_stage, "checkpoints", "best_model.pt")
             if not os.path.exists(checkpoint_path):
@@ -373,12 +505,25 @@ class CurriculumTrainer:
                         print(f"⚠️  Skipping previous stage {previous_stage} because checkpoint not found: {checkpoint_path}")
                     return None
                 raise RuntimeError(f"Previous stage {previous_stage} checkpoint not found: {checkpoint_path}")
-            checkpoint = torch.load(checkpoint_path, map_location=self.device)
+            print("Loading checkpoint from previous stage: ", checkpoint_path, "and model type: ", self.model_type, "and llm_id: ", self.llm_id)
+            print("This might take a while")
+            checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
             # Get the underlying model (handles DDP wrapping)
             model = self._get_model()
             if self.model_type == "EmbedHealthSP":
                 model.encoder.load_state_dict(checkpoint["encoder_state"])
                 model.projector.load_state_dict(checkpoint["projector_state"])
+                
+                # Load LoRA state from previous stage (allow missing for stage transitions)
+                try:
+                    loaded_count = model.load_lora_state_from_checkpoint(checkpoint, allow_missing=True)
+                    if loaded_count > 0 and self.rank == 0:
+                        print(f"📥 Loaded LoRA adapters from previous stage: {loaded_count} parameters")
+                except RuntimeError as e:
+                    if self.rank == 0:
+                        print(f"❌ Failed to load LoRA state from previous stage: {e}")
+                    # For previous stage loading, we can be more tolerant of LoRA mismatches
+                    # as stages might have different LoRA configurations
             else:
                 # Handle EmbedHealthFlamingo with graceful loading
                 model_state = checkpoint["model_state"]
@@ -431,72 +576,129 @@ class CurriculumTrainer:
     def _evaluate_stage(self, stage: str, test_loader: DataLoader, stage_name: str, 
                        metric_func: Callable = None, epoch: int = None) -> Dict[str, Any]:
         """Evaluate model on test set for a specific stage."""
-        # Only evaluate on rank 0 for distributed training
-        if dist.is_initialized() and self.rank != 0:
-            # Other ranks wait for evaluation to complete
-            dist.barrier()
-            return {"test_loss": 0.0}
-        
+        # Enable eval mode for all ranks
         self.model.eval()
         results = []
         test_loss = 0.0
         
         # Set higher max_tokens for generation during evaluation
-        max_new_tokens = 30000
+        max_new_tokens = 2000
         
-        
-        with torch.no_grad():
-            for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
-             
-                # Compute loss
-                loss = self._get_model().compute_loss(batch)
-                test_loss += loss.item()
-                
-                # Generate predictions with higher max_tokens
-                predictions = self._get_model().generate(batch, max_new_tokens=max_new_tokens)
-                
-                # Collect results
-                for sample, pred in zip(batch, predictions):
-                    result = {
-                        "pre_prompt": sample["pre_prompt"],
-                        "time_series_text": sample["time_series_text"],
-                        "post_prompt": sample["post_prompt"],
-                        "generated": pred,
-                        "gold": sample["answer"],
-                    }
+        # Prepare per-rank streaming writer for test predictions
+        results_file_rank = os.path.join(self.results_dir, stage_name, "results", f"test_predictions_rank_{self.rank if dist.is_initialized() else 0}.jsonl")
+        final_results_file = os.path.join(self.results_dir, stage_name, "results", "test_predictions.jsonl")
+        results_fp = None
+        # Ensure directory exists (defensive)
+        os.makedirs(os.path.dirname(results_file_rank), exist_ok=True)
+        if self.rank == 0:
+            print(f"[Eval] rank={self.rank}, world_size={self.world_size}")
+            print(f"Saving per-rank test predictions to: {results_file_rank}")
+            if dist.is_initialized():
+                print(f"Final merged predictions will be saved to: {final_results_file}")
+        # Open per-rank file in write mode to start fresh, then append per-sample
+        results_fp = open(results_file_rank, "w", encoding="utf-8")
+        if not results_fp:
+            raise RuntimeError(f"Failed to open per-rank results file: {results_file_rank}")
+        try:
+            with torch.no_grad():
+                for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
+                    # Generate predictions with higher max_tokens (skip separate loss computation)
+                    predictions = self._get_model().generate(batch, max_new_tokens=max_new_tokens)
                     
-                    # Add time series ID for stage2 captioning
-                    if stage == "stage2_captioning" and "id" in sample:
-                        result["time_series_id"] = sample["id"]
-                    
-                    results.append(result)
+                    # Collect results
+                    for sample, pred in zip(batch, predictions):
+                        result = {
+                            "pre_prompt": sample["pre_prompt"],
+                            "time_series_text": sample["time_series_text"],
+                            "post_prompt": sample["post_prompt"],
+                            "generated": pred,
+                            "gold": sample["answer"],
+                        }
+                        
+                        # Add time series ID for stage2 captioning
+                        if stage == "stage2_captioning" and "id" in sample:
+                            result["time_series_id"] = sample["id"]
+                        
+                        # Add template_id and ecg_id for stage5_ecg_cot
+                        if stage == "stage5_ecg_cot":
+                            if "template_id" in sample:
+                                result["template_id"] = sample["template_id"]
+                            if "ecg_id" in sample:
+                                result["ecg_id"] = sample["ecg_id"]
+                            if "correct_answer" in sample:
+                                result["correct_answer"] = sample["correct_answer"]
+                        
+                        results.append(result)
+                        # Stream write each result immediately to per-rank file
+                        results_fp.write(json.dumps(result, ensure_ascii=False) + "\n")
+                        results_fp.flush()
+                        try:
+                            os.fsync(results_fp.fileno())
+                        except Exception:
+                            pass
+        finally:
+            if results_fp is not None:
+                results_fp.close()
+
+        # Synchronize all ranks before merging
+        if dist.is_initialized():
+            dist.barrier()
+
+        # Rank 0 merges per-rank files into final results file
+        if (not dist.is_initialized()) or (self.rank == 0):
+            try:
+                # Overwrite final file each evaluation
+                with open(final_results_file, "w", encoding="utf-8") as merged_fp:
+                    if dist.is_initialized():
+                        num_ranks = self.world_size
+                    else:
+                        num_ranks = 1
+                    for r in range(num_ranks):
+                        part_file = os.path.join(self.results_dir, stage_name, "results", f"test_predictions_rank_{r}.jsonl")
+                        if os.path.exists(part_file):
+                            with open(part_file, "r", encoding="utf-8") as pf:
+                                for line in pf:
+                                    merged_fp.write(line)
+                if self.rank == 0:
+                    print(f"Merged per-rank predictions into: {final_results_file}")
+            finally:
+                pass
         
-        avg_test_loss = test_loss / len(test_loader)
+        # Report test loss as NaN since we skip explicit loss computation during evaluation
+        # Before, we were computing the loss explicitly, but this required to run the model twice, once for loss and once for predictions.
+        avg_test_loss = float("nan")
         
         # Calculate stage-specific metrics
         metrics = {"test_loss": avg_test_loss}
         if epoch is not None:
             metrics["epoch"] = epoch
         if metric_func:
-            predictions = [r["generated"] for r in results]
-            gold_answers = [r["gold"] for r in results]
-            additional_metrics = metric_func(predictions, gold_answers)
-            metrics.update(additional_metrics)
+            # Compute metrics on rank 0 after merging, else minimal metrics
+            if (not dist.is_initialized()) or (self.rank == 0):
+                predictions = []
+                gold_answers = []
+                # Read from final merged file
+                merged_path = final_results_file
+                with open(merged_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        try:
+                            obj = json.loads(line)
+                            predictions.append(obj.get("generated", ""))
+                            gold_answers.append(obj.get("gold", ""))
+                        except Exception:
+                            continue
+                additional_metrics = metric_func(predictions, gold_answers)
+                metrics.update(additional_metrics)
         
-        # Save results only on rank 0
-        if self.rank == 0:
-            results_file = os.path.join(self.results_dir, stage_name, "results", "test_predictions.jsonl")
-            with open(results_file, "w", encoding="utf-8") as f:
-                for row in results:
-                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
-            
+        # Save results only on rank 0 (or when not distributed)
+        if (not dist.is_initialized()) or (self.rank == 0):
             # Save metrics
             metrics_file = os.path.join(self.results_dir, stage_name, "results", "metrics.json")
             with open(metrics_file, "w") as f:
                 json.dump(metrics, f, indent=2)
             
             print(f"✅ {stage_name} evaluation complete:")
-            print(f"   Test predictions saved to: {results_file}")
+            print(f"   Test predictions saved to: {final_results_file}")
             print(f"   Metrics saved to: {metrics_file}")
             print(f"   Max tokens used for generation: {max_new_tokens}")
             for metric, value in metrics.items():
@@ -530,8 +732,9 @@ class CurriculumTrainer:
 
     def _train_stage(self, stage_name: str, dataset_class, num_epochs: int, 
                     lr_encoder: float, lr_projector: float, lr_base: float, 
-                    metric_func: Callable = None, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
+                    metric_func: Callable = None, batch_size: int = None, eval_only: bool = False, sampler=None) -> Dict[str, Any]:
         """Generic training function for any stage."""
+        epoch = None
         # Use provided batch_size or default to global BATCH_SIZE
         if batch_size is None:
             batch_size = BATCH_SIZE
@@ -607,17 +810,40 @@ class CurriculumTrainer:
             
             return metrics
         
+        # Enable LoRA if needed for this stage
+        self._enable_lora_if_needed(stage_name)
+        
         # Initialize optimizer and scheduler
         optimizer = self._get_optimizer(batch_size, lr_encoder, lr_projector, lr_base)
         
         # Create data loaders
-        train_loader = self._merge_data_loaders(
-            [dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())],
-            shuffle=True,
-            batch_size=batch_size,
-            patch_size=PATCH_SIZE,
-            distribute_data=self.world_size > 1
-        )
+        if sampler is not None:
+            if self.world_size > 1:
+                get_logger().warning("BalancedBatchSampler was provided, but distributed training (DDP) is enabled. BalancedBatchSampler will NOT be used. Data will be sharded using DistributedSampler instead. Typically for stage3_cot it is better to use BalancedBatchSampler, if dataset is imbalanced.")
+                train_loader = self._merge_data_loaders(
+                    [dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())],
+                    shuffle=True,
+                    batch_size=batch_size,
+                    patch_size=PATCH_SIZE,
+                    distribute_data=True
+                )
+            else:
+                train_dataset = dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())
+                train_loader = DataLoader(
+                    train_dataset,
+                    batch_sampler=sampler,
+                    collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
+                        batch, patch_size=PATCH_SIZE
+                    ),
+                )
+        else:
+            train_loader = self._merge_data_loaders(
+                [dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())],
+                shuffle=True,
+                batch_size=batch_size,
+                patch_size=PATCH_SIZE,
+                distribute_data=self.world_size > 1
+            )
         
         val_loader = self._merge_data_loaders(
             [dataset_class("validation", EOS_TOKEN=self._get_model().get_eos_token())],
@@ -632,7 +858,7 @@ class CurriculumTrainer:
             shuffle=False,
             batch_size=1,
             patch_size=PATCH_SIZE,
-            distribute_data=False  # Don't distribute test
+            distribute_data=self.world_size > 1
         )
         
         # Scheduler
@@ -649,9 +875,11 @@ class CurriculumTrainer:
             print(f"🔥 Warmup steps: {warmup_steps}")
         
         # Load previous checkpoint if exists (for resuming current stage)
-        best_epoch, best_val_loss = self._load_checkpoint(stage_name, optimizer, scheduler)
+        best_epoch, best_val_loss = self._load_checkpoint(stage_name, optimizer, scheduler, eval_only=eval_only)
         if best_epoch is not None:
             print(f"📂 Resuming {stage_name} from epoch {best_epoch} (val_loss: {best_val_loss:.4f})")
+            # Display previous loss history if available
+            self._display_loss_history(stage_name)
         else:
             print(f"🆕 Starting fresh training for {stage_name}")
             best_val_loss = float("inf")  # Ensure proper initialization
@@ -676,8 +904,18 @@ class CurriculumTrainer:
                 self.model.train()
                 running_loss = 0.0
                 prog = tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs}", disable=self.rank != 0)
-                
-                for batch in prog:
+                for i, batch in enumerate(prog):
+                    # DEBUG PRINT: Only for the first batch of the first epoch
+                    if epoch == start_epoch and i == 0:
+                        print(f"[DEBUG] Batch {i} - batch size: {len(batch)}")
+                        if isinstance(batch, list) and isinstance(batch[0], dict):
+                            for k, v in batch[0].items():
+                                if hasattr(v, 'shape'):
+                                    print(f"[DEBUG] Sample key '{k}' shape: {v.shape}")
+                                elif isinstance(v, list):
+                                    print(f"[DEBUG] Sample key '{k}' list length: {len(v)}")
+                        import torch
+                        print(torch.cuda.memory_summary() if torch.cuda.is_available() else "No CUDA")
                     optimizer.zero_grad()
                     loss = self._get_model().compute_loss(batch)
                     loss.backward()
@@ -703,7 +941,7 @@ class CurriculumTrainer:
                 val_loss = 0.0
                 self.model.eval()
                 with torch.no_grad():
-                    for batch in val_loader:
+                    for batch in tqdm(val_loader, desc=f"Validating {stage_name}", disable=self.rank != 0):
                         val_loss += self._get_model().compute_loss(batch).item()
                 
                 avg_val_loss = val_loss / len(val_loader)
@@ -717,6 +955,9 @@ class CurriculumTrainer:
                 if self.rank == 0:
                     tqdm.write(f"Epoch {epoch} — val   loss: {avg_val_loss:.4f}")
                     tqdm.write(f"Epoch {epoch} — best  loss: {best_val_loss:.4f}")
+                
+                # Save loss history for this epoch
+                self._save_loss_history(stage_name, epoch, avg_train_loss, avg_val_loss)
                 
                 # Early stopping - all ranks need to make the same decision
                 should_save = avg_val_loss + 1e-4 < best_val_loss
@@ -759,10 +1000,15 @@ class CurriculumTrainer:
                 print(f"📂 Loaded best checkpoint from epoch {best_epoch} for evaluation.")
         
         if self.rank == 0:
-            print(f"🏁 Training completed for {stage_name}")
-            print(f"   Total epochs run: {epoch}")
-            print(f"   Best validation loss: {best_val_loss:.4f}")
-            print(f"   Epochs without improvement: {epochs_no_improve}")
+            if epoch is None:
+                epoch = best_epoch
+                print(f"🏁 Training completed for {stage_name}")
+                print(f"   Total epochs run: {epoch}")
+            else:
+                print(f"🏁 Training completed for {stage_name}")
+                print(f"   Total epochs run: {epoch}")
+                print(f"   Best validation loss: {best_val_loss:.4f}")
+                print(f"   Epochs without improvement: {epochs_no_improve}")
         
         metrics = self._evaluate_stage(stage_name, test_loader, stage_name, metric_func, best_epoch)
         
@@ -801,7 +1047,7 @@ class CurriculumTrainer:
         return self._train_stage(
             stage_name="stage2_captioning",
             dataset_class=M4QADataset,
-            num_epochs=60,
+            num_epochs=20,
             lr_encoder=2e-4,
             lr_projector=1e-4,
             lr_base=2e-4,
@@ -811,7 +1057,7 @@ class CurriculumTrainer:
         )
     
     def stage3_cot(self, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
-        """Stage CoT: Chain-of-Thought Reasoning (PAMAP2).
+        """Stage CoT: Chain-of-Thought Reasoning (HAR).
         
         Configuration:
         - Epochs: 100
@@ -819,16 +1065,67 @@ class CurriculumTrainer:
         - EmbedHealthFlamingo: base_lr=2e-4
         - Metric: Test loss only (chain-of-thought reasoning)
         """
+        sampler = None
+        
         return self._train_stage(
             stage_name="stage3_cot",
-            dataset_class=PAMAP2CoTQADataset,
-            num_epochs=100,
+            dataset_class=HARCoTQADataset,
+            num_epochs=30,
             lr_encoder=2e-4,
             lr_projector=1e-4,
             lr_base=2e-4,
             metric_func=None,  # Only test loss for chain-of-thought reasoning
             batch_size=batch_size,
-            eval_only=eval_only
+            eval_only=eval_only,
+            sampler=sampler
+        )
+    
+    def stage4_sleep_cot(self, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
+        """Stage 4: Chain-of-Thought Reasoning (SleepEDF).
+        
+        Configuration:
+        - Epochs: 60
+        - EmbedHealthSP: encoder_lr=2e-4, projector_lr=1e-4
+        - EmbedHealthFlamingo: base_lr=2e-4
+        - Metric: Test loss only (chain-of-thought reasoning)
+        """
+        sampler = None
+        
+        return self._train_stage(
+            stage_name="stage4_sleep_cot",
+            dataset_class=SleepEDFCoTQADataset,
+            num_epochs=60,
+            lr_encoder=2e-4,
+            lr_projector=1e-4,
+            lr_base=2e-4,
+            metric_func=None,  # Only test loss for chain-of-thought reasoning
+            batch_size=batch_size,
+            eval_only=eval_only,
+            sampler=sampler
+        )
+    
+    def stage5_ecg_cot(self, batch_size: int = None, eval_only: bool = False) -> Dict[str, Any]:
+        """Stage 5: Chain-of-Thought Reasoning (ECG QA CoT).
+        
+        Configuration:
+        - Epochs: 60
+        - EmbedHealthSP: encoder_lr=2e-4, projector_lr=1e-4
+        - EmbedHealthFlamingo: base_lr=2e-4
+        - Metric: Test loss only (chain-of-thought reasoning)
+        """
+        sampler = None
+        
+        return self._train_stage(
+            stage_name="stage5_ecg_cot",
+            dataset_class=ECGQACoTQADataset,
+            num_epochs=60,
+            lr_encoder=2e-4,
+            lr_projector=1e-4,
+            lr_base=2e-4,
+            metric_func=None,  # Only test loss for chain-of-thought reasoning
+            batch_size=batch_size,
+            eval_only=eval_only,
+            sampler=sampler
         )
     
     def run_curriculum(self, stages: List[str] = None, batch_size: int = None, eval_only: bool = False):
@@ -878,6 +1175,14 @@ class CurriculumTrainer:
                 stage_results = self.stage3_cot(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
+            elif stage == "stage4_sleep_cot":
+                stage_results = self.stage4_sleep_cot(batch_size=batch_size, eval_only=eval_only)
+                results[stage] = stage_results
+                self._mark_stage_completed(stage, stage_results)
+            elif stage == "stage5_ecg_cot":
+                stage_results = self.stage5_ecg_cot(batch_size=batch_size, eval_only=eval_only)
+                results[stage] = stage_results
+                self._mark_stage_completed(stage, stage_results)
             else:
                 if self.rank == 0:
                     print(f"⚠️  Unknown stage: {stage}, skipping...")
@@ -923,7 +1228,7 @@ class CurriculumTrainer:
             init_method=self.dist_url,
             world_size=self.world_size,
             rank=self.rank,
-            timeout=datetime.timedelta(minutes=999),
+            timeout=datetime.timedelta(hours=999),
         )
         
         # Set device for this process
@@ -985,6 +1290,43 @@ class CurriculumTrainer:
         """Check if a checkpoint exists for a specific stage."""
         checkpoint_path = os.path.join(self.results_dir, stage, "checkpoints", "best_model.pt")
         return os.path.exists(checkpoint_path)
+    
+    def _enable_lora_if_needed(self, stage_name: str):
+        """Enable LoRA for EmbedHealthSP models in stages after stage2."""
+        if self.model_type != "EmbedHealthSP":
+            return  # LoRA only for EmbedHealthSP
+        
+        # Get the underlying model (handles DDP wrapping)
+        model = self._get_model()
+        
+        # Enable LoRA for stages after stage2_captioning
+        stages_with_lora = ["stage3_cot", "stage4_sleep_cot", "stage5_ecg_cot"]
+        
+        if stage_name in stages_with_lora:
+            if not getattr(model, 'lora_enabled', False):
+                if self.rank == 0:
+                    print(f"🔧 Enabling LoRA for {stage_name}")
+                try:
+                    model.enable_lora(
+                        lora_r=16,
+                        lora_alpha=32,
+                        lora_dropout=0.0
+                    )
+                    if self.rank == 0:
+                        print(f"✅ LoRA enabled for {stage_name}")
+                except Exception as e:
+                    if self.rank == 0:
+                        print(f"❌ Failed to enable LoRA for {stage_name}: {e}")
+                        print("   Continuing without LoRA...")
+            else:
+                if self.rank == 0:
+                    print(f"✅ LoRA already enabled for {stage_name}")
+        else:
+            if self.rank == 0:
+                if stage_name in ["stage1_mcq", "stage2_captioning"]:
+                    print(f"ℹ️  LoRA disabled for {stage_name} (only enabled for stages 3+)")
+                else:
+                    print(f"ℹ️  LoRA not configured for {stage_name}")
 
 
 def main():
