@@ -175,36 +175,27 @@ class OpenTSLMSP(TimeSeriesLLM):
         batch: List[Dict[str, any]],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        TL;DR:
-            This function is probably the most crucial part of OpenTSLM-SP, and also the hardest to understand.
-            It's where the magic happens and legends are made.
+        Processes a batch of training samples by embedding and aligning text and time series data
+        for efficient parallel processing on the GPU.
 
-            It batches and embeds all text and time series inputs in parallel,
-            then reassembles them per sample to allow efficient GPU execution.
-            Praise the PyTorch Wizards: ChatGPT-o4-mini-high, Patrick, and Thomas (listed in strictly descending order of skill).
+        This method performs the following steps:
 
-        Long description:
-            Processes a batch of training samples by embedding and aligning text and time series data
-            for efficient parallel processing on the GPU.
+        1. Extracts all text components (pre_prompt, time_series_text, post_prompt) from each sample,
+        and embeds them in a single batch using the LLM tokenizer and embedding layer. Padding and attention
+        masks are applied to accommodate variable-length sequences.
 
-            This method performs the following steps:
+        2. Gathers all time series segments across the batch and pads them
+        into a single tensor of shape [N_ts_total, T_padded, D], where T_padded
+        is the smallest multiple of `patch_size` ≥ the longest segment length.
+        This tensor is then encoded and projected into the LLM hidden space.
 
-            1. Extracts all text components (pre_prompt, time_series_text, post_prompt) from each sample,
-            and embeds them in a single batch using the LLM tokenizer and embedding layer. Padding and attention
-            masks are applied to accommodate variable-length sequences.
+        3. After all embeddings are extracted, the function reconstructs each original sample by interleaving its
+        embedded pre_prompt, time series texts and corresponding time series embeddings, and the post_prompt, preserving original order.
 
-            2. Gathers all time series segments across the batch and pads them
-            into a single tensor of shape [N_ts_total, T_padded, D], where T_padded
-            is the smallest multiple of `patch_size` ≥ the longest segment length.
-            This tensor is then encoded and projected into the LLM hidden space.
+        4. Pads all reassembled sequences to a uniform length across the batch to form the final input tensor
+            and attention mask.
 
-            3. After all embeddings are extracted, the function reconstructs each original sample by interleaving its
-            embedded pre_prompt, time series texts and corresponding time series embeddings, and the post_prompt, preserving original order.
-
-            4. Pads all reassembled sequences to a uniform length across the batch to form the final input tensor
-                and attention mask.
-
-            5. All of this is only required for efficient processing.
+        5. All of this is only required for efficient processing.
 
         - pre_prompt: str
         - time_series_text: List[str]
