@@ -10,7 +10,7 @@
 1. **Clone the Repository**
 
    ```bash
-   git clone https://github.com/StanfordBDHG/OpenTSLM.git
+   git clone https://github.com/StanfordBDHG/OpenTSLM.git --recurse-submodules
    ```
 
 2. **Install Dependencies**

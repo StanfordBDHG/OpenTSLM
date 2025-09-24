@@ -65,19 +65,19 @@ def generate_time_series_plot(time_series) -> str:
         axes = [axes]
 
     for i, series in enumerate(ts_list):
-        axes[i].plot(series, marker='o', linestyle='-', markersize=0)
+        axes[i].plot(series, marker="o", linestyle="-", markersize=0)
         axes[i].grid(True, alpha=0.3)
-        axes[i].set_title(f"Time Series {i+1}")
+        axes[i].set_title(f"Time Series {i + 1}")
         axes[i].set_ylabel("Value")
     axes[-1].set_xlabel("Time")
 
     plt.tight_layout()
 
     img_buffer = io.BytesIO()
-    plt.savefig(img_buffer, format='png', bbox_inches='tight', dpi=100)
+    plt.savefig(img_buffer, format="png", bbox_inches="tight", dpi=100)
     plt.close()
     img_buffer.seek(0)
-    image_data = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+    image_data = base64.b64encode(img_buffer.getvalue()).decode("utf-8")
     return image_data
 
 
@@ -108,9 +108,9 @@ def main():
         max_new_tokens=80,
     )
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("FINAL RESULTS SUMMARY")
-    print("="*80)
+    print("=" * 80)
     print(results_df.to_string(index=False))
     return results_df
 

@@ -1,6 +1,6 @@
 import re
 import sys
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Tuple
 
 from common_evaluator import CommonEvaluator
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
@@ -31,7 +31,7 @@ def normalize_label(label: str) -> str:
 
 
 def evaluate_ecg_metrics(
-    ground_truth: str, prediction: str, sample: Optional[Dict[str, Any]] = None
+    ground_truth: str, prediction: str, sample: Dict[str, Any] | None = None
 ) -> Dict[str, Any]:
     """
     Evaluate ECG-QA CoT predictions using per-template answers from CSV.
@@ -253,6 +253,7 @@ def main():
         dataset_class=ECGQACoTQADataset,
         evaluation_function=evaluate_ecg_metrics,
         max_samples=490,
+        use_plot=False,
         max_new_tokens=400,
     )
 
