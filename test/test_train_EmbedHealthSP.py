@@ -14,7 +14,7 @@ from tqdm.auto import tqdm
 from transformers import get_linear_schedule_with_warmup
 
 from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
-from model.llm.EmbedHealthSP import EmbedHealthSP
+from model.llm.OpenTSLMSP import OpenTSLMSP
 from model.projector.MLPProjector import MLPProjector
 from src.model_config import (
     BATCH_SIZE,
@@ -44,7 +44,7 @@ else:
 # Model
 # ---------------------------
 encoder = TransformerCNNEncoder().to(device)
-model = EmbedHealthSP(encoder=encoder, projector_class=MLPProjector, device=device).to(
+model = OpenTSLMSP(encoder=encoder, projector_class=MLPProjector, device=device).to(
     device
 )
 
