@@ -13,6 +13,7 @@ import os as _os
 import psutil
 
 import pynvml  # type: ignore
+
 _NVML_AVAILABLE = True
 
 
@@ -25,8 +26,8 @@ if SRC_DIR not in sys.path:
     sys.path.append(SRC_DIR)
 
 # Models
-from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
-from model.llm.EmbedHealthSP import EmbedHealthSP
+from model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
+from model.llm.OpenTSLMSP import OpenTSLMSP
 
 # Datasets
 from time_series_datasets.TSQADataset import TSQADataset
@@ -34,7 +35,9 @@ from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
 from time_series_datasets.simulation.SimulationQADataset import SimulationQADataset
-from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
+from time_series_datasets.util import (
+    extend_time_series_to_match_patch_size_and_aggregate,
+)
 
 
 def get_device(device_arg: str | None) -> str:
@@ -89,13 +92,16 @@ def nvml_current_process_bytes() -> int:
             except Exception:
                 procs_gfx = []
             for p in list(procs) + list(procs_gfx):
-                if int(p.pid) == pid and p.usedGpuMemory is not None and p.usedGpuMemory >= 0:
+                if (
+                    int(p.pid) == pid
+                    and p.usedGpuMemory is not None
+                    and p.usedGpuMemory >= 0
+                ):
                     total_bytes += int(p.usedGpuMemory)
                     found = True
         return total_bytes if found else -1
     except Exception:
         return -1
-
 
 
 def get_first_batch(dataset, batch_size: int = 1) -> List[Dict[str, any]]:
@@ -109,20 +115,29 @@ def get_first_batch(dataset, batch_size: int = 1) -> List[Dict[str, any]]:
 
 
 def build_optimizer(model, model_type: str, base_lr: float = 2e-4):
-    if model_type == "EmbedHealthSP":
-        enc_params = [p for p in getattr(model, "encoder").parameters() if p.requires_grad]
-        proj_params = [p for p in getattr(model, "projector").parameters() if p.requires_grad]
+    if model_type == "OpenTSLMSP":
+        enc_params = [
+            p for p in getattr(model, "encoder").parameters() if p.requires_grad
+        ]
+        proj_params = [
+            p for p in getattr(model, "projector").parameters() if p.requires_grad
+        ]
         param_groups = []
         if len(enc_params) > 0:
             param_groups.append({"params": enc_params, "weight_decay": 0.1})
         if len(proj_params) > 0:
             param_groups.append({"params": proj_params, "weight_decay": 0.1})
-        return torch.optim.AdamW(param_groups, lr=base_lr) if len(param_groups) > 0 else None
+        return (
+            torch.optim.AdamW(param_groups, lr=base_lr)
+            if len(param_groups) > 0
+            else None
+        )
     # Flamingo-like
     named_params = list(model.named_parameters())
     trainable = list(
         filter(
-            lambda np: np[1].requires_grad and not getattr(np[1], "exclude_from_optimizer", False),
+            lambda np: np[1].requires_grad
+            and not getattr(np[1], "exclude_from_optimizer", False),
             named_params,
         )
     )
@@ -143,15 +158,17 @@ def build_optimizer(model, model_type: str, base_lr: float = 2e-4):
     )
 
 
-def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float, int, int, int]:
+def train_for_steps(
+    model, model_type: str, dataset, steps: int
+) -> Tuple[float, int, int, int]:
     model.train()
     optimizer = build_optimizer(model, model_type)
-    
+
     # Initialize memory tracking
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
-    
+
     # Track CPU memory baseline
     cpu_memory_baseline = measure_peak_cpu_bytes()
 
@@ -172,12 +189,14 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
     max_cpu_bytes = cpu_memory_baseline
     step = 0
     # Initialize postfix
-    pbar.set_postfix({
-        "alloc_gb": 0.0,
-        "res_gb": 0.0,
-        "nvml_gb": 0.0,
-        "cpu_gb": 0.0,
-    })
+    pbar.set_postfix(
+        {
+            "alloc_gb": 0.0,
+            "res_gb": 0.0,
+            "nvml_gb": 0.0,
+            "cpu_gb": 0.0,
+        }
+    )
     for batch in loader:
         if optimizer:
             optimizer.zero_grad(set_to_none=True)
@@ -187,7 +206,7 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
             loss.backward()
             optimizer.step()
         last_loss = float(loss.detach().item())
-        
+
         # Track peak memory across steps
         if torch.cuda.is_available():
             torch.cuda.synchronize()
@@ -200,28 +219,34 @@ def train_for_steps(model, model_type: str, dataset, steps: int) -> Tuple[float,
             nvml_bytes = nvml_current_process_bytes()
             if nvml_bytes > max_nvml_bytes:
                 max_nvml_bytes = nvml_bytes
-        
+
         # Track CPU memory
         current_cpu_bytes = measure_peak_cpu_bytes()
         if current_cpu_bytes > max_cpu_bytes:
             max_cpu_bytes = current_cpu_bytes
-        
+
         # Update progress bar postfix in GB
         def _to_gb(val: int) -> float:
-            return float(val) / (1024.0 ** 3) if isinstance(val, (int, float)) and val >= 0 else 0.0
-        
-        pbar.set_postfix({
-            "alloc_gb": f"{_to_gb(max_peak_bytes):.2f}",
-            "res_gb": f"{_to_gb(max_reserved_bytes):.2f}",
-            "nvml_gb": f"{_to_gb(max_nvml_bytes):.2f}",
-            "cpu_gb": f"{_to_gb(max_cpu_bytes):.2f}",
-        })
+            return (
+                float(val) / (1024.0**3)
+                if isinstance(val, (int, float)) and val >= 0
+                else 0.0
+            )
+
+        pbar.set_postfix(
+            {
+                "alloc_gb": f"{_to_gb(max_peak_bytes):.2f}",
+                "res_gb": f"{_to_gb(max_reserved_bytes):.2f}",
+                "nvml_gb": f"{_to_gb(max_nvml_bytes):.2f}",
+                "cpu_gb": f"{_to_gb(max_cpu_bytes):.2f}",
+            }
+        )
         step += 1
         pbar.update(1)
         if step >= steps:
             break
     pbar.close()
-    
+
     if torch.cuda.is_available():
         peak_bytes = max_peak_bytes
         peak_reserved_bytes = max_reserved_bytes
@@ -247,7 +272,9 @@ def append_row(path: str, row: List[any]):
         writer.writerow(row)
 
 
-def run_for_dataset(model_name: str, model, dataset_name: str, dataset_obj) -> Dict[str, any]:
+def run_for_dataset(
+    model_name: str, model, dataset_name: str, dataset_obj
+) -> Dict[str, any]:
     result: Dict[str, any] = {
         "model": model_name,
         "dataset": dataset_name,
@@ -259,7 +286,9 @@ def run_for_dataset(model_name: str, model, dataset_name: str, dataset_obj) -> D
     try:
         # Train for half an epoch, capped at 10000 steps
         steps = max(1, min(len(dataset_obj), 100))
-        loss, peak, peak_reserved, nvml_peak = train_for_steps(model, model_name, dataset_obj, steps)
+        loss, peak, peak_reserved, nvml_peak = train_for_steps(
+            model, model_name, dataset_obj, steps
+        )
         result["loss"] = loss
         result["peak_cuda_bytes"] = peak
         result["peak_cuda_reserved_bytes"] = peak_reserved
@@ -271,19 +300,50 @@ def run_for_dataset(model_name: str, model, dataset_name: str, dataset_obj) -> D
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Measure memory use for a single training iteration for a chosen model and dataset.")
-    parser.add_argument("-llm_id", required=True, help="HuggingFace model id for the language model")
-    parser.add_argument("--model", required=True, choices=["EmbedHealthFlamingo", "EmbedHealthSP"], help="Model to instantiate")
+    parser = argparse.ArgumentParser(
+        description="Measure memory use for a single training iteration for a chosen model and dataset."
+    )
+    parser.add_argument(
+        "-llm_id", required=True, help="HuggingFace model id for the language model"
+    )
+    parser.add_argument(
+        "--model",
+        required=True,
+        choices=["OpenTSLMFlamingo", "OpenTSLMSP"],
+        help="Model to instantiate",
+    )
     parser.add_argument(
         "--dataset",
         required=True,
-        choices=["TSQADataset", "HARCoTQADataset", "SleepEDFCoTQADataset", "ECGQACoTQADataset", "SimulationQADataset"],
+        choices=[
+            "TSQADataset",
+            "HARCoTQADataset",
+            "SleepEDFCoTQADataset",
+            "ECGQACoTQADataset",
+            "SimulationQADataset",
+        ],
         help="Dataset to use",
     )
-    parser.add_argument("--device", default="cpu", help="Device to run on (e.g., cuda, cuda:0, cpu)")
-    parser.add_argument("--length", type=int, default=100, help="Length of time series for SimulationQADataset (default: 100)")
-    parser.add_argument("--num_series", type=int, default=1, help="Number of time series for SimulationQADataset (default: 1)")
-    parser.add_argument("--results_csv", default=os.path.join(REPO_DIR, "memory_use.csv"), help="Path to CSV file to append results")
+    parser.add_argument(
+        "--device", default="cpu", help="Device to run on (e.g., cuda, cuda:0, cpu)"
+    )
+    parser.add_argument(
+        "--length",
+        type=int,
+        default=100,
+        help="Length of time series for SimulationQADataset (default: 100)",
+    )
+    parser.add_argument(
+        "--num_series",
+        type=int,
+        default=1,
+        help="Number of time series for SimulationQADataset (default: 1)",
+    )
+    parser.add_argument(
+        "--results_csv",
+        default=os.path.join(REPO_DIR, "memory_use.csv"),
+        help="Path to CSV file to append results",
+    )
     args = parser.parse_args()
 
     device = get_device(args.device)
@@ -308,12 +368,16 @@ def main():
     ensure_csv(args.results_csv, header)
 
     # Instantiate selected model
-    if args.model == "EmbedHealthFlamingo":
-        model = EmbedHealthFlamingo(device=device, llm_id=args.llm_id, cross_attn_every_n_layers=1,
-                gradient_checkpointing=True)
+    if args.model == "OpenTSLMFlamingo":
+        model = OpenTSLMFlamingo(
+            device=device,
+            llm_id=args.llm_id,
+            cross_attn_every_n_layers=1,
+            gradient_checkpointing=True,
+        )
         eos = model.get_eos_token()
-    elif args.model == "EmbedHealthSP":
-        model = EmbedHealthSP(llm_id=args.llm_id, device=device)
+    elif args.model == "OpenTSLMSP":
+        model = OpenTSLMSP(llm_id=args.llm_id, device=device)
         eos = model.get_eos_token()
     else:
         raise ValueError(f"Unknown model: {args.model}")
@@ -332,10 +396,14 @@ def main():
         dataset = SleepEDFCoTQADataset(split="train", EOS_TOKEN=eos)
         dataset_name = "SleepEDF-CoT"
     elif args.dataset == "ECGQACoTQADataset":
-        dataset = ECGQACoTQADataset(split="train", EOS_TOKEN=eos, max_samples=1, preload_processed_data=False)
+        dataset = ECGQACoTQADataset(
+            split="train", EOS_TOKEN=eos, max_samples=1, preload_processed_data=False
+        )
         dataset_name = "ECG-QA-CoT"
     elif args.dataset == "SimulationQADataset":
-        dataset = SimulationQADataset(split="train", EOS_TOKEN=eos, length=args.length, num_series=args.num_series)
+        dataset = SimulationQADataset(
+            split="train", EOS_TOKEN=eos, length=args.length, num_series=args.num_series
+        )
         dataset_name = f"Simulation-L{args.length}-N{args.num_series}"
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
@@ -343,11 +411,23 @@ def main():
     # Run one iteration and append results
     res = run_for_dataset(args.model, model, dataset_name, dataset)
     peak_bytes = res["peak_cuda_bytes"]
-    peak_gb = (float(peak_bytes) / (1024.0 ** 3)) if isinstance(peak_bytes, (int, float)) and peak_bytes >= 0 else -1
+    peak_gb = (
+        (float(peak_bytes) / (1024.0**3))
+        if isinstance(peak_bytes, (int, float)) and peak_bytes >= 0
+        else -1
+    )
     peak_reserved_bytes = res.get("peak_cuda_reserved_bytes", -1)
-    peak_reserved_gb = (float(peak_reserved_bytes) / (1024.0 ** 3)) if isinstance(peak_reserved_bytes, (int, float)) and peak_reserved_bytes >= 0 else -1
+    peak_reserved_gb = (
+        (float(peak_reserved_bytes) / (1024.0**3))
+        if isinstance(peak_reserved_bytes, (int, float)) and peak_reserved_bytes >= 0
+        else -1
+    )
     nvml_peak_bytes = res.get("nvml_peak_bytes", -1)
-    nvml_peak_gb = (float(nvml_peak_bytes) / (1024.0 ** 3)) if isinstance(nvml_peak_bytes, (int, float)) and nvml_peak_bytes >= 0 else -1
+    nvml_peak_gb = (
+        (float(nvml_peak_bytes) / (1024.0**3))
+        if isinstance(nvml_peak_bytes, (int, float)) and nvml_peak_bytes >= 0
+        else -1
+    )
     append_row(
         args.results_csv,
         [
@@ -358,11 +438,17 @@ def main():
             res["dataset"],
             res["loss"],
             res["peak_cuda_bytes"],
-            f"{peak_gb:.4f}" if isinstance(peak_gb, float) and peak_gb >= 0 else peak_gb,
+            f"{peak_gb:.4f}"
+            if isinstance(peak_gb, float) and peak_gb >= 0
+            else peak_gb,
             res.get("peak_cuda_reserved_bytes", -1),
-            f"{peak_reserved_gb:.4f}" if isinstance(peak_reserved_gb, float) and peak_reserved_gb >= 0 else peak_reserved_gb,
+            f"{peak_reserved_gb:.4f}"
+            if isinstance(peak_reserved_gb, float) and peak_reserved_gb >= 0
+            else peak_reserved_gb,
             res.get("nvml_peak_bytes", -1),
-            f"{nvml_peak_gb:.4f}" if isinstance(nvml_peak_gb, float) and nvml_peak_gb >= 0 else nvml_peak_gb,
+            f"{nvml_peak_gb:.4f}"
+            if isinstance(nvml_peak_gb, float) and nvml_peak_gb >= 0
+            else nvml_peak_gb,
             res["status"],
             res["error"],
         ],
@@ -373,5 +459,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
