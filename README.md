@@ -23,7 +23,7 @@
 OpenTSLM is designed to work with Llama and Gemma models, with Llama 3.2 1B as the default. These models are stored in Hugging Face repositories which may require access permissions. Follow these steps to gain access and download:
 
 1. **Request Access (for Llama models)**  
-   Visit the Llama model repository (e.g., https://huggingface.co/meta-llama/Llama-3.2-1B) and request access from Meta. Gemma models may also require access permissions.
+   Visit the Llama model repository (e.g., https://huggingface.co/meta-llama/Llama-3.2-1B) or Gemma models repository (https://huggingface.co/google/gemma-3-270m) and request access from Meta.
 
 2. **Authenticate with Hugging Face**  
    Log in to your Hugging Face account and configure the CLI:
@@ -43,13 +43,13 @@ OpenTSLM has been tested and works with the following models:
 
 **Llama Models:**
 
-- **meta-llama/Llama-3.2-1B** (default) - Recommended for most use cases
-- **meta-llama/Llama-3.2-3B** - Larger model for better performance with higher memory requirements
+- **meta-llama/Llama-3.2-1B** (default)
+- **meta-llama/Llama-3.2-3B**
 
 **Gemma Models:**
 
-- **google/gemma-3-270m** - Smallest Gemma model, fast and memory-efficient
-- **google/gemma-3-1b-pt** - Balanced Gemma model for good performance
+- **google/gemma-3-270m**
+- **google/gemma-3-1b-pt**
 
 Other variants may work but have not been extensively tested.
 
