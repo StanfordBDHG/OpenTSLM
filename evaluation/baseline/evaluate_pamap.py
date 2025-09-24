@@ -2,7 +2,8 @@ import re
 import sys
 from typing import Dict, Any
 
-from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
+from common_evaluator import CommonEvaluator
+from time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
 
 
 def extract_label_from_prediction(prediction: str) -> str:
@@ -27,9 +28,9 @@ def extract_label_from_prediction(prediction: str) -> str:
     return label.lower()
 
 
-def evaluate_har_acc(ground_truth: str, prediction: str) -> Dict[str, Any]:
+def evaluate_pamap_acc(ground_truth: str, prediction: str) -> Dict[str, Any]:
     """
-    Evaluate HARCoTQADataset predictions against ground truth.
+    Evaluate PAMAP2AccQADataset predictions against ground truth.
     Extracts the label from the end of the model's output and compares to ground truth.
     """
     gt_clean = ground_truth.lower().strip()
@@ -39,17 +40,17 @@ def evaluate_har_acc(ground_truth: str, prediction: str) -> Dict[str, Any]:
 
 
 def main():
-    """Main function to run HAR evaluation."""
+    """Main function to run PAMAP evaluation."""
     if len(sys.argv) != 2:
-        print("Usage: python evaluate_har.py <model_name>")
-        print("Example: python evaluate_har.py meta-llama/Llama-3.2-1B")
+        print("Usage: python evaluate_pamap.py <model_name>")
+        print("Example: python evaluate_pamap.py meta-llama/Llama-3.2-1B")
         sys.exit(1)
     
     model_name = sys.argv[1]
     
-    dataset_classes = [HARCoTQADataset]
+    dataset_classes = [PAMAP2AccQADataset]
     evaluation_functions = {
-        "HARCoTQADataset": evaluate_har_acc,
+        "PAMAP2AccQADataset": evaluate_pamap_acc,
     }
     evaluator = CommonEvaluator()
     results_df = evaluator.evaluate_multiple_models(

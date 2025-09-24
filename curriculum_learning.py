@@ -576,32 +576,29 @@ class CurriculumTrainer:
     def _evaluate_stage(self, stage: str, test_loader: DataLoader, stage_name: str, 
                        metric_func: Callable = None, epoch: int = None) -> Dict[str, Any]:
         """Evaluate model on test set for a specific stage."""
-        # Only evaluate on rank 0 for distributed training
-        if dist.is_initialized() and self.rank != 0:
-            # Other ranks wait for evaluation to complete
-            dist.barrier()
-            return {"test_loss": 0.0}
-        
+        # Enable eval mode for all ranks
         self.model.eval()
         results = []
         test_loss = 0.0
         
         # Set higher max_tokens for generation during evaluation
-        max_new_tokens = 2500
+        max_new_tokens = 2000
         
-        # Prepare streaming writer for test predictions (rank 0 only)
-        results_file = None
+        # Prepare per-rank streaming writer for test predictions
+        results_file_rank = os.path.join(self.results_dir, stage_name, "results", f"test_predictions_rank_{self.rank if dist.is_initialized() else 0}.jsonl")
+        final_results_file = os.path.join(self.results_dir, stage_name, "results", "test_predictions.jsonl")
         results_fp = None
+        # Ensure directory exists (defensive)
+        os.makedirs(os.path.dirname(results_file_rank), exist_ok=True)
         if self.rank == 0:
-            results_file = os.path.join(self.results_dir, stage_name, "results", "test_predictions.jsonl")
-            # Ensure directory exists (defensive)
-            os.makedirs(os.path.dirname(results_file), exist_ok=True)
             print(f"[Eval] rank={self.rank}, world_size={self.world_size}")
-            print(f"Saving test predictions to: {results_file}")
-            # Open in write mode to start a fresh file, then append per-sample
-            results_fp = open(results_file, "w", encoding="utf-8")
-            if not results_fp:
-                raise RuntimeError(f"Failed to open results file: {results_file}")
+            print(f"Saving per-rank test predictions to: {results_file_rank}")
+            if dist.is_initialized():
+                print(f"Final merged predictions will be saved to: {final_results_file}")
+        # Open per-rank file in write mode to start fresh, then append per-sample
+        results_fp = open(results_file_rank, "w", encoding="utf-8")
+        if not results_fp:
+            raise RuntimeError(f"Failed to open per-rank results file: {results_file_rank}")
         try:
             with torch.no_grad():
                 for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
@@ -628,22 +625,44 @@ class CurriculumTrainer:
                                 result["template_id"] = sample["template_id"]
                             if "ecg_id" in sample:
                                 result["ecg_id"] = sample["ecg_id"]
+                            if "correct_answer" in sample:
+                                result["correct_answer"] = sample["correct_answer"]
                         
                         results.append(result)
-                        # Stream write each result immediately (rank 0 only)
-                        if results_fp is not None:
-                            print(f"Writing result to {results_file}")
-                            results_fp.write(json.dumps(result, ensure_ascii=False) + "\n")
-                            results_fp.flush()
-                            try:
-                                os.fsync(results_fp.fileno())
-                            except Exception:
-                                pass
-                        else:
-                            raise RuntimeError(f"Failed to open results file: {results_file}")
+                        # Stream write each result immediately to per-rank file
+                        results_fp.write(json.dumps(result, ensure_ascii=False) + "\n")
+                        results_fp.flush()
+                        try:
+                            os.fsync(results_fp.fileno())
+                        except Exception:
+                            pass
         finally:
             if results_fp is not None:
                 results_fp.close()
+
+        # Synchronize all ranks before merging
+        if dist.is_initialized():
+            dist.barrier()
+
+        # Rank 0 merges per-rank files into final results file
+        if (not dist.is_initialized()) or (self.rank == 0):
+            try:
+                # Overwrite final file each evaluation
+                with open(final_results_file, "w", encoding="utf-8") as merged_fp:
+                    if dist.is_initialized():
+                        num_ranks = self.world_size
+                    else:
+                        num_ranks = 1
+                    for r in range(num_ranks):
+                        part_file = os.path.join(self.results_dir, stage_name, "results", f"test_predictions_rank_{r}.jsonl")
+                        if os.path.exists(part_file):
+                            with open(part_file, "r", encoding="utf-8") as pf:
+                                for line in pf:
+                                    merged_fp.write(line)
+                if self.rank == 0:
+                    print(f"Merged per-rank predictions into: {final_results_file}")
+            finally:
+                pass
         
         # Report test loss as NaN since we skip explicit loss computation during evaluation
         # Before, we were computing the loss explicitly, but this required to run the model twice, once for loss and once for predictions.
@@ -654,21 +673,32 @@ class CurriculumTrainer:
         if epoch is not None:
             metrics["epoch"] = epoch
         if metric_func:
-            predictions = [r["generated"] for r in results]
-            gold_answers = [r["gold"] for r in results]
-            additional_metrics = metric_func(predictions, gold_answers)
-            metrics.update(additional_metrics)
+            # Compute metrics on rank 0 after merging, else minimal metrics
+            if (not dist.is_initialized()) or (self.rank == 0):
+                predictions = []
+                gold_answers = []
+                # Read from final merged file
+                merged_path = final_results_file
+                with open(merged_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        try:
+                            obj = json.loads(line)
+                            predictions.append(obj.get("generated", ""))
+                            gold_answers.append(obj.get("gold", ""))
+                        except Exception:
+                            continue
+                additional_metrics = metric_func(predictions, gold_answers)
+                metrics.update(additional_metrics)
         
-        # Save results only on rank 0
-        if self.rank == 0:
+        # Save results only on rank 0 (or when not distributed)
+        if (not dist.is_initialized()) or (self.rank == 0):
             # Save metrics
             metrics_file = os.path.join(self.results_dir, stage_name, "results", "metrics.json")
             with open(metrics_file, "w") as f:
                 json.dump(metrics, f, indent=2)
             
             print(f"✅ {stage_name} evaluation complete:")
-            if results_file is not None:
-                print(f"   Test predictions saved to: {results_file}")
+            print(f"   Test predictions saved to: {final_results_file}")
             print(f"   Metrics saved to: {metrics_file}")
             print(f"   Max tokens used for generation: {max_new_tokens}")
             for metric, value in metrics.items():
@@ -828,7 +858,7 @@ class CurriculumTrainer:
             shuffle=False,
             batch_size=1,
             patch_size=PATCH_SIZE,
-            distribute_data=False  # Don't distribute test
+            distribute_data=self.world_size > 1
         )
         
         # Scheduler
@@ -911,7 +941,7 @@ class CurriculumTrainer:
                 val_loss = 0.0
                 self.model.eval()
                 with torch.no_grad():
-                    for batch in val_loader:
+                    for batch in tqdm(val_loader, desc=f"Validating {stage_name}", disable=self.rank != 0):
                         val_loss += self._get_model().compute_loss(batch).item()
                 
                 avg_val_loss = val_loss / len(val_loader)

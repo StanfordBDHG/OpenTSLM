@@ -44,8 +44,8 @@ class CommonEvaluator:
         """Get the best available device."""
         if torch.cuda.is_available():
             return "cuda"
-        # elif torch.backends.mps.is_available():
-        #     return "mps"
+        elif torch.backends.mps.is_available():
+            return "mps"
         else:
             return "cpu"
     
@@ -96,6 +96,7 @@ class CommonEvaluator:
                 print(f"Using Llama formatter for model: {model_name}")
             else:
                 print(f"Defaulting to Llama formatter for model: {model_name}")
+
                 formatter = llama_formatter
         else:
             formatter = llama_formatter
@@ -210,7 +211,7 @@ class CommonEvaluator:
                 outputs = pipe(
                     input_text,
                     max_new_tokens=max_new_tokens,
-                    return_full_text=False,
+                    return_full_text=False
                 )
                 
                 # Extract generated text
@@ -265,6 +266,7 @@ class CommonEvaluator:
                         first_error_printed = True
                 else:
                     raise ValueError(f"Unexpectedly found empty outputs")
+
                 
                 # total_samples is already set to dataset_size, no need to increment
                 

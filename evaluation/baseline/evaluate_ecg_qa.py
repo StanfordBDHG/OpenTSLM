@@ -1,6 +1,7 @@
 import re
 import sys
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Tuple
+
 
 from common_evaluator import CommonEvaluator
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
@@ -30,8 +31,7 @@ def normalize_label(label: str) -> str:
         return ""
     return label.lower().strip().rstrip('.,!?;:')
 
-
-def evaluate_ecg_metrics(ground_truth: str, prediction: str, sample: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def evaluate_ecg_metrics(ground_truth: str, prediction: str, sample: Dict[str, Any] | None = None) -> Dict[str, Any]:
     """
     Evaluate ECG-QA CoT predictions using per-template answers from CSV.
     Normalization matches the parser in evaluation/embedhealth/ecg_qa_cot/parse_ecg_qa_cot_data.py.
