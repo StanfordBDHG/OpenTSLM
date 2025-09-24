@@ -73,7 +73,7 @@ class CurriculumTrainer:
     We train across different stages:
     - stage1_mcq: Trains the model on a time-series MCQ dataset (TSQA)
     - stage2_captioning: Trains the model on a time-series captioning dataset (M4 time series captioning)
-    - stage3_cot: Trains the model on a chain-of-thought reasoning dataset (PAMAP2 CoT)
+    - stage3_cot: Trains the model on a chain-of-thought reasoning dataset (HAR CoT)
     - stage4_sleep_cot: Trains the model on sleep stage classification with chain-of-thought reasoning
     - stage5_ecg_cot: Trains the model on ECG QA with chain-of-thought reasoning
 
