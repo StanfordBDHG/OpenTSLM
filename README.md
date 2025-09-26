@@ -117,27 +117,21 @@ EmbedHealth provides a factory class called `OpenTSLM` for easily loading pre-tr
 ### Quick Usage
 
 ```python
-from model.llm.OpenTSLM import OpenTSLM
-from prompt.full_prompt import FullPrompt
-import torch
+# Load model
+model = OpenTSLM.load_pretrained("OpenTSLM/repo-id")
 
-# Load a pre-trained model using the factory method
-# Available models can be found at: https://huggingface.co/OpenTSLM
-# The method returns either an EmbedHealthSP or EmbedHealthFlamingo instance
-# depending on the repository ID
-model = OpenTSLM.load_pretrained("<hugging_face_repo_id>")
-
-# Create a prompt with time series data
+# Create prompt with raw time series data (normalization handled automatically)
 prompt = FullPrompt(
-    pre_prompt="Analyze this time series:",
-    time_series_text=["Heart rate measurement"],
-    time_series=[torch.randn(100)],  # Your time series data
-    post_prompt="What does this indicate?"
+    pre_prompt=TextPrompt("You are an expert in HAR analysis."),
+    text_time_series_prompt_list=[
+        TextTimeSeriesPrompt("X-axis accelerometer", [2.34, 2.34, 7.657, 3.21, -1.2])
+    ],
+    post_prompt=TextPrompt("What activity is this?")
 )
 
-# Generate response using the loaded model
-response = model.eval_prompt(prompt)
-print(response)
+# Generate response
+output = model.eval_prompt(prompt, normalize=True)
+print(output)
 ```
 
 ### Repository Naming Convention
@@ -149,6 +143,7 @@ print(response)
 
 - **Automatic Model Detection**: Detects model type from repository name suffix
 - **Device Auto-detection**: Automatically selects best available device (CUDA > MPS > CPU)
+- **Automatic Normalization**: Time series data is automatically normalized (zero mean, unit variance) during inference
 - **Hugging Face Integration**: Downloads models directly from Hugging Face Hub
 
 ## 📁 Results Structure

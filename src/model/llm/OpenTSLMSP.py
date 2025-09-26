@@ -485,13 +485,17 @@ class OpenTSLMSP(TimeSeriesLLM):
 
         return 0
 
-    def eval_prompt(self, prompt: FullPrompt, max_new_tokens: int = 30000) -> str:
+    def eval_prompt(
+        self, prompt: FullPrompt, max_new_tokens: int = 30000, normalize: bool = False
+    ) -> str:
         """
         Evaluate a prompt and return the generated text.
         """
 
         batch = [prompt.to_dict()]
         self.eval()
-        batch = extend_time_series_to_match_patch_size_and_aggregate(batch)
+        batch = extend_time_series_to_match_patch_size_and_aggregate(
+            batch, normalize=normalize
+        )
         output = self.generate(batch, max_new_tokens=max_new_tokens)
         return output[0]
