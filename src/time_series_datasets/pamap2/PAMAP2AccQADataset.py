@@ -75,25 +75,27 @@ class PAMAP2AccQADataset(QADataset):
         You MUST end your response with 'Answer: <class label>'
         """
         return text
-       
+
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
         series = torch.tensor(
-            np.array([
-                row["time_series"]["handAcc16_1"],
-                row["time_series"]["handAcc16_2"],
-                row["time_series"]["handAcc16_3"],
-            ]),
+            np.array(
+                [
+                    row["time_series"]["handAcc16_1"],
+                    row["time_series"]["handAcc16_2"],
+                    row["time_series"]["handAcc16_3"],
+                ]
+            ),
             dtype=torch.float32,
         )
 
         # Downsampling by 2x
         # Since the PAMAP dataset has 100Hz it results in around 50 Hz which should be fine for further processing
         series = series[:, ::2]
-        #print(series.shape)
+        # print(series.shape)
 
-        #means = series.mean(dim=0, keepdim=True)  # shape: (n_series, 1)
-        #stds = series.std(dim=0, keepdim=True)  # shape: (n_series, 1)
-        #series = (series - means) / (stds + 1e-8)  # broadcasts to (n_series, length)
+        # means = series.mean(dim=0, keepdim=True)  # shape: (n_series, 1)
+        # stds = series.std(dim=0, keepdim=True)  # shape: (n_series, 1)
+        # series = (series - means) / (stds + 1e-8)  # broadcasts to (n_series, length)
 
         return [
             TextTimeSeriesPrompt(time_series_label, time_series)

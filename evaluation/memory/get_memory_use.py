@@ -194,6 +194,7 @@ def train_for_steps(
             "alloc_gb": 0.0,
             "res_gb": 0.0,
             "nvml_gb": 0.0,
+            "cpu_gb": 0.0,
         }
     )
     for batch in loader:
@@ -219,21 +220,27 @@ def train_for_steps(
             if nvml_bytes > max_nvml_bytes:
                 max_nvml_bytes = nvml_bytes
 
-            # Update progress bar postfix in GB
-            def _to_gb(val: int) -> float:
-                return (
-                    float(val) / (1024.0**3)
-                    if isinstance(val, (int, float)) and val >= 0
-                    else 0.0
-                )
+        # Track CPU memory
+        current_cpu_bytes = measure_peak_cpu_bytes()
+        if current_cpu_bytes > max_cpu_bytes:
+            max_cpu_bytes = current_cpu_bytes
 
-            pbar.set_postfix(
-                {
-                    "alloc_gb": f"{_to_gb(max_peak_bytes):.2f}",
-                    "res_gb": f"{_to_gb(max_reserved_bytes):.2f}",
-                    "nvml_gb": f"{_to_gb(max_nvml_bytes):.2f}",
-                }
+        # Update progress bar postfix in GB
+        def _to_gb(val: int) -> float:
+            return (
+                float(val) / (1024.0**3)
+                if isinstance(val, (int, float)) and val >= 0
+                else 0.0
             )
+
+        pbar.set_postfix(
+            {
+                "alloc_gb": f"{_to_gb(max_peak_bytes):.2f}",
+                "res_gb": f"{_to_gb(max_reserved_bytes):.2f}",
+                "nvml_gb": f"{_to_gb(max_nvml_bytes):.2f}",
+                "cpu_gb": f"{_to_gb(max_cpu_bytes):.2f}",
+            }
+        )
         step += 1
         pbar.update(1)
         if step >= steps:
@@ -278,7 +285,7 @@ def run_for_dataset(
     }
     try:
         # Train for half an epoch, capped at 10000 steps
-        steps = max(1, min(len(dataset_obj), 10000))
+        steps = max(1, min(len(dataset_obj), 100))
         loss, peak, peak_reserved, nvml_peak = train_for_steps(
             model, model_name, dataset_obj, steps
         )
@@ -318,7 +325,7 @@ def main():
         help="Dataset to use",
     )
     parser.add_argument(
-        "--device", default="cuda", help="Device to run on (e.g., cuda, cuda:0, cpu)"
+        "--device", default="cpu", help="Device to run on (e.g., cuda, cuda:0, cpu)"
     )
     parser.add_argument(
         "--length",

@@ -10,6 +10,31 @@ RESULTS_CSV=${2:-}
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 PYTHON=python
 
+# Models and datasets to test
+MODELS=(
+    "OpenTSLMSP"
+    "OpenTSLMFlamingo"
+)
+
+DATASETS=(
+  "TSQADataset"
+  "HARCoTQADataset"
+  "SleepEDFCoTQADataset"
+  "ECGQACoTQADataset"
+)
+
+# LLM IDs
+LLM_IDS=(
+  "meta-llama/Llama-3.2-1B"
+  "meta-llama/Llama-3.2-3B"
+  "google/gemma-3-270m"
+  "google/gemma-3-1b"
+)
+
+# SimulationQADataset parameters
+SIMULATION_LENGTHS=(10 100 1000 10000)
+SIMULATION_NUM_SERIES=(1 2 3 4 5)
+
 RESULTS_FLAG="--results_csv ${RESULTS_CSV:-$REPO_DIR/memory_use.csv}"
 
 if [[ -n "$DEVICE_ARG" ]]; then
@@ -23,11 +48,31 @@ echo "Writing results to: ${RESULTS_FLAG#--results_csv }"
 # Failed configurations that need to be rerun
 echo "Rerunning failed configurations..."
 
-# CUDA Out of Memory failures
-echo "=== CUDA Out of Memory Failures ==="
+# llama3b OpenTSLMFlamingo for TSQA, HAR, Sleep, ECG_QA
+LLAMA3B="meta-llama/Llama-3.2-3B"
+FLAMINGO_MODEL="OpenTSLMFlamingo"
+SP_MODEL="OpenTSLMSP"
 
-# meta-llama/Llama-3.2-1B + EmbedHealthSP failures
-echo "[RETRY] meta-llama/Llama-3.2-1B + EmbedHealthSP + Simulation-L10000-N3"
+SPECIFIC_DATASETS=(
+  "TSQADataset"
+  "HARCoTQADataset" 
+  "SleepEDFCoTQADataset"
+  "ECGQACoTQADataset"
+)
+
+for dataset in "${SPECIFIC_DATASETS[@]}"; do
+  echo "[RUN] llm_id=$LLAMA3B model=$FLAMINGO_MODEL dataset=$dataset"
+  set +e
+  $PYTHON "$REPO_DIR/get_memory_use.py" -llm_id "$LLAMA3B" --model "$FLAMINGO_MODEL" --dataset "$dataset" $DEVICE_FLAG $RESULTS_FLAG
+  status=$?
+  set -e
+  if [[ $status -ne 0 ]]; then
+    echo "[ERROR] Failed for llm_id=$LLAMA3B model=$FLAMINGO_MODEL dataset=$dataset (exit $status)"
+  fi
+done
+
+# OpenTSLMSP llama3b for ECG_QA
+echo "[RUN] llm_id=$LLAMA3B model=$SP_MODEL dataset=ECGQACoTQADataset"
 set +e
 $PYTHON "$REPO_DIR/get_memory_use.py" -llm_id "meta-llama/Llama-3.2-1B" --model "EmbedHealthSP" --dataset "SimulationQADataset" --length "10000" --num_series "3" $DEVICE_FLAG $RESULTS_FLAG
 status=$?

@@ -13,11 +13,11 @@ def calculate_f1_score(prediction: str, ground_truth: str):
     truth_normalized = first_three(ground_truth).lower()
     f1 = 1.0 if pred_normalized == truth_normalized else 0.0
     return {
-        'f1_score': f1,
-        'precision': f1,
-        'recall': f1,
-        'prediction_normalized': pred_normalized,
-        'ground_truth_normalized': truth_normalized
+        "f1_score": f1,
+        "precision": f1,
+        "recall": f1,
+        "prediction_normalized": pred_normalized,
+        "ground_truth_normalized": truth_normalized,
     }
 
 
@@ -53,14 +53,18 @@ def calculate_f1_stats(data_points, allowed_labels=None):
         tp, fp, fn = c["tp"], c["fp"], c["fn"]
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+        f1 = (
+            2 * (precision * recall) / (precision + recall)
+            if (precision + recall) > 0
+            else 0
+        )
         class_f1_scores[cls] = {
             "f1": f1,
             "precision": precision,
             "recall": recall,
             "tp": tp,
             "fp": fp,
-            "fn": fn
+            "fn": fn,
         }
         total_f1 += f1
         valid_classes += 1
@@ -70,7 +74,7 @@ def calculate_f1_stats(data_points, allowed_labels=None):
         "average_f1": average_f1,
         "macro_f1": macro_f1,
         "class_f1_scores": class_f1_scores,
-        "total_classes": valid_classes
+        "total_classes": valid_classes,
     }
 
 
@@ -78,7 +82,7 @@ def parse_baseline_json(input_path: str):
     if not os.path.exists(input_path):
         print(f"File not found: {input_path}")
         return
-    with open(input_path, 'r', encoding='utf-8') as f:
+    with open(input_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     detailed = data.get("detailed_results", [])
@@ -86,7 +90,7 @@ def parse_baseline_json(input_path: str):
     correct = 0
     data_points = []
 
-    labels = ['(a)', '(b)', '(c)']
+    labels = ["(a)", "(b)", "(c)"]
     label_to_idx = {l: i for i, l in enumerate(labels)}
     confusion = [[0, 0, 0] for _ in range(3)]
     support = {l: 0 for l in labels}
@@ -99,21 +103,23 @@ def parse_baseline_json(input_path: str):
         pred = first_three(pred_raw)
 
         total += 1
-        is_correct = (gold == pred)
+        is_correct = gold == pred
         if is_correct:
             correct += 1
         else:
             print(f"Line {i} - Pred: {pred_raw} -> {pred}, Gold: {gold_raw} -> {gold}")
 
         f1_result = calculate_f1_score(pred, gold)
-        data_points.append({
-            "accuracy": is_correct,
-            "f1_score": f1_result['f1_score'],
-            "precision": f1_result['precision'],
-            "recall": f1_result['recall'],
-            "prediction_normalized": f1_result['prediction_normalized'],
-            "ground_truth_normalized": f1_result['ground_truth_normalized']
-        })
+        data_points.append(
+            {
+                "accuracy": is_correct,
+                "f1_score": f1_result["f1_score"],
+                "precision": f1_result["precision"],
+                "recall": f1_result["recall"],
+                "prediction_normalized": f1_result["prediction_normalized"],
+                "ground_truth_normalized": f1_result["ground_truth_normalized"],
+            }
+        )
 
         if gold in label_to_idx and pred in label_to_idx:
             gi = label_to_idx[gold]
@@ -135,10 +141,12 @@ def parse_baseline_json(input_path: str):
     print(f"Macro-F1 Score: {f1_stats['macro_f1']:.4f}")
     print(f"Total Classes: {f1_stats['total_classes']}")
 
-    if f1_stats['class_f1_scores']:
+    if f1_stats["class_f1_scores"]:
         print(f"\nPer-Class F1 Scores:")
-        for cls, scores in f1_stats['class_f1_scores'].items():
-            print(f"  {cls}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
+        for cls, scores in f1_stats["class_f1_scores"].items():
+            print(
+                f"  {cls}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}"
+            )
 
     print("\nClass support (gold counts):")
     for l in labels:
@@ -154,8 +162,6 @@ def parse_baseline_json(input_path: str):
 
 if __name__ == "__main__":
     # Default path: update if needed
-    input_file = \
-        "/Users/planger/Development/EmbedHealth/evaluation/results/baseline/detailed_runpod_final_run/evaluation_results_google-gemma-3-1b-pt_tsqadataset.json"
+    # TODO what should happen with this path? Should we remove it?
+    input_file = "/Users/planger/Development/EmbedHealth/evaluation/results/baseline_pod/evaluation_results_meta-llama-llama-3-2-3b_tsqadataset.json"
     parse_baseline_json(input_file)
-
-

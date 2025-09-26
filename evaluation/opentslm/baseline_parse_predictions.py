@@ -10,8 +10,8 @@ from collections import Counter
 from tqdm import tqdm
 
 # Add the src directory to the path to import from the dataset class
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.append(os.path.join(project_root, 'src'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.append(os.path.join(project_root, "src"))
 
 # Import the dataset class to get labels
 from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
@@ -24,27 +24,27 @@ def calculate_f1_score(prediction, ground_truth):
     """Calculate F1 score for classification labels using token overlap (like SQuAD)."""
 
     # Normalize labels
-    pred_normalized = prediction.lower().strip().rstrip('.,!?;:')
-    truth_normalized = ground_truth.lower().strip().rstrip('.,!?;:')
+    pred_normalized = prediction.lower().strip().rstrip(".,!?;:")
+    truth_normalized = ground_truth.lower().strip().rstrip(".,!?;:")
 
     pred_tokens = pred_normalized.split()
     truth_tokens = truth_normalized.split()
 
     if not pred_tokens and not truth_tokens:
         return {
-            'f1_score': 1.0,
-            'precision': 1.0,
-            'recall': 1.0,
-            'prediction_normalized': pred_normalized,
-            'ground_truth_normalized': truth_normalized
+            "f1_score": 1.0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "prediction_normalized": pred_normalized,
+            "ground_truth_normalized": truth_normalized,
         }
     if not pred_tokens or not truth_tokens:
         return {
-            'f1_score': 0.0,
-            'precision': 0.0,
-            'recall': 0.0,
-            'prediction_normalized': pred_normalized,
-            'ground_truth_normalized': truth_normalized
+            "f1_score": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "prediction_normalized": pred_normalized,
+            "ground_truth_normalized": truth_normalized,
         }
 
     common = Counter(pred_tokens) & Counter(truth_tokens)
@@ -52,14 +52,16 @@ def calculate_f1_score(prediction, ground_truth):
 
     precision = num_same / len(pred_tokens) if pred_tokens else 0.0
     recall = num_same / len(truth_tokens) if truth_tokens else 0.0
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
+    f1 = (
+        2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
+    )
 
     return {
-        'f1_score': f1,
-        'precision': precision,
-        'recall': recall,
-        'prediction_normalized': pred_normalized,
-        'ground_truth_normalized': truth_normalized
+        "f1_score": f1,
+        "precision": precision,
+        "recall": recall,
+        "prediction_normalized": pred_normalized,
+        "ground_truth_normalized": truth_normalized,
     }
 
 
@@ -99,7 +101,11 @@ def calculate_f1_stats(data_points, allowed_labels=None):
         tp, fp, fn = counts["tp"], counts["fp"], counts["fn"]
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+        f1 = (
+            2 * precision * recall / (precision + recall)
+            if (precision + recall) > 0
+            else 0
+        )
 
         class_f1_scores[class_name] = {
             "f1": f1,
@@ -107,7 +113,7 @@ def calculate_f1_stats(data_points, allowed_labels=None):
             "recall": recall,
             "tp": tp,
             "fp": fp,
-            "fn": fn
+            "fn": fn,
         }
         total_f1 += f1
         valid_classes += 1
@@ -117,7 +123,7 @@ def calculate_f1_stats(data_points, allowed_labels=None):
     return {
         "macro_f1": macro_f1,
         "class_f1_scores": class_f1_scores,
-        "total_classes": valid_classes
+        "total_classes": valid_classes,
     }
 
 
@@ -134,7 +140,7 @@ def calculate_accuracy_stats(data_points):
         "total_samples": total,
         "correct_predictions": correct,
         "incorrect_predictions": total - correct,
-        "accuracy_percentage": accuracy_percentage
+        "accuracy_percentage": accuracy_percentage,
     }
 
 
@@ -155,7 +161,9 @@ def parse_baseline_json(input_file, output_file=None):
 
     allowed_labels = set(SUPPORTED_LABELS)
 
-    answer_count = sum(1 for point in extracted_data if "Answer: " in point.get("generated", ""))
+    answer_count = sum(
+        1 for point in extracted_data if "Answer: " in point.get("generated", "")
+    )
 
     excluded_count = 0
     for point in extracted_data:
@@ -169,7 +177,9 @@ def parse_baseline_json(input_file, output_file=None):
         print(f"Extracted {len(extracted_data)} data points")
         print(f"Predictions containing 'Answer:': {answer_count}/{len(extracted_data)}")
         if excluded_count > 0:
-            print(f"Excluded {excluded_count} predictions not in the label set from metrics")
+            print(
+                f"Excluded {excluded_count} predictions not in the label set from metrics"
+            )
 
         accuracy_stats = calculate_accuracy_stats(extracted_data)
         print(f"\nAccuracy Statistics:")
@@ -183,9 +193,9 @@ def parse_baseline_json(input_file, output_file=None):
         print(f"Macro-F1 Score: {f1_stats['macro_f1']:.4f}")
         print(f"Total Classes: {f1_stats['total_classes']}")
 
-        if f1_stats['class_f1_scores']:
+        if f1_stats["class_f1_scores"]:
             print(f"\nPer-Class F1 Scores:")
-            for class_name, scores in f1_stats['class_f1_scores'].items():
+            for class_name, scores in f1_stats["class_f1_scores"].items():
                 print(
                     f"  {class_name}: "
                     f"F1={scores['f1']:.4f}, "
@@ -194,7 +204,7 @@ def parse_baseline_json(input_file, output_file=None):
                     f"TP={scores['tp']}, FP={scores['fp']}, FN={scores['fn']}"
                 )
 
-        with open(output_file, 'w', encoding='utf-8') as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             for item in extracted_data:
                 f.write(json.dumps(item, indent=2) + "\n")
 
@@ -209,20 +219,22 @@ def extract_structured_data(input_file):
     """Extract structured data from baseline JSON file"""
     data_points = []
 
-    with open(input_file, 'r', encoding='utf-8') as f:
+    with open(input_file, "r", encoding="utf-8") as f:
         data = json.load(f)
-        detailed_results = data.get('detailed_results', [])
+        detailed_results = data.get("detailed_results", [])
 
         for result in tqdm(detailed_results, desc="Processing results"):
             try:
-                sample_idx = result.get('sample_idx', 0)
-                generated_answer = result.get('generated_answer', '')
-                target_answer = result.get('target_answer', '')
+                sample_idx = result.get("sample_idx", 0)
+                generated_answer = result.get("generated_answer", "")
+                target_answer = result.get("target_answer", "")
 
                 model_prediction = extract_answer(generated_answer).replace("<eos>", "")
                 ground_truth = extract_answer(target_answer).replace("<eos>", "")
 
-                accuracy = model_prediction.strip().lower() == ground_truth.strip().lower()
+                accuracy = (
+                    model_prediction.strip().lower() == ground_truth.strip().lower()
+                )
 
                 f1_result = calculate_f1_score(model_prediction, ground_truth)
 
@@ -232,15 +244,17 @@ def extract_structured_data(input_file):
                     "model_prediction": model_prediction,
                     "ground_truth": ground_truth,
                     "accuracy": accuracy,
-                    "f1_score": f1_result['f1_score'],
-                    "precision": f1_result['precision'],
-                    "recall": f1_result['recall'],
-                    "prediction_normalized": f1_result['prediction_normalized'],
-                    "ground_truth_normalized": f1_result['ground_truth_normalized']
+                    "f1_score": f1_result["f1_score"],
+                    "precision": f1_result["precision"],
+                    "recall": f1_result["recall"],
+                    "prediction_normalized": f1_result["prediction_normalized"],
+                    "ground_truth_normalized": f1_result["ground_truth_normalized"],
                 }
                 data_points.append(data_point)
             except Exception as e:
-                print(f"Error processing sample {result.get('sample_idx', 'unknown')}: {e}")
+                print(
+                    f"Error processing sample {result.get('sample_idx', 'unknown')}: {e}"
+                )
                 continue
 
     return data_points
@@ -251,13 +265,14 @@ def extract_answer(text):
     if "Answer: " not in text:
         return text.strip()
     answer = text.split("Answer: ")[-1].strip()
-    answer = re.sub(r'<\|.*?\|>$', '', answer).strip()
+    answer = re.sub(r"<\|.*?\|>$", "", answer).strip()
     return answer
 
 
 if __name__ == "__main__":
     # Example usage with the baseline JSON file
-    input_file = "/Users/planger/Development/EmbedHealth/evaluation/results_chatgpt/baseline/detailed/evaluation_results_openai-gpt-4o_pamap2accqadataset.json"
+    # TODO what should happen with this path? Should we remove it?
+    input_file = "/Users/planger/Development/EmbedHealth/evaluation/results/baseline/detailed/evaluation_results_meta-llama-llama-3-2-3b_harcotqadataset.json"
     output_file = "out.jsonl"
 
     parse_baseline_json(input_file, output_file)

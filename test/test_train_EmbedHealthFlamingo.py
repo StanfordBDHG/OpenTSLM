@@ -14,7 +14,7 @@ from tqdm.auto import tqdm
 from transformers import get_linear_schedule_with_warmup
 
 from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
-from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
+from model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
 from model.projector.MLPProjector import MLPProjector
 from src.model_config import (
     BATCH_SIZE,
@@ -43,7 +43,7 @@ else:
 # ---------------------------
 # Model
 # ---------------------------
-model = EmbedHealthFlamingo(
+model = OpenTSLMFlamingo(
     device="cuda",
     cross_attn_every_n_layers=1,
 ).to(device)

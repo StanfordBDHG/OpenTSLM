@@ -1,1 +1,0 @@
-nohup torchrun --nproc-per-node=4 train_ddp.py --batch-size 48 --epochs 30 > output.txt 2>&1 &

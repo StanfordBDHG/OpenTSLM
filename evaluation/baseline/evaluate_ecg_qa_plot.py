@@ -1,8 +1,14 @@
 import re
 import sys
-from typing import Dict, Any, List, Tuple
+import io
+import base64
+import os
+from datetime import datetime
+from typing import Dict, Any, List, Optional
 
-from common_evaluator import CommonEvaluator
+import matplotlib.pyplot as plt
+
+from common_evaluator_plot import CommonEvaluatorPlot
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
 
 
@@ -31,11 +37,11 @@ def normalize_label(label: str) -> str:
 
 
 def evaluate_ecg_metrics(
-    ground_truth: str, prediction: str, sample: Dict[str, Any] | None = None
+    ground_truth: str, prediction: str, sample: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Evaluate ECG-QA CoT predictions using per-template answers from CSV.
-    Normalization matches the parser in evaluation/opentslm/ecg_qa_cot/parse_ecg_qa_cot_data.py.
+    Normalization matches the parser used in evaluate_ecg_qa.py.
     """
     # Extract answers
     pred_raw = extract_answer(prediction)
@@ -47,16 +53,12 @@ def evaluate_ecg_metrics(
 
     # Per-template supported answers (strict)
     if not isinstance(sample, dict):
-        print(f"DEBUG: Sample type: {type(sample)}")
-        print(f"DEBUG: Sample content: {sample}")
         raise ValueError(
             "Sample must be a dict containing 'template_id' for ECG-QA evaluation"
         )
 
     template_id = sample.get("template_id") or sample.get("cot_template_id")
     if template_id is None:
-        print(f"DEBUG: Sample keys: {sample.keys()}")
-        print(f"DEBUG: Sample content: {sample}")
         raise ValueError("Missing 'template_id' in sample for ECG-QA evaluation")
 
     possible_answers = ECGQACoTQADataset.get_possible_answers_for_template(
@@ -91,7 +93,68 @@ def evaluate_ecg_metrics(
     }
 
 
-# --- Parser-matching aggregation helpers ---
+def generate_ecg_plot(time_series: List[List[float]]) -> str:
+    """
+    Create a base64 PNG plot for multi-lead ECG time series.
+
+    - Accepts a list of 1D lists/arrays, one per ECG lead.
+    - Renders each lead as a separate subplot with grid and title.
+    """
+    if time_series is None:
+        return None
+
+    ts_list = list(time_series)
+    if not ts_list:
+        return None
+
+    num_series = len(ts_list)
+    lead_names = [
+        "I",
+        "II",
+        "III",
+        "aVR",
+        "aVL",
+        "aVF",
+        "V1",
+        "V2",
+        "V3",
+        "V4",
+        "V5",
+        "V6",
+    ]
+
+    # Limit to a reasonable number of subplots; if more, still plot all with generic names
+    fig_height = max(3, min(2 + 0.9 * num_series, 20))
+    fig, axes = plt.subplots(num_series, 1, figsize=(12, fig_height), sharex=True)
+    if num_series == 1:
+        axes = [axes]
+
+    for i, series in enumerate(ts_list):
+        axes[i].plot(series, linewidth=1.0)
+        axes[i].grid(True, alpha=0.3)
+        name = lead_names[i] if i < len(lead_names) else f"Lead {i + 1}"
+        axes[i].set_title(f"ECG Lead {name}")
+        axes[i].set_ylabel("mV")
+    axes[-1].set_xlabel("Time (samples)")
+
+    plt.tight_layout()
+
+    # Save plot to disk instead of showing it
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    results_dir = os.path.join(current_dir, "..", "results", "baseline", "plots")
+    os.makedirs(results_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    filename = f"ecg_plot_{timestamp}.png"
+    file_path = os.path.join(results_dir, filename)
+    plt.savefig(file_path, format="png", bbox_inches="tight", dpi=110)
+
+    # Also save to buffer for returning base64 to caller
+    img_buffer = io.BytesIO()
+    plt.savefig(img_buffer, format="png", bbox_inches="tight", dpi=110)
+    plt.close()
+    img_buffer.seek(0)
+    image_data = base64.b64encode(img_buffer.getvalue()).decode("utf-8")
+    return image_data
 
 
 def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -238,22 +301,22 @@ def _build_data_points_from_results(
 
 
 def main():
-    """Main function to run ECG-QA CoT evaluation with parser-matching F1 aggregation."""
+    """Main function to run ECG-QA CoT evaluation with plotting."""
     if len(sys.argv) != 2:
-        print("Usage: python evaluate_ecg_qa.py <model_name>")
-        print("Example: python evaluate_ecg_qa.py meta-llama/Llama-3.2-1B")
+        print("Usage: python evaluate_ecqqa_plot.py <model_name>")
+        print("Example: python evaluate_ecqqa_plot.py meta-llama/Llama-3.2-1B")
         sys.exit(1)
 
     model_name = sys.argv[1]
 
-    evaluator = CommonEvaluator()
+    evaluator = CommonEvaluatorPlot()
     # Run single evaluation to keep detailed results for F1 aggregation
     results = evaluator.evaluate_model_on_dataset(
         model_name=model_name,
         dataset_class=ECGQACoTQADataset,
         evaluation_function=evaluate_ecg_metrics,
-        max_samples=490,
-        use_plot=False,
+        plot_function=generate_ecg_plot,
+        max_samples=10000,
         max_new_tokens=400,
     )
 
