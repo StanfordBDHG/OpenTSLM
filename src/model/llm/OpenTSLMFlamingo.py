@@ -342,7 +342,7 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         self.to(self.device)
 
     def eval_prompt(
-        self, prompt: FullPrompt, max_new_tokens: int = 30000, normalize: bool = False
+        self, prompt: FullPrompt, max_new_tokens: int = 1000, normalize: bool = False
     ) -> str:
         """
         Evaluate a prompt and return the generated text.
@@ -350,14 +350,15 @@ class OpenTSLMFlamingo(TimeSeriesLLM):
         # Temporarily disable compilation to avoid data-dependent operation issues
         original_disable = torch._dynamo.config.disable
         torch._dynamo.config.disable = True
-
         try:
             batch = [prompt.to_dict()]
             self.eval()
             batch = extend_time_series_to_match_patch_size_and_aggregate(
                 batch, normalize=normalize
             )
+            print("Generating")
             output = self.generate(batch, max_new_tokens=max_new_tokens)
+            print(f"Generated output: {output[0]}")
             return output[0]
         finally:
             # Restore original compilation setting

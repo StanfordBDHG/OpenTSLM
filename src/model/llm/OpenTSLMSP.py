@@ -373,7 +373,27 @@ class OpenTSLMSP(TimeSeriesLLM):
 
     def load_from_file(self, path: str):
         ckpt = torch.load(path, map_location=self.device, weights_only=False)
-        self.encoder.load_state_dict(ckpt["encoder_state"])
+        
+        # Handle positional embedding size mismatch
+        encoder_state = ckpt["encoder_state"]
+        if "pos_embed" in encoder_state:
+            checkpoint_pos_embed = encoder_state["pos_embed"]
+            current_pos_embed = self.encoder.pos_embed
+            
+            if checkpoint_pos_embed.shape != current_pos_embed.shape:
+                print(f"⚠️  Positional embedding size mismatch: checkpoint {checkpoint_pos_embed.shape} vs current {current_pos_embed.shape}")
+                print(f"   Resizing positional embeddings to match checkpoint...")
+                
+                # Resize current positional embeddings to match checkpoint
+                new_pos_embed = torch.nn.Parameter(
+                    torch.zeros_like(checkpoint_pos_embed)
+                )
+                # Copy as much as possible
+                min_size = min(checkpoint_pos_embed.shape[1], current_pos_embed.shape[1])
+                new_pos_embed.data[:, :min_size, :] = checkpoint_pos_embed[:, :min_size, :]
+                self.encoder.pos_embed = new_pos_embed
+        
+        self.encoder.load_state_dict(encoder_state, strict=False)
         self.projector.load_state_dict(ckpt["projector_state"])
 
         # Load LoRA state if present (allow missing for backward compatibility)
@@ -399,10 +419,10 @@ class OpenTSLMSP(TimeSeriesLLM):
         if checkpoint_has_lora and "lora_state" in checkpoint:
             # Checkpoint has LoRA adapters
             if not self.lora_enabled:
-                raise RuntimeError(
-                    "Checkpoint contains LoRA adapters but LoRA is not currently enabled. "
-                    "Call enable_lora() before loading this checkpoint."
-                )
+                print("⚠️  Checkpoint contains LoRA adapters but LoRA is not currently enabled.")
+                print("   Enabling LoRA with default parameters to load the checkpoint...")
+                # Enable LoRA with default parameters
+                self.enable_lora()
 
             # Load LoRA adapters
             try:
