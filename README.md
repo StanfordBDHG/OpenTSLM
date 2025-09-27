@@ -53,7 +53,32 @@ OpenTSLM has been tested and works with the following models:
 
 Other variants may work but have not been extensively tested.
 
-## Multi-stage training (Curriculum)
+
+## 🚀 Quickstart with pretrained models
+
+EmbedHealth provides a factory class called `OpenTSLM` for easily loading pre-trained models from Hugging Face Hub. The `load_pretrained` method automatically detects the model type and returns the appropriate model instance.
+
+### Quick Usage
+
+```python
+# Load model
+model = OpenTSLM.load_pretrained("OpenTSLM/repo-id")
+
+# Create prompt with raw time series data (normalization handled automatically)
+prompt = FullPrompt(
+    pre_prompt=TextPrompt("You are an expert in HAR analysis."),
+    text_time_series_prompt_list=[
+        TextTimeSeriesPrompt("X-axis accelerometer", [2.34, 2.34, 7.657, 3.21, -1.2])
+    ],
+    post_prompt=TextPrompt("What activity is this?")
+)
+
+# Generate response
+output = model.eval_prompt(prompt, normalize=True)
+print(output)
+```
+
+## Training: Multi-stage training (Curriculum)
 
 OpenTSLM uses curriculum learning with progressive training stages:
 
@@ -110,29 +135,6 @@ python curriculum_learning.py --model OpenTSLMFlamingo --eval_only
 - `--gradient_checkpointing`: Enable gradient checkpointing for memory efficiency
 - `--verbose`: Enable verbose logging
 
-## 🚀 Using Pre-trained Models
-
-EmbedHealth provides a factory class called `OpenTSLM` for easily loading pre-trained models from Hugging Face Hub. The `load_pretrained` method automatically detects the model type and returns the appropriate model instance.
-
-### Quick Usage
-
-```python
-# Load model
-model = OpenTSLM.load_pretrained("OpenTSLM/repo-id")
-
-# Create prompt with raw time series data (normalization handled automatically)
-prompt = FullPrompt(
-    pre_prompt=TextPrompt("You are an expert in HAR analysis."),
-    text_time_series_prompt_list=[
-        TextTimeSeriesPrompt("X-axis accelerometer", [2.34, 2.34, 7.657, 3.21, -1.2])
-    ],
-    post_prompt=TextPrompt("What activity is this?")
-)
-
-# Generate response
-output = model.eval_prompt(prompt, normalize=True)
-print(output)
-```
 
 ### Repository Naming Convention
 

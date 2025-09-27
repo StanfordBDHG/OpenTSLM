@@ -3,8 +3,8 @@ from typing import Optional, Union
 from enum import Enum
 from huggingface_hub import hf_hub_download
 
-from .EmbedHealthSP import EmbedHealthSP
-from .EmbedHealthFlamingo import EmbedHealthFlamingo
+from .OpenTSLMSP import OpenTSLMSP
+from .OpenTSLMFlamingo import OpenTSLMFlamingo
 
 
 class ModelType(Enum):
@@ -45,7 +45,7 @@ class OpenTSLM:
         repo_id: str,
         device: Optional[str] = None,
         cache_dir: Optional[str] = None,
-    ) -> Union[EmbedHealthSP, EmbedHealthFlamingo]:
+    ) -> Union[OpenTSLMSP, OpenTSLMFlamingo]:
         """
         Load a pretrained model from Hugging Face Hub.
 
@@ -55,7 +55,7 @@ class OpenTSLM:
             cache_dir: Directory to cache downloaded models (optional)
 
         Returns:
-            Union[EmbedHealthSP, EmbedHealthFlamingo]: The loaded model instance
+            Union[OpenTSLMSP, OpenTSLMFlamingo]: The loaded model instance
 
         Example:
             >>> model = OpenTSLM.load_pretrained("OpenTSLM/gemma-3-270m-pt-sleep-flamingo")
@@ -74,11 +74,11 @@ class OpenTSLM:
 
         # Instantiate model with fixed training parameters
         if model_type == ModelType.SP:
-            # EmbedHealthSP uses default parameters from curriculum learning
-            model = EmbedHealthSP(llm_id=base_llm_id, device=device)
+            # OpenTSLMSP uses default parameters from curriculum learning
+            model = OpenTSLMSP(llm_id=base_llm_id, device=device)
         elif model_type == ModelType.FLAMINGO:
-            # EmbedHealthFlamingo with fixed parameters from curriculum learning
-            model = EmbedHealthFlamingo(
+            # OpenTSLMFlamingo with fixed parameters from curriculum learning
+            model = OpenTSLMFlamingo(
                 device=device,
                 llm_id=base_llm_id,
                 cross_attn_every_n_layers=1,
@@ -127,7 +127,7 @@ class OpenTSLM:
             # Download the main model checkpoint file
             checkpoint_path = hf_hub_download(
                 repo_id=repo_id,
-                filename="best_model.pt",
+                filename="model.pt",
                 cache_dir=cache_dir,
                 local_files_only=False,
             )
@@ -137,7 +137,7 @@ class OpenTSLM:
         except Exception as e:
             raise RuntimeError(
                 f"Failed to download model from {repo_id}. "
-                f"Tried 'best_model.pt' and 'pytorch_model.bin'. "
+                f"Tried 'model.pt'. "
                 f"Original error: {e}"
             )
 
