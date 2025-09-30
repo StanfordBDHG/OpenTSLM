@@ -45,21 +45,47 @@ fi
 
 echo "Writing results to: ${RESULTS_FLAG#--results_csv }"
 
+# Run specific datasets for specific model/LLM combinations
+echo "Running specific datasets for specific model/LLM combinations..."
+
+# llama3b OpenTSLMFlamingo for TSQA, HAR, Sleep, ECG_QA
+LLAMA3B="meta-llama/Llama-3.2-3B"
+FLAMINGO_MODEL="OpenTSLMFlamingo"
+SP_MODEL="OpenTSLMSP"
+
+SPECIFIC_DATASETS=(
+  "TSQADataset"
+  "HARCoTQADataset" 
+  "SleepEDFCoTQADataset"
+  "ECGQACoTQADataset"
+)
+
+for dataset in "${SPECIFIC_DATASETS[@]}"; do
+  echo "[RUN] llm_id=$LLAMA3B model=$FLAMINGO_MODEL dataset=$dataset"
+  set +e
+  $PYTHON "$REPO_DIR/get_memory_use.py" -llm_id "$LLAMA3B" --model "$FLAMINGO_MODEL" --dataset "$dataset" $DEVICE_FLAG $RESULTS_FLAG
+  status=$?
+  set -e
+  if [[ $status -ne 0 ]]; then
+    echo "[ERROR] Failed for llm_id=$LLAMA3B model=$FLAMINGO_MODEL dataset=$dataset (exit $status)"
+  fi
+done
+
+# OpenTSLMSP llama3b for ECG_QA
+echo "[RUN] llm_id=$LLAMA3B model=$SP_MODEL dataset=ECGQACoTQADataset"
+set +e
+$PYTHON "$REPO_DIR/get_memory_use.py" -llm_id "$LLAMA3B" --model "$SP_MODEL" --dataset "ECGQACoTQADataset" $DEVICE_FLAG $RESULTS_FLAG
+status=$?
+set -e
+if [[ $status -ne 0 ]]; then
+  echo "[ERROR] Failed for llm_id=$LLAMA3B model=$SP_MODEL dataset=ECGQACoTQADataset (exit $status)"
+fi
+
+
+# Run SimulationQADataset for all model/LLM combinations
+echo "Running SimulationQADataset for all combinations..."
 for llm in "${LLM_IDS[@]}"; do
   for model in "${MODELS[@]}"; do
-    # Run standard datasets
-    for dataset in "${DATASETS[@]}"; do
-      echo "[RUN] llm_id=$llm model=$model dataset=$dataset"
-      set +e
-      $PYTHON "$REPO_DIR/get_memory_use.py" -llm_id "$llm" --model "$model" --dataset "$dataset" $DEVICE_FLAG $RESULTS_FLAG
-      status=$?
-      set -e
-      if [[ $status -ne 0 ]]; then
-        echo "[ERROR] Failed for llm_id=$llm model=$model dataset=$dataset (exit $status)"
-      fi
-    done
-    
-    # Run SimulationQADataset with all combinations of length and num_series
     for length in "${SIMULATION_LENGTHS[@]}"; do
       for num_series in "${SIMULATION_NUM_SERIES[@]}"; do
         echo "[RUN] llm_id=$llm model=$model dataset=SimulationQADataset length=$length num_series=$num_series"
@@ -74,6 +100,7 @@ for llm in "${LLM_IDS[@]}"; do
     done
   done
 done
+
 
 echo "All runs completed."
 

@@ -1,9 +1,9 @@
 ## Example ECG Analysis
 
-**Clinical Context:** 76-year-old male patient. 12-lead ECG. clinical recording. recorded with AT-6     6. Signal quality: baseline drift noted, static noise present, burst noise present, electrode artifacts present. extra beats detected during recording. pacemaker present.
+**Clinical Context:** 76-year-old male patient. 12-lead ECG. clinical recording. recorded with AT-6 6. Signal quality: baseline drift noted, static noise present, burst noise present, electrode artifacts present. extra beats detected during recording. pacemaker present.
 
 **Question:** Does this ECG show symptoms of non-diagnostic t abnormalities?
 
 **Expected Answer:** yes
 
-This example demonstrates how EmbedHealth processes ECG signals on a millimeter paper grid (similar to clinical practice) and answers specific diagnostic questions about cardiac conditions.
+This example demonstrates how OpenTSLM processes ECG signals on a millimeter paper grid (similar to clinical practice) and answers specific diagnostic questions about cardiac conditions.
