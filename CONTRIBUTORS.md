@@ -5,4 +5,7 @@
 - **Max Rosenblattl**
 - **Winnie Chow**
 - **Maxwell Xu**
+- **Daniel McDuff**
+- **Elgar Fleisch**
+- **Filipe Barata**
 - **Paul Schmiedmayer**

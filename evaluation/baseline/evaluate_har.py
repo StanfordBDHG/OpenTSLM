@@ -2,7 +2,6 @@ import re
 import sys
 from typing import Dict, Any
 
-from common_evaluator import CommonEvaluator
 from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 
 
@@ -48,7 +47,7 @@ def evaluate_har_acc(ground_truth: str, prediction: str) -> Dict[str, Any]:
 
 
 def main():
-    """Main function to run HAR CoT evaluation."""
+    """Main function to run HAR evaluation."""
     if len(sys.argv) != 2:
         print("Usage: python evaluate_har.py <model_name>")
         print("Example: python evaluate_har.py meta-llama/Llama-3.2-1B")

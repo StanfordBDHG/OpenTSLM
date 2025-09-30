@@ -138,7 +138,6 @@ def generate_ecg_plot(time_series: List[List[float]]) -> str:
     axes[-1].set_xlabel("Time (samples)")
 
     plt.tight_layout()
-
     # Save plot to disk instead of showing it
     current_dir = os.path.dirname(os.path.abspath(__file__))
     results_dir = os.path.join(current_dir, "..", "results", "baseline", "plots")
