@@ -1,3 +1,11 @@
+<!--
+This source file is part of the OpenTSLM open-source project
+
+SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+
+SPDX-License-Identifier: MIT
+-->
+
 # Time Series LLM Evaluation Framework
 
 This directory contains a modular evaluation framework for testing LLMs on time series datasets. The system is designed to be easily extensible to new datasets and models.

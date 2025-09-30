@@ -1,4 +1,12 @@
-# Clinician ECG Review Evaluation
+<!--
+This source file is part of the OpenTSLM open-source project
+
+SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+
+SPDX-License-Identifier: MIT
+-->
+
+# Clinician ECG Evaluation
 
 This directory contains tools for the clinician-based analysis of the ECG-QA-based model evaluation. It contains a random subset of 84 samples based on the total templates with suitable predictions (42 in total, 2 random samples from each).
 

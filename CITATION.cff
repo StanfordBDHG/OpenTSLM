@@ -1,4 +1,6 @@
-cff-version: 1.2.0
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-License-Identifier: MIT
+
 message: "If you use this software or model, please cite it as below."
 title: "OpenTSLM: Time-Series Language Models for Reasoning over Multivariate Medical Text- and Time-Series Data"
 authors:
