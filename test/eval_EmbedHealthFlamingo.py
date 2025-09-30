@@ -10,7 +10,7 @@ from torch.utils.data import ConcatDataset, DataLoader, Dataset
 from tqdm.auto import tqdm
 
 from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
-from model.llm.EmbedHealthFlamingo import EmbedHealthFlamingo
+from model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
 from src.model_config import (
     PATCH_SIZE,
     RESULTS_FILE,
@@ -30,7 +30,7 @@ else:
 # ---------------------------
 # Model
 # ---------------------------
-model = EmbedHealthFlamingo(
+model = OpenTSLMFlamingo(
     device=device,
     cross_attn_every_n_layers=1,
 ).to(device)

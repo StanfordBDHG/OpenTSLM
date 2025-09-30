@@ -25,11 +25,11 @@ from sklearn.model_selection import train_test_split
 # Constants
 # ---------------------------
 
-RELEASE_URL = "https://polybox.ethz.ch/index.php/s/QxLJwrWPBSZm8Y5/download/M4TimeSeriesCaptionDatasetv01.zip"
+RELEASE_URL = "https://polybox.ethz.ch/index.php/s/MT3y9WdEebT8wfj/download/M4TimeSeriesCaptionDatasetV02.zip"
 DATA_DIR = "data/M4TimeSeriesCaptionDataset"
-GENERATED_DATA_DIR = os.path.join(DATA_DIR)
+GENERATED_DATA_DIR = os.path.join(DATA_DIR, "M4TimeSeriesCaptionDataset")
 
-AVAILABLE_FREQUENCIES = ["Monthly", "Quarterly", "Weekly"]
+AVAILABLE_FREQUENCIES = ["Daily", "Hourly", "Monthly", "Quarterly", "Weekly", "Yearly"]
 
 TEST_FRAC = 0.1
 VAL_FRAC = 0.1
