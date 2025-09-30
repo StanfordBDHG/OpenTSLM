@@ -5,7 +5,6 @@ import re
 import sys
 import base64
 from typing import Type, Callable, Dict, List, Any, Optional
-from abc import ABC, abstractmethod
 
 import numpy as np
 import pandas as pd
@@ -110,7 +109,8 @@ class CommonEvaluator:
                 formatter = llama_formatter
                 print(f"Using Llama formatter for model: {model_name}")
             else:
-                print("Defaulting to Llama formatter for model: {model_name}")
+                print(f"Defaulting to Llama formatter for model: {model_name}")
+
                 formatter = llama_formatter
         else:
             formatter = llama_formatter
@@ -296,9 +296,6 @@ class CommonEvaluator:
                         print(f"PREDICTION: {generated_text}")
                         print("=" * 80)
                         first_error_printed = True
-
-                # total_samples is already set to dataset_size, no need to increment
-
             except Exception as e:
                 print(f"Error processing sample {idx}: {e}")
                 continue
