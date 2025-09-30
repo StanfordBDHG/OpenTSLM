@@ -12,12 +12,9 @@
 ## Examples
 
 <p align="center">
-  <img src="assets/ecg_rationale.png" alt="ECG Rationale" width="48%">
-  <img src="assets/har_rationale.png" alt="HAR Rationale" width="48%">
-</p>
-<p align="center">
-  <img src="assets/m4_caption.png" alt="M4 Caption" width="48%">
-  <img src="assets/sleep_rationale.png" alt="Sleep Rationale" width="48%">
+    <img src="assets/m4_caption.png" alt="M4 Caption" width="32%">
+  <img src="assets/ecg_rationale.png" alt="ECG Rationale" width="32%">
+  <img src="assets/har_rationale.png" alt="HAR Rationale" width="32%">
 </p>
 
 ## Installation
