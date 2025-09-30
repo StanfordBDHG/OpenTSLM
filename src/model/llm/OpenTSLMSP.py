@@ -6,6 +6,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 try:
     from peft import get_peft_model, LoraConfig, TaskType
+
     PEFT_AVAILABLE = True
 except ImportError:
     PEFT_AVAILABLE = False
@@ -16,9 +17,12 @@ from model.llm.TimeSeriesLLM import TimeSeriesLLM
 from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from model.projector.MLPProjector import MLPProjector
 from prompt.full_prompt import FullPrompt
-from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
- 
-class EmbedHealthSP(TimeSeriesLLM):
+from time_series_datasets.util import (
+    extend_time_series_to_match_patch_size_and_aggregate,
+)
+
+
+class OpenTSLMSP(TimeSeriesLLM):
     def __init__(
         self,
         llm_id: str = "meta-llama/Llama-3.2-1B",
@@ -36,7 +40,7 @@ class EmbedHealthSP(TimeSeriesLLM):
             llm_id,
             torch_dtype=torch.bfloat16,
             device_map={"": device},
-            attn_implementation='eager'
+            attn_implementation="eager",
         )
         self.llm.resize_token_embeddings(len(self.tokenizer))
 
@@ -50,20 +54,24 @@ class EmbedHealthSP(TimeSeriesLLM):
 
         # LoRA-related attributes
         self.lora_enabled = False
-        self.original_llm = None  # Keep reference to original model for backward compatibility
+        self.original_llm = (
+            None  # Keep reference to original model for backward compatibility
+        )
 
         # Freeze the LLM backbone for SP model (internally)
         for p in self.llm.parameters():
             p.requires_grad = False
 
-    def enable_lora(self, 
-                    lora_r: int = 16,
-                    lora_alpha: int = 32,
-                    lora_dropout: float = 0.0,
-                    target_modules: Optional[List[str]] = None):
+    def enable_lora(
+        self,
+        lora_r: int = 16,
+        lora_alpha: int = 32,
+        lora_dropout: float = 0.0,
+        target_modules: Optional[List[str]] = None,
+    ):
         """
         Enable LoRA fine-tuning for the LLM component.
-        
+
         Args:
             lora_r: LoRA rank
             lora_alpha: LoRA alpha parameter
@@ -71,18 +79,30 @@ class EmbedHealthSP(TimeSeriesLLM):
             target_modules: List of module names to apply LoRA to. If None, uses defaults.
         """
         if not PEFT_AVAILABLE:
-            raise RuntimeError("peft package is required for LoRA fine-tuning. Please install with: pip install peft")
-        
+            raise RuntimeError(
+                "peft package is required for LoRA fine-tuning. Please install with: pip install peft"
+            )
+
         if self.lora_enabled:
-            raise RuntimeError("LoRA is already enabled. Call disable_lora() first if you want to reconfigure LoRA.")
-        
+            raise RuntimeError(
+                "LoRA is already enabled. Call disable_lora() first if you want to reconfigure LoRA."
+            )
+
         # Store reference to original model before applying LoRA
         self.original_llm = self.llm
-        
+
         # Default target modules for common architectures
         if target_modules is None:
-            target_modules = ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
-        
+            target_modules = [
+                "q_proj",
+                "v_proj",
+                "k_proj",
+                "o_proj",
+                "gate_proj",
+                "up_proj",
+                "down_proj",
+            ]
+
         # Create LoRA config
         lora_config = LoraConfig(
             r=lora_r,
@@ -92,15 +112,21 @@ class EmbedHealthSP(TimeSeriesLLM):
             bias="none",
             task_type=TaskType.CAUSAL_LM,
         )
-        
+
         try:
             # Apply LoRA to the model
             self.llm = get_peft_model(self.llm, lora_config)
             self.lora_enabled = True
-            
+
             # Print LoRA info
-            lora_params = sum(p.numel() for name, p in self.llm.named_parameters() if p.requires_grad and "lora_" in name)
-            trainable_params = sum(p.numel() for p in self.llm.parameters() if p.requires_grad)
+            lora_params = sum(
+                p.numel()
+                for name, p in self.llm.named_parameters()
+                if p.requires_grad and "lora_" in name
+            )
+            trainable_params = sum(
+                p.numel() for p in self.llm.parameters() if p.requires_grad
+            )
             total_params = sum(p.numel() for p in self.llm.parameters())
             print(f"✅ LoRA enabled:")
             print(f"   LoRA parameters: {lora_params:,}")
@@ -108,18 +134,22 @@ class EmbedHealthSP(TimeSeriesLLM):
             print(f"   Total parameters: {total_params:,}")
             print(f"   LoRA %: {100 * lora_params / total_params:.2f}%")
             print(f"   Trainable %: {100 * trainable_params / total_params:.2f}%")
-            
+
         except Exception as e:
             print(f"❌ Failed to enable LoRA: {e}")
-            print("   This might be due to incompatible target modules for your model architecture.")
-            print("   Try specifying different target_modules or check your model's layer names.")
+            print(
+                "   This might be due to incompatible target modules for your model architecture."
+            )
+            print(
+                "   Try specifying different target_modules or check your model's layer names."
+            )
             raise
 
     def get_lora_parameters(self):
         """Get LoRA parameters for the optimizer."""
         if not self.lora_enabled:
             return []
-        
+
         lora_params = []
         for name, param in self.llm.named_parameters():
             if param.requires_grad and "lora_" in name:
@@ -129,12 +159,14 @@ class EmbedHealthSP(TimeSeriesLLM):
     def disable_lora(self):
         """Disable LoRA and revert to original frozen LLM."""
         if not self.lora_enabled:
-            raise RuntimeError("LoRA is not enabled. Cannot disable LoRA when it's not active.")
-        
+            raise RuntimeError(
+                "LoRA is not enabled. Cannot disable LoRA when it's not active."
+            )
+
         if self.original_llm is not None:
             self.llm = self.original_llm
             self.original_llm = None
-        
+
         self.lora_enabled = False
         print("✅ LoRA disabled, reverted to frozen LLM")
 
@@ -144,7 +176,7 @@ class EmbedHealthSP(TimeSeriesLLM):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         TL;DR:
-            This function is probably the most crucial part of EmbedHealth-SP, and also the hardest to understand.
+            This function is probably the most crucial part of OpenTSLM-SP, and also the hardest to understand.
             It's where the magic happens and legends are made.
 
             It batches and embeds all text and time series inputs in parallel,
@@ -333,35 +365,37 @@ class EmbedHealthSP(TimeSeriesLLM):
             "encoder_state": self.encoder.state_dict(),
             "projector_state": self.projector.state_dict(),
         }
-        
+
         # Add LoRA state to checkpoint
         self.save_lora_state_to_checkpoint(checkpoint)
-        
+
         torch.save(checkpoint, path)
 
     def load_from_file(self, path: str):
         ckpt = torch.load(path, map_location=self.device, weights_only=False)
         self.encoder.load_state_dict(ckpt["encoder_state"])
         self.projector.load_state_dict(ckpt["projector_state"])
-        
+
         # Load LoRA state if present (allow missing for backward compatibility)
         self.load_lora_state_from_checkpoint(ckpt, allow_missing=True)
-        
+
         print(f"📥 Loaded model from epoch {ckpt.get('epoch', '?')}")
 
-    def load_lora_state_from_checkpoint(self, checkpoint: dict, allow_missing: bool = False):
+    def load_lora_state_from_checkpoint(
+        self, checkpoint: dict, allow_missing: bool = False
+    ):
         """
         Load LoRA adapters from a checkpoint.
-        
+
         Args:
             checkpoint: Checkpoint dictionary containing potential LoRA state
             allow_missing: If True, don't raise exception when checkpoint has no LoRA but model expects it
-        
+
         Raises:
             RuntimeError: When there's a mismatch between checkpoint and current LoRA state
         """
         checkpoint_has_lora = checkpoint.get("lora_enabled", False)
-        
+
         if checkpoint_has_lora and "lora_state" in checkpoint:
             # Checkpoint has LoRA adapters
             if not self.lora_enabled:
@@ -369,40 +403,45 @@ class EmbedHealthSP(TimeSeriesLLM):
                     "Checkpoint contains LoRA adapters but LoRA is not currently enabled. "
                     "Call enable_lora() before loading this checkpoint."
                 )
-            
+
             # Load LoRA adapters
             try:
                 lora_state = checkpoint["lora_state"]
                 loaded_count = 0
                 missing_keys = []
-                
+
                 # Track which LoRA parameters we expect to find
-                expected_lora_params = {name for name, param in self.llm.named_parameters() 
-                                      if param.requires_grad and "lora_" in name}
-                
+                expected_lora_params = {
+                    name
+                    for name, param in self.llm.named_parameters()
+                    if param.requires_grad and "lora_" in name
+                }
+
                 for name, param in self.llm.named_parameters():
                     if name in lora_state and param.requires_grad and "lora_" in name:
                         param.data.copy_(lora_state[name])
                         loaded_count += 1
                     elif param.requires_grad and "lora_" in name:
                         missing_keys.append(name)
-                
+
                 if missing_keys and not allow_missing:
                     raise RuntimeError(
                         f"Could not find LoRA parameters in checkpoint: {missing_keys[:5]}..."
                     )
-                
+
                 print(f"📥 Loaded LoRA adapters: {loaded_count} parameters")
                 return loaded_count
-                
+
             except Exception as e:
                 if "Could not find LoRA parameters" in str(e):
                     raise  # Re-raise our custom exception
                 raise RuntimeError(f"Failed to load LoRA adapters: {e}")
-        
+
         elif checkpoint_has_lora:
-            raise RuntimeError("Checkpoint indicates LoRA was enabled but no LoRA state found")
-        
+            raise RuntimeError(
+                "Checkpoint indicates LoRA was enabled but no LoRA state found"
+            )
+
         # Handle case where checkpoint has no LoRA but model expects it
         if not checkpoint_has_lora and self.lora_enabled:
             if not allow_missing:
@@ -413,29 +452,29 @@ class EmbedHealthSP(TimeSeriesLLM):
             else:
                 print("⚠️  Loading checkpoint from before LoRA was enabled.")
                 print("   LoRA adapters will be randomly initialized.")
-        
+
         return 0
 
     def save_lora_state_to_checkpoint(self, checkpoint: dict):
         """
         Save LoRA adapters to a checkpoint dictionary.
-        
+
         Args:
             checkpoint: Checkpoint dictionary to add LoRA state to
-        
+
         Returns:
             int: Number of LoRA parameters saved
         """
         checkpoint["lora_enabled"] = self.lora_enabled
-        
-        if self.lora_enabled and hasattr(self.llm, 'peft_config'):
+
+        if self.lora_enabled and hasattr(self.llm, "peft_config"):
             try:
                 # Save LoRA adapter weights
                 lora_state = {}
                 for name, param in self.llm.named_parameters():
                     if param.requires_grad and "lora_" in name:
                         lora_state[name] = param.data.clone()
-                
+
                 if lora_state:
                     checkpoint["lora_state"] = lora_state
                     checkpoint["lora_config"] = self.llm.peft_config
@@ -443,14 +482,14 @@ class EmbedHealthSP(TimeSeriesLLM):
                     return len(lora_state)
             except Exception as e:
                 raise RuntimeError(f"Failed to save LoRA adapters: {e}")
-        
+
         return 0
 
     def eval_prompt(self, prompt: FullPrompt, max_new_tokens: int = 30000) -> str:
         """
         Evaluate a prompt and return the generated text.
         """
-                
+
         batch = [prompt.to_dict()]
         self.eval()
         batch = extend_time_series_to_match_patch_size_and_aggregate(batch)

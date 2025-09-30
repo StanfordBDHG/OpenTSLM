@@ -6,7 +6,6 @@ from common_evaluator import CommonEvaluator
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
 
 
-
 def extract_answer(text: str) -> str:
     """
     Extract the final answer from model text, following the parser rules:
@@ -28,13 +27,15 @@ def normalize_label(label: str) -> str:
     """Lowercase, strip, and remove trailing punctuation to match parser behavior."""
     if label is None:
         return ""
-    return label.lower().strip().rstrip('.,!?;:')
+    return label.lower().strip().rstrip(".,!?;:")
 
 
-def evaluate_ecg_metrics(ground_truth: str, prediction: str, sample: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def evaluate_ecg_metrics(
+    ground_truth: str, prediction: str, sample: Dict[str, Any] | None = None
+) -> Dict[str, Any]:
     """
     Evaluate ECG-QA CoT predictions using per-template answers from CSV.
-    Normalization matches the parser in evaluation/embedhealth/ecg_qa_cot/parse_ecg_qa_cot_data.py.
+    Normalization matches the parser in evaluation/opentslm/ecg_qa_cot/parse_ecg_qa_cot_data.py.
     """
     # Extract answers
     pred_raw = extract_answer(prediction)
@@ -48,7 +49,9 @@ def evaluate_ecg_metrics(ground_truth: str, prediction: str, sample: Dict[str, A
     if not isinstance(sample, dict):
         print(f"DEBUG: Sample type: {type(sample)}")
         print(f"DEBUG: Sample content: {sample}")
-        raise ValueError("Sample must be a dict containing 'template_id' for ECG-QA evaluation")
+        raise ValueError(
+            "Sample must be a dict containing 'template_id' for ECG-QA evaluation"
+        )
 
     template_id = sample.get("template_id") or sample.get("cot_template_id")
     if template_id is None:
@@ -56,7 +59,9 @@ def evaluate_ecg_metrics(ground_truth: str, prediction: str, sample: Dict[str, A
         print(f"DEBUG: Sample content: {sample}")
         raise ValueError("Missing 'template_id' in sample for ECG-QA evaluation")
 
-    possible_answers = ECGQACoTQADataset.get_possible_answers_for_template(int(template_id))
+    possible_answers = ECGQACoTQADataset.get_possible_answers_for_template(
+        int(template_id)
+    )
     if not possible_answers:
         raise ValueError(f"No possible answers found for template_id={template_id}")
 
@@ -88,6 +93,7 @@ def evaluate_ecg_metrics(ground_truth: str, prediction: str, sample: Dict[str, A
 
 # --- Parser-matching aggregation helpers ---
 
+
 def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not data_points:
         return {}
@@ -96,7 +102,7 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
 
     template_groups: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
     for point in data_points:
-        template_id = point.get('template_id')
+        template_id = point.get("template_id")
         if template_id is None:
             raise ValueError(f"Missing template_id in data point: {point}")
         template_groups[int(template_id)].append(point)
@@ -110,7 +116,7 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
         if not points:
             continue
 
-        possible_answers = points[0].get('possible_answers', [])
+        possible_answers = points[0].get("possible_answers", [])
         if not possible_answers:
             raise ValueError(f"No possible answers found for template {template_id}")
 
@@ -139,10 +145,16 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
         valid_classes = 0
 
         for class_name, counts in class_predictions.items():
-            tp = counts["tp"]; fp = counts["fp"]; fn = counts["fn"]
+            tp = counts["tp"]
+            fp = counts["fp"]
+            fn = counts["fn"]
             precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
             recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-            f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+            f1 = (
+                2 * (precision * recall) / (precision + recall)
+                if (precision + recall) > 0
+                else 0.0
+            )
 
             class_f1_scores[class_name] = {
                 "f1": f1,
@@ -159,7 +171,9 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
 
         template_correct = sum(1 for p in points if p.get("accuracy", False))
         template_accuracy = template_correct / len(points) if points else 0.0
-        template_avg_f1 = sum(p.get("f1_score", 0.0) for p in points) / len(points) if points else 0.0
+        template_avg_f1 = (
+            sum(p.get("f1_score", 0.0) for p in points) / len(points) if points else 0.0
+        )
 
         template_stats[template_id] = {
             "num_samples": len(points),
@@ -176,7 +190,9 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
         total_f1_sum += template_avg_f1 * len(points)
 
     template_macro_f1s = [stats["macro_f1"] for stats in template_stats.values()]
-    overall_macro_f1 = sum(template_macro_f1s) / len(template_macro_f1s) if template_macro_f1s else 0.0
+    overall_macro_f1 = (
+        sum(template_macro_f1s) / len(template_macro_f1s) if template_macro_f1s else 0.0
+    )
     overall_accuracy = total_correct / total_samples if total_samples > 0 else 0.0
     overall_avg_f1 = total_f1_sum / total_samples if total_samples > 0 else 0.0
 
@@ -192,7 +208,9 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
     }
 
 
-def _build_data_points_from_results(detailed_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _build_data_points_from_results(
+    detailed_results: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
     data_points: List[Dict[str, Any]] = []
     for r in detailed_results:
         m = r.get("metrics", {})
@@ -212,7 +230,9 @@ def _build_data_points_from_results(detailed_results: List[Dict[str, Any]]) -> L
             "possible_answers": m.get("possible_answers", []),
         }
         if not dp["possible_answers"]:
-            raise ValueError(f"No possible answers in metrics for template {template_id}")
+            raise ValueError(
+                f"No possible answers in metrics for template {template_id}"
+            )
         data_points.append(dp)
     return data_points
 
@@ -265,4 +285,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()

@@ -1,4 +1,4 @@
-# EmbedHealth contributors
+# OpenTSLM contributors
 
 * [Patrick Langer](patricklanger.com)
 * **Thomas Kaar**

@@ -30,9 +30,9 @@ def parse_model_name(llm_id, model_type):
     elif "gemma-3-1b-pt" in base_name:
         base_name = "Gemma-3-1B-pt"
 
-    if model_type == "EmbedHealthSP":
+    if model_type == "OpenTSLMSP":
         type_name = "SoftPrompt"
-    elif model_type == "EmbedHealthFlamingo":
+    elif model_type == "OpenTSLMFlamingo":
         type_name = "Flamingo"
     else:
         type_name = model_type
@@ -43,18 +43,20 @@ def parse_model_name(llm_id, model_type):
 def plot_memory_usage(csv_file="merged_success.csv"):
     # --- Publication style settings ---
     plt.style.use("seaborn-v0_8-white")
-    matplotlib.rcParams.update({
-        "font.family": "serif",
-        "font.serif": ["Palatino", "Times New Roman", "DejaVu Serif"],
-        "font.size": 18,
-        "axes.labelsize": 20,
-        "axes.titlesize": 20,
-        "legend.fontsize": 17,
-        "xtick.labelsize": 17,
-        "ytick.labelsize": 17,
-        "axes.linewidth": 0.6,
-        "axes.edgecolor": "0.15",
-    })
+    matplotlib.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": ["Palatino", "Times New Roman", "DejaVu Serif"],
+            "font.size": 18,
+            "axes.labelsize": 20,
+            "axes.titlesize": 20,
+            "legend.fontsize": 17,
+            "xtick.labelsize": 17,
+            "ytick.labelsize": 17,
+            "axes.linewidth": 0.6,
+            "axes.edgecolor": "0.15",
+        }
+    )
 
     df = pd.read_csv(csv_file)
 
@@ -68,7 +70,9 @@ def plot_memory_usage(csv_file="merged_success.csv"):
 
     # Order datasets
     dataset_order = ["TSQA", "HAR-CoT", "SleepEDF-CoT", "ECG-QA-CoT"]
-    df["dataset"] = pd.Categorical(df["dataset"], categories=dataset_order, ordered=True)
+    df["dataset"] = pd.Categorical(
+        df["dataset"], categories=dataset_order, ordered=True
+    )
 
     # Order configs
     config_order = ["SoftPrompt", "Flamingo"]
@@ -76,7 +80,7 @@ def plot_memory_usage(csv_file="merged_success.csv"):
 
     # Define consistent order for base models
     model_order = ["Gemma-3-270M", "Gemma-3-1B-pt", "Llama-3.2-1B", "Llama-3.2-3B"]
-    
+
     # Get base models in the specified order
     base_models = [bm for bm in model_order if bm in df["base_model"].unique()]
 
@@ -87,11 +91,10 @@ def plot_memory_usage(csv_file="merged_success.csv"):
     if n_models == 1:
         axes = [axes]
 
-  
     # Muted, paper-friendly palette
     palette = {
         "SoftPrompt": "#4477AA",  # muted blue
-        "Flamingo": "#CC6677"     # muted red
+        "Flamingo": "#CC6677",  # muted red
     }
 
     for ax, base_model in zip(axes, base_models):
@@ -108,7 +111,7 @@ def plot_memory_usage(csv_file="merged_success.csv"):
             linewidth=0.6,
             dodge=True,
             width=0.8,
-            legend=(ax == axes[0]),   # Show legend only in first subplot
+            legend=(ax == axes[0]),  # Show legend only in first subplot
         )
 
         ax.set_title(base_model, fontsize=19, fontweight="bold")
@@ -119,14 +122,14 @@ def plot_memory_usage(csv_file="merged_success.csv"):
         ax.grid(axis="y", alpha=0.5, linestyle="--", linewidth=0.5)
         ax.set_axisbelow(True)
         ax.set_ylim(0, 110)
-        
+
         # Style the legend in the first subplot
         if ax == axes[0]:
             legend = ax.get_legend()
             if legend:
                 legend.set_title(None)  # Remove "config" title
-                legend.get_frame().set_facecolor('white')
-                legend.get_frame().set_edgecolor('0.3')
+                legend.get_frame().set_facecolor("white")
+                legend.get_frame().set_edgecolor("0.3")
                 legend.get_frame().set_linewidth(1.0)
                 legend.get_frame().set_alpha(1.0)
                 legend.set_frame_on(True)
@@ -136,7 +139,7 @@ def plot_memory_usage(csv_file="merged_success.csv"):
             ax.bar_label(container, fmt="%.1f", padding=2, fontsize=15, rotation=90)
 
     plt.tight_layout(pad=0.5)
-    
+
     for fmt in ["png", "pdf"]:
         plt.savefig(
             f"memory_usage_facet.{fmt}",

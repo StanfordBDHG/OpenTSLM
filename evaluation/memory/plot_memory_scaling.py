@@ -28,9 +28,9 @@ def parse_model_name(llm_id, model_type):
     else:
         base_name = llm_id
 
-    if model_type == "EmbedHealthSP":
+    if model_type == "OpenTSLMSP":
         type_name = "SoftPrompt"
-    elif model_type == "EmbedHealthFlamingo":
+    elif model_type == "OpenTSLMFlamingo":
         type_name = "Flamingo"
     else:
         type_name = model_type
