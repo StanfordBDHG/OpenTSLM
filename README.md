@@ -191,7 +191,7 @@ This work was made possible only by joint effort of many awesome collaborators:
 - Daniel McDuff (Google Research, University Washington)
 - Elgar Fleisch (ETH Zurich)
 - Filipe Barata (ETH Zurich)
-- Paul Schmiedmayer (ETH Zurich)
+- Paul Schmiedmayer (Stanford)
 
 <div align="center">
   <img src="assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="160">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
