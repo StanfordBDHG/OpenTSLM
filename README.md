@@ -14,7 +14,7 @@ Large Language Models (LLMs) have emerged as powerful tools for interpreting mul
 **[🔗 Read the full paper](https://www.researchgate.net/publication/395975374_OpenTSLM_Time-Series_Language_Models_for_Reasoning_over_Multivariate_Medical_Text-_and_Time-Series_Data)**  
 
 ## Examples
-We present some examples below:
+OpenTSLM models can reason over multiple time series of any length at once, generating findings, captions, and rationales in natural language. We tested these models across a wide range of tasks spanning Human Activity Recognition (HAR) from 3-axis acceleration data, sleep stating from EEG readings, 12-lead ECG question answering, and time series captioning. Some examples are shown below, more are available in the paper.
 <p align="center">
   <img src="assets/ecg_rationale.png" alt="ECG Rationale" width="32%">
   <img src="assets/har_rationale.png" alt="HAR Rationale" width="32%">
