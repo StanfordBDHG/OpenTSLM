@@ -2,6 +2,7 @@ import re
 import sys
 from typing import Dict, Any, List, Tuple
 
+
 from common_evaluator import CommonEvaluator
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
 
@@ -253,7 +254,6 @@ def main():
         dataset_class=ECGQACoTQADataset,
         evaluation_function=evaluate_ecg_metrics,
         max_samples=490,
-        use_plot=False,
         max_new_tokens=400,
     )
 

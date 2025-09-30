@@ -221,7 +221,6 @@ def train_for_steps(
         if step >= steps:
             break
     pbar.close()
-
     if torch.cuda.is_available():
         peak_bytes = max_peak_bytes
         peak_reserved_bytes = max_reserved_bytes

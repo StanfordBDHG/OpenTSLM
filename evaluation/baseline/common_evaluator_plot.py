@@ -64,7 +64,6 @@ class CommonEvaluatorPlot(CommonEvaluator):
         Load a dataset with proper formatting.
         """
         print(f"Loading dataset: {dataset_class.__name__}")
-
         formatter = None
 
         # Default dataset arguments
@@ -105,7 +104,6 @@ class CommonEvaluatorPlot(CommonEvaluator):
             plot_functions: Optional dict mapping dataset class names to plot functions
             max_samples: Maximum number of samples per evaluation
             **pipeline_kwargs: Additional arguments for model pipeline
-
         Returns:
             DataFrame with results for all model-dataset combinations
         """
@@ -119,7 +117,6 @@ class CommonEvaluatorPlot(CommonEvaluator):
         os.makedirs(results_dir, exist_ok=True)
         df_filename = os.path.join(results_dir, "evaluation_results.csv")
         print(f"Results will be saved to: {df_filename}")
-
         # Load existing results if file exists
         existing_df = None
         if os.path.exists(df_filename):
@@ -178,7 +175,6 @@ class CommonEvaluatorPlot(CommonEvaluator):
                         "successful_inferences": results["successful_inferences"],
                         "success_rate": results["success_rate"],
                     }
-
                     # Add specific metrics
                     if results["metrics"]:
                         for metric_name, metric_values in results["metrics"].items():
@@ -222,7 +218,6 @@ class CommonEvaluatorPlot(CommonEvaluator):
                         final_df = current_df
                     final_df.to_csv(df_filename, index=False)
                     print(f"⚠️  Results updated (with error): {df_filename}")
-
         print(f"\nFinal results saved to: {df_filename}")
         return final_df
 
@@ -268,7 +263,6 @@ class CommonEvaluatorPlot(CommonEvaluator):
         else:
             dataset_size = len(dataset)
             print(f"Processing all {dataset_size} samples...")
-
         # Initialize tracking
         total_samples = 0
         successful_inferences = 0
@@ -365,7 +359,6 @@ class CommonEvaluatorPlot(CommonEvaluator):
                         # Fallback to 2-arg call
                         metrics = evaluation_function(target_answer, generated_text)
                     all_metrics.append(metrics)
-
                     # Store detailed results
                     result = {
                         "sample_idx": idx,
@@ -375,7 +368,6 @@ class CommonEvaluatorPlot(CommonEvaluator):
                         "metrics": metrics,
                     }
                     results.append(result)
-
                     # Print progress for first few samples
                     if idx < 10:
                         print(f"\nSAMPLE {idx + 1}:")
@@ -430,7 +422,6 @@ class CommonEvaluatorPlot(CommonEvaluator):
                 print(f"Error processing sample {idx}: {e}")
                 total_samples += 1
                 continue
-
         # Calculate aggregate metrics
         if successful_inferences > 0:
             # Aggregate metrics across all samples
