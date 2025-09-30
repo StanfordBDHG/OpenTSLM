@@ -4,7 +4,7 @@
 Large Language Models (LLMs) have emerged as powerful tools for interpreting multimodal data (e.g., images, audio, text), often surpassing specialized models. In medicine, they hold particular promise for synthesizing large volumes of clinical information into actionable insights and patient-facing digital health applications.  Yet, a major limitation remains their inability to handle time series data. To overcome this gap, we present OpenTSLM, a family of Time Series Language Models (TSLMs) created by integrating time series as a native modality to pretrained Large Language Models, enabling natural-language prompting and reasoning over multiple time series of any length... **[🔗 Read the full paper](https://www.researchgate.net/publication/395975374_OpenTSLM_Time-Series_Language_Models_for_Reasoning_over_Multivariate_Medical_Text-_and_Time-Series_Data)**  
 
 <p align="center">
-  <img src="assets/schematic_overview_2.png" alt="Schematic Overview" width="75%">
+  <img src="assets/schematic_overview_2.png" alt="Schematic Overview" width="100%">
 </p>
 
 
