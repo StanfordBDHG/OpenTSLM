@@ -5,6 +5,21 @@
 
 
 
+<p align="center">
+  <img src="assets/schematic_overview_2.png" alt="Schematic Overview" width="75%">
+</p>
+
+## Examples
+
+<p align="center">
+  <img src="assets/ecg_rationale.png" alt="ECG Rationale" width="48%">
+  <img src="assets/har_rationale.png" alt="HAR Rationale" width="48%">
+</p>
+<p align="center">
+  <img src="assets/m4_caption.png" alt="M4 Caption" width="48%">
+  <img src="assets/sleep_rationale.png" alt="Sleep Rationale" width="48%">
+</p>
+
 ## Installation
 
 1. **Clone the Repository**  
