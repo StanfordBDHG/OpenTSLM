@@ -6,6 +6,7 @@ from model.llm.TimeSeriesFlamingoWithTrainableEncoder import (
 from open_flamingo.open_flamingo.src.flamingo_lm import FlamingoLMMixin
 from open_flamingo.open_flamingo.src.utils import extend_instance
 import torch
+import torch._dynamo
 from typing import List, Dict, Tuple
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
@@ -13,6 +14,16 @@ from model_config import ENCODER_OUTPUT_DIM
 from model.llm.TimeSeriesLLM import TimeSeriesLLM
 from prompt.full_prompt import FullPrompt
 from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
+
+# Monkey-patch FlamingoLayer to add attention_type property for compatibility with newer transformers
+from open_flamingo.open_flamingo.src.flamingo_lm import FlamingoLayer
+
+def _attention_type_property(self):
+    """Proxy the attention_type attribute from the underlying decoder layer."""
+    return getattr(self.decoder_layer, 'attention_type', None)
+
+# Add the attention_type property to FlamingoLayer
+FlamingoLayer.attention_type = property(_attention_type_property)
 
 class EmbedHealthFlamingo(TimeSeriesLLM):
     def __init__(
@@ -41,6 +52,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             trust_remote_code=True,
             cache_dir=None,
             device_map={"": device},
+            attn_implementation='eager'
         )
 
         # add Flamingo special tokens to the tokenizer
@@ -65,9 +77,22 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 "mpt": "transformer.blocks",
                 "mosaicgpt": "transformer.blocks",
                 "gemma": "model.layers",
+                "gemma2": "model.layers",
+                "gemma3": "model.layers",
                 "medgemma": "model.layers",
             }
 
+            # Special handling for Gemma3 models with different architectures
+            model_class_name = model.__class__.__name__
+            if "gemma3" in model_class_name.lower():
+                if "ConditionalGeneration" in model_class_name:
+                    # Gemma3ForConditionalGeneration (multimodal 4B model) - layers are at language_model.layers
+                    return "language_model.layers"
+                else:
+                    # Gemma3ForCausalLM (text-only 1B model) - layers are at standard model.layers
+                    return "model.layers"
+            
+            # Original logic for non-Gemma3 models
             for k in __KNOWN_DECODER_LAYERS_ATTR_NAMES:
                 if k.lower() in model.__class__.__name__.lower():
                     return __KNOWN_DECODER_LAYERS_ATTR_NAMES[k]
@@ -79,6 +104,11 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         decoder_layers_attr_name = _infer_decoder_layers_attr_name(lang_encoder)
         lang_encoder.set_decoder_layers_attr_name(decoder_layers_attr_name)
         lang_encoder.resize_token_embeddings(len(text_tokenizer))
+
+        # Fix compatibility for Gemma3Config which has hidden_size in text_config
+        if hasattr(lang_encoder.config, "text_config") and hasattr(lang_encoder.config.text_config, "hidden_size"):
+            if not hasattr(lang_encoder.config, "hidden_size"):
+                lang_encoder.config.hidden_size = lang_encoder.config.text_config.hidden_size
 
         model = TimeSeriesFlamingoWithTrainableEncoder(
             SimpleNamespace(visual=time_series_encoder),
@@ -202,25 +232,35 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
     def generate(
         self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
     ) -> List[str]:
-        input_ids, images, attention_mask, _ = self.pad_and_apply_batch(
-            batch, include_labels=True
-        )
-        gen_ids = self.llm.generate(
-            vision_x=images,
-            lang_x=input_ids,
-            attention_mask=attention_mask,
-            max_new_tokens=max_new_tokens,
-            eos_token_id=self.text_tokenizer.eos_token_id,
-            pad_token_id=self.text_tokenizer.pad_token_id,
-            **generate_kwargs,
-        )
+        # Temporarily disable compilation to avoid data-dependent operation issues
+        original_disable = torch._dynamo.config.disable
+        torch._dynamo.config.disable = True
+        
+        try:
+            with torch.inference_mode():
+                input_ids, images, attention_mask, _ = self.pad_and_apply_batch(
+                    batch, include_labels=True
+                )
+            
+                gen_ids = self.llm.generate(
+                    vision_x=images,
+                    lang_x=input_ids,
+                    attention_mask=attention_mask,
+                    max_new_tokens=max_new_tokens,
+                    eos_token_id=self.text_tokenizer.eos_token_id,
+                    pad_token_id=self.text_tokenizer.pad_token_id,
+                    **generate_kwargs,
+                )
 
-        # Remove input ids from generation
-        answer_only_ids = gen_ids[:, input_ids.shape[1] :]
+                # Remove input ids from generation
+                answer_only_ids = gen_ids[:, input_ids.shape[1] :]
 
-        return self.text_tokenizer.batch_decode(
-            answer_only_ids, skip_special_tokens=True
-        )
+                return self.text_tokenizer.batch_decode(
+                    answer_only_ids, skip_special_tokens=True
+                )
+        finally:
+            # Restore original compilation setting
+            torch._dynamo.config.disable = original_disable
 
     def compute_loss(self, batch: List[Dict[str, any]]) -> torch.Tensor:
         """
@@ -294,9 +334,16 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         """
         Evaluate a prompt and return the generated text.
         """
-                
-        batch = [prompt.to_dict()]
-        self.eval()
-        batch = extend_time_series_to_match_patch_size_and_aggregate(batch)
-        output = self.generate(batch, max_new_tokens=max_new_tokens)
-        return output[0]
+        # Temporarily disable compilation to avoid data-dependent operation issues
+        original_disable = torch._dynamo.config.disable
+        torch._dynamo.config.disable = True
+        
+        try:        
+            batch = [prompt.to_dict()]
+            self.eval()
+            batch = extend_time_series_to_match_patch_size_and_aggregate(batch)
+            output = self.generate(batch, max_new_tokens=max_new_tokens)
+            return output[0]
+        finally:
+            # Restore original compilation setting
+            torch._dynamo.config.disable = original_disable

@@ -12,6 +12,10 @@ from tqdm.auto import tqdm
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
+from collections import defaultdict
+import numpy as np
+from torch.utils.data import Sampler
+from time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSampler
 
 
 TIME_SERIES_LABELS = [
@@ -70,7 +74,7 @@ class PAMAP2CoTQADataset(QADataset):
         Possible activity labels are:
         lying, sitting, standing, walking, running, cycling, nordic walking, watching TV, computer work, car driving, ascending stairs, descending stairs, vacuum cleaning, ironing, folding laundry, house cleaning, playing soccer, rope jumping.
         
-        - Make sure that your last word is the answer. You MUST end your response with "Answer: ".
+        - Make sure that your last word is the answer. You MUST end your response with "Answer: "
         """
 
         return text
@@ -141,6 +145,40 @@ class PAMAP2CoTQADataset(QADataset):
             prompts.append(TextTimeSeriesPrompt(text_prompt, time_series))
         return prompts
 
+    @staticmethod
+    def get_labels() -> List[str]:
+        """
+        Return the list of all possible activity labels for the PAMAP2CoTQADataset.
+        """
+        return [
+            "lying",
+            "sitting",
+            "standing",
+            "walking",
+            "running",
+            "cycling",
+            "nordic walking",
+            "watching TV",
+            "computer work",
+            "car driving",
+            "ascending stairs",
+            "descending stairs",
+            "vacuum cleaning",
+            "ironing",
+            "folding laundry",
+            "house cleaning",
+            "playing soccer",
+            "rope jumping",
+        ]
+
+
+    def _format_sample(self, row):
+        sample = super()._format_sample(row)
+        sample["label"] = row["label"]
+        sample["x_axis"] = row["x_axis"]
+        sample["y_axis"] = row["y_axis"]
+        sample["z_axis"] = row["z_axis"]
+        return sample
 
 if __name__ == "__main__":
     dataset = PAMAP2CoTQADataset(split="train", EOS_TOKEN="")
@@ -149,10 +187,17 @@ if __name__ == "__main__":
 
     print(f"Dataset sizes: Train: {len(dataset)}, Validation: {len(dataset_val)}, Test: {len(dataset_test)}")
 
+    # Use BalancedBatchSampler for the training set
+    labels = [row["label"] for row in dataset]
+    num_classes = len(set(labels))
+    batch_size = 4  # You can change this, but it must be divisible by num_classes
+    if batch_size % num_classes != 0:
+        raise ValueError(f"Batch size ({batch_size}) must be divisible by number of classes ({num_classes})")
+    sampler = BalancedBatchSampler(labels, batch_size)
+
     dataloader = DataLoader(
         dataset,
-        batch_size=4,
-        shuffle=True,
+        batch_sampler=sampler,
         collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
             batch, patch_size=4
         ),

@@ -13,7 +13,7 @@ class CNNTokenizer(TimeSeriesEncoderBase):
         dropout: float = 0.0,
         transformer_input_dim: int = TRANSFORMER_INPUT_DIM,
         patch_size: int = PATCH_SIZE,
-        max_patches: int = 1024,
+        max_patches: int = 2600,
     ):
         """
         Args:
@@ -73,7 +73,7 @@ class CNNTokenizer(TimeSeriesEncoderBase):
         N = x.size(1)
         if N > self.pos_embed.size(1):
             raise ValueError(
-                f"Too many patches {N}; max supported is {self.pos_embed.size(1)}"
+                f"Time series of length {N*4} is too long; max supported is {self.pos_embed.size(1)*4}. Change max_patches parameter in {__file__}"
             )
         pos = self.pos_embed[:, :N, :]
         x = x + pos
