@@ -67,7 +67,34 @@ OpenTSLM has been tested and works with the following models:
 
 Other variants may work but have not been extensively tested.
 
-## Multi-stage training (Curriculum)
+
+
+## 🚀 Quickstart with pretrained models
+
+EmbedHealth provides a factory class called `OpenTSLM` for easily loading pre-trained models from Hugging Face Hub. The `load_pretrained` method automatically detects the model type and returns the appropriate model instance.
+
+
+```python
+from src import OpenTSLM, TextPrompt, TextTimeSeriesPrompt, FullPrompt
+
+# Load model
+model = OpenTSLM.load_pretrained("OpenTSLM/gemma-3-270m-pt-har-flamingo")
+
+# Create prompt with raw time series data (normalization handled automatically)
+prompt = FullPrompt(
+    pre_prompt=TextPrompt("You are an expert in HAR analysis."),
+    text_time_series_prompt_list=[
+        TextTimeSeriesPrompt("X-axis accelerometer", [2.34, 2.34, 7.657, 3.21, -1.2])
+    ],
+    post_prompt=TextPrompt("What activity is this? Reasn step by step providing a full rationale before replying.")
+)
+
+# Generate response
+output = model.eval_prompt(prompt, normalize=True)
+print(output)
+```
+
+## Training: Multi-stage training (Curriculum)
 
 OpenTSLM uses curriculum learning with progressive training stages:
 
@@ -123,6 +150,12 @@ python curriculum_learning.py --model OpenTSLMFlamingo --eval_only
 - `--batch_size`: Batch size for training
 - `--gradient_checkpointing`: Enable gradient checkpointing for memory efficiency
 - `--verbose`: Enable verbose logging
+
+### Repository Naming Convention
+
+- Repository IDs ending with `-sp` will load and return `EmbedHealthSP` models
+- Repository IDs ending with `-flamingo` will load and return `EmbedHealthFlamingo` models
+
 
 ## 📁 Results Structure
 
