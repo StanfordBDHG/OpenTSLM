@@ -1,7 +1,9 @@
 import json
 import os
+import io
 import re
 import sys
+import base64
 from typing import Type, Callable, Dict, List, Any, Optional
 
 import numpy as np
@@ -10,6 +12,7 @@ import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers.pipelines import pipeline
+import matplotlib.pyplot as plt
 from time import sleep
 
 # Add src to path
