@@ -54,15 +54,17 @@ OpenTSLM has been tested and works with the following models:
 Other variants may work but have not been extensively tested.
 
 
+
 ## 🚀 Quickstart with pretrained models
 
 EmbedHealth provides a factory class called `OpenTSLM` for easily loading pre-trained models from Hugging Face Hub. The `load_pretrained` method automatically detects the model type and returns the appropriate model instance.
 
-### Quick Usage
 
 ```python
+from src import OpenTSLM, TextPrompt, TextTimeSeriesPrompt, FullPrompt
+
 # Load model
-model = OpenTSLM.load_pretrained("OpenTSLM/repo-id")
+model = OpenTSLM.load_pretrained("OpenTSLM/gemma-3-270m-pt-har-flamingo")
 
 # Create prompt with raw time series data (normalization handled automatically)
 prompt = FullPrompt(
@@ -70,7 +72,7 @@ prompt = FullPrompt(
     text_time_series_prompt_list=[
         TextTimeSeriesPrompt("X-axis accelerometer", [2.34, 2.34, 7.657, 3.21, -1.2])
     ],
-    post_prompt=TextPrompt("What activity is this?")
+    post_prompt=TextPrompt("What activity is this? Reasn step by step providing a full rationale before replying.")
 )
 
 # Generate response
@@ -135,18 +137,11 @@ python curriculum_learning.py --model OpenTSLMFlamingo --eval_only
 - `--gradient_checkpointing`: Enable gradient checkpointing for memory efficiency
 - `--verbose`: Enable verbose logging
 
-
 ### Repository Naming Convention
 
 - Repository IDs ending with `-sp` will load and return `EmbedHealthSP` models
 - Repository IDs ending with `-flamingo` will load and return `EmbedHealthFlamingo` models
 
-### Features
-
-- **Automatic Model Detection**: Detects model type from repository name suffix
-- **Device Auto-detection**: Automatically selects best available device (CUDA > MPS > CPU)
-- **Automatic Normalization**: Time series data is automatically normalized (zero mean, unit variance) during inference
-- **Hugging Face Integration**: Downloads models directly from Hugging Face Hub
 
 ## 📁 Results Structure
 
