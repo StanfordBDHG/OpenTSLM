@@ -8,6 +8,8 @@ SPDX-License-Identifier: MIT
 
 # OpenTSLM: Time-Series Language Models for Reasoning over Multivariate Medical Text- and Time-Series Data
 [![DOI](https://img.shields.io/badge/DOI-10.13140/RG.2.2.14827.60963-blue.svg)](https://doi.org/10.13140/RG.2.2.14827.60963)
+[![Static Analysis](https://github.com/StanfordBDHG/OpenTSLM/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/StanfordBDHG/OpenTSLM/actions/workflows/static-analysis.yml)
+
 
 Large Language Models (LLMs) have emerged as powerful tools for interpreting multimodal data (e.g., images, audio, text), often surpassing specialized models. In medicine, they hold particular promise for synthesizing large volumes of clinical information into actionable insights and patient-facing digital health applications.  Yet, a major limitation remains their inability to handle time series data. To overcome this gap, we present OpenTSLM, a family of Time Series Language Models (TSLMs) created by integrating time series as a native modality to pretrained Large Language Models, enabling natural-language prompting and reasoning over multiple time series of any length [...] **[🔗 Read the full paper](https://doi.org/10.13140/RG.2.2.14827.60963)**  
 
