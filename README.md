@@ -1,9 +1,15 @@
+<!--
+This source file is part of the OpenTSLM open-source project
+
+SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+
+SPDX-License-Identifier: MIT
+-->
+
 # OpenTSLM: Time-Series Language Models for Reasoning over Multivariate Medical Text- and Time-Series Data
 [![DOI](https://img.shields.io/badge/DOI-10.13140/RG.2.2.14827.60963-blue.svg)](https://doi.org/10.13140/RG.2.2.14827.60963)
 
-Large Language Models (LLMs) have emerged as powerful tools for interpreting multimodal data (e.g., images, audio, text), often surpassing specialized models. In medicine, they hold particular promise for synthesizing large volumes of clinical information into actionable insights and patient-facing digital health applications.  Yet, a major limitation remains their inability to handle time series data. To overcome this gap, we present OpenTSLM, a family of Time Series Language Models (TSLMs) created by integrating time series as a native modality to pretrained Large Language Models, enabling natural-language prompting and reasoning over multiple time series of any length... **[🔗 Read the full paper](https://www.researchgate.net/publication/395975374_OpenTSLM_Time-Series_Language_Models_for_Reasoning_over_Multivariate_Medical_Text-_and_Time-Series_Data)**  
-
-
+Large Language Models (LLMs) have emerged as powerful tools for interpreting multimodal data (e.g., images, audio, text), often surpassing specialized models. In medicine, they hold particular promise for synthesizing large volumes of clinical information into actionable insights and patient-facing digital health applications.  Yet, a major limitation remains their inability to handle time series data. To overcome this gap, we present OpenTSLM, a family of Time Series Language Models (TSLMs) created by integrating time series as a native modality to pretrained Large Language Models, enabling natural-language prompting and reasoning over multiple time series of any length [...] **[🔗 Read the full paper](https://doi.org/10.13140/RG.2.2.14827.60963)**  
 
 <p align="center">
   <img src="assets/schematic_overview_3.png" alt="Schematic Overview" width="100%">
@@ -11,13 +17,16 @@ Large Language Models (LLMs) have emerged as powerful tools for interpreting mul
 
 
 ## Examples
-OpenTSLM models can reason over multiple time series of any length at once, generating findings, captions, and rationales in natural language. We tested these models across a wide range of tasks spanning Human Activity Recognition (HAR) from 3-axis acceleration data, sleep stating from EEG readings, 12-lead ECG question answering, and time series captioning. Some examples are shown below, more are available in the paper.
+
+OpenTSLM models can reason over multiple time series of any length at once, generating findings, captions, and rationales in natural language. We tested these models across a wide range of tasks spanning Human Activity Recognition (HAR) from 3-axis acceleration data, sleep staging from EEG readings, 12-lead ECG question answering, and time series captioning. Some examples are shown below, more are available in the paper.
+
 <p align="center">
   <img src="assets/ecg_rationale.png" alt="ECG Rationale" width="32%">
   <img src="assets/har_rationale.png" alt="HAR Rationale" width="32%">
     <img src="assets/m4_caption.png" alt="M4 Caption" width="34%">
 
 </p>
+
 
 ## Installation
 
@@ -31,6 +40,7 @@ OpenTSLM models can reason over multiple time series of any length at once, gene
    ```bash
    pip install -r requirements.txt
    ```
+
 
 ## LLM Setup
 
@@ -66,6 +76,7 @@ OpenTSLM has been tested and works with the following models:
 - **google/gemma-3-1b-pt**
 
 Other variants may work but have not been extensively tested.
+
 
 ## Multi-stage training (Curriculum)
 
@@ -124,9 +135,10 @@ python curriculum_learning.py --model OpenTSLMFlamingo --eval_only
 - `--gradient_checkpointing`: Enable gradient checkpointing for memory efficiency
 - `--verbose`: Enable verbose logging
 
+
 ## 📁 Results Structure
 
-During training, the scripts creates a structured results directory:
+During training, the script creates a structured results directory:
 
 ```
 results/
@@ -179,31 +191,51 @@ results/
 
 Each stage automatically loads the best model from the previous stage, ensuring proper curriculum progression. Results are organized by model ID (sanitized), then by model type and stage. The `{llm_id}` directory name is derived from the `--llm_id` parameter (e.g., `meta-llama/Llama-3.2-1B` becomes `Llama3_2_1B`, `google/gemma-3-1b-pt` becomes `gemma_3_1b_pt`).
 
-## Contributors
-This work was made possible only by joint effort of many awesome collaborators:
 
-- Patrick Langer (Stanford, ETH Zurich)
-- Thomas Kaar (Stanford, TUM)
-- Max Rosenblattl (Stanford, TUM)
+## Authors
+
+This work was made possible through the collaborative efforts of an interdisciplinary team of researchers from computer science, medicine, and engineering. Thank you to all of the Co-authors of the TSLM publication:
+- Patrick Langer (Stanford University, ETH Zurich)
+- Thomas Kaar (Stanford University, TUM)
+- Max Rosenblattl (Stanford University, TUM)
 - Maxwell A. Xu (Google Research, University of Illinois Urbana-Champaign)
-- Winnie Chow (Stanford)
+- Winnie Chow (Stanford University)
 - Martin Maritsch (Amazon)
-- Daniel McDuff (Google Research, University Washington)
-- Elgar Fleisch (ETH Zurich)
+- Aradhana Verma (Stanford University)
+- Brian Han (Stanford University)
+- Daniel Seung Kim (University of Washington)
+- Henry Chubb (Stanford University)
+- Scott Ceresnak (Stanford University)
+- Aydin Zahedivash (Stanford University)
+- Alexander Tarlochan Singh Sandhu (Stanford University)
+- Fatima Rodriguez (Stanford University)
+- Daniel McDuff (Google Research, University of Washington)
+- Elgar Fleisch (ETH Zurich, University of St. Gallen)
+- Oliver Aalami (Stanford University)
 - Filipe Barata (ETH Zurich)
-- Paul Schmiedmayer (Stanford)
-
-<div align="center">
-  <img src="assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="160">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="assets/eth_cdhi_logo.png" alt="ETH Centre for Digital Health Interventions" height="160">
-</div>
+- Paul Schmiedmayer (Stanford University)
 
 ## Contributing
 
-Contributions to this project are welcome. Please make sure to read the [contribution guidelines](https://github.com/StanfordSpezi/.github/blob/main/CONTRIBUTING.md) and the [contributor covenant code of conduct](https://github.com/StanfordSpezi/.github/blob/main/CODE_OF_CONDUCT.md) first.
+Contributions to this project are welcome. Please make sure to read the [contribution guidelines](https://github.com/StanfordBDHG/.github/blob/main/CONTRIBUTING.md) and the [contributor covenant code of conduct](https://github.com/StanfordBDHG/.github/blob/main/CODE_OF_CONDUCT.md) first.
+
+You can find a list of all current contributors at [CONTRIBUTORS.md](CONTRIBUTORS.md).
+
+
+## Research Opportunities
+
+Are you a student interested in advancing the frontiers of time-series language models and digital health research? We welcome students to get involved in our research projects!
+
+Visit our [Student Research Opportunities page](http://bdh.stanford.edu/studentresearch) to learn more about current projects and how you can contribute to cutting-edge research at the intersection of AI and healthcare.
+
+For researchers and project partners interested in collaboration opportunities, please reach out to us at **digitalhealthresearch@stanford.edu**.
 
 
 ## License
 
-This project is licensed under the MIT License. 
+This project is licensed under the MIT License.
 
+<div align="left">
+  <img src="assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="100">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="assets/eth_cdhi_logo.png" alt="ETH Centre for Digital Health Interventions" height="100">
+</div>
