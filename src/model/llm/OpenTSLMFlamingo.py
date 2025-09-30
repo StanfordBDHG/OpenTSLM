@@ -13,19 +13,24 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from model_config import ENCODER_OUTPUT_DIM
 from model.llm.TimeSeriesLLM import TimeSeriesLLM
 from prompt.full_prompt import FullPrompt
-from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
+from time_series_datasets.util import (
+    extend_time_series_to_match_patch_size_and_aggregate,
+)
 
 # Monkey-patch FlamingoLayer to add attention_type property for compatibility with newer transformers
 from open_flamingo.open_flamingo.src.flamingo_lm import FlamingoLayer
 
+
 def _attention_type_property(self):
     """Proxy the attention_type attribute from the underlying decoder layer."""
-    return getattr(self.decoder_layer, 'attention_type', None)
+    return getattr(self.decoder_layer, "attention_type", None)
+
 
 # Add the attention_type property to FlamingoLayer
 FlamingoLayer.attention_type = property(_attention_type_property)
 
-class EmbedHealthFlamingo(TimeSeriesLLM):
+
+class OpenTSLMFlamingo(TimeSeriesLLM):
     def __init__(
         self,
         device: str,
@@ -52,7 +57,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             trust_remote_code=True,
             cache_dir=None,
             device_map={"": device},
-            attn_implementation='eager'
+            attn_implementation="eager",
         )
 
         # add Flamingo special tokens to the tokenizer
@@ -91,7 +96,7 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
                 else:
                     # Gemma3ForCausalLM (text-only 1B model) - layers are at standard model.layers
                     return "model.layers"
-            
+
             # Original logic for non-Gemma3 models
             for k in __KNOWN_DECODER_LAYERS_ATTR_NAMES:
                 if k.lower() in model.__class__.__name__.lower():
@@ -106,9 +111,13 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         lang_encoder.resize_token_embeddings(len(text_tokenizer))
 
         # Fix compatibility for Gemma3Config which has hidden_size in text_config
-        if hasattr(lang_encoder.config, "text_config") and hasattr(lang_encoder.config.text_config, "hidden_size"):
+        if hasattr(lang_encoder.config, "text_config") and hasattr(
+            lang_encoder.config.text_config, "hidden_size"
+        ):
             if not hasattr(lang_encoder.config, "hidden_size"):
-                lang_encoder.config.hidden_size = lang_encoder.config.text_config.hidden_size
+                lang_encoder.config.hidden_size = (
+                    lang_encoder.config.text_config.hidden_size
+                )
 
         model = TimeSeriesFlamingoWithTrainableEncoder(
             SimpleNamespace(visual=time_series_encoder),
@@ -235,13 +244,13 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         # Temporarily disable compilation to avoid data-dependent operation issues
         original_disable = torch._dynamo.config.disable
         torch._dynamo.config.disable = True
-        
+
         try:
             with torch.inference_mode():
                 input_ids, images, attention_mask, _ = self.pad_and_apply_batch(
                     batch, include_labels=True
                 )
-            
+
                 gen_ids = self.llm.generate(
                     vision_x=images,
                     lang_x=input_ids,
@@ -307,12 +316,14 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
             raise RuntimeError("No recognized model state key in checkpoint.")
 
         # Handle DDP (DistributedDataParallel) if needed
-        if hasattr(self, 'module'):
-            model_state = {f'module.{k}': v for k, v in model_state.items()}
+        if hasattr(self, "module"):
+            model_state = {f"module.{k}": v for k, v in model_state.items()}
 
         # Remove 'model.' prefix if present in checkpoint keys
-        if all(k.startswith('model.') for k in model_state.keys()):
-            model_state = {k.replace('model.', '', 1): v for k, v in model_state.items()}
+        if all(k.startswith("model.") for k in model_state.keys()):
+            model_state = {
+                k.replace("model.", "", 1): v for k, v in model_state.items()
+            }
 
         # Load state dict with strict=False to handle missing/unexpected keys
         missing_keys, unexpected_keys = self.load_state_dict(model_state, strict=False)
@@ -337,8 +348,8 @@ class EmbedHealthFlamingo(TimeSeriesLLM):
         # Temporarily disable compilation to avoid data-dependent operation issues
         original_disable = torch._dynamo.config.disable
         torch._dynamo.config.disable = True
-        
-        try:        
+
+        try:
             batch = [prompt.to_dict()]
             self.eval()
             batch = extend_time_series_to_match_patch_size_and_aggregate(batch)

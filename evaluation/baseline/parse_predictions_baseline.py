@@ -15,12 +15,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from evaluation.embedhealth.parse_predictions import (
+from evaluation.opentslm.parse_predictions import (
     calculate_f1_score,
     calculate_f1_stats,
     calculate_accuracy_stats,
     extract_answer,
 )
+
 
 def extract_structured_data(obj: Dict) -> List[Dict]:
     """Extract structured per-sample data points from a detailed results JSON object."""
@@ -40,23 +41,34 @@ def extract_structured_data(obj: Dict) -> List[Dict]:
             "model_prediction": model_prediction,
             "ground_truth": ground_truth,
             "accuracy": accuracy,
-            "f1_score": f1_result['f1_score'],
-            "precision": f1_result['precision'],
-            "recall": f1_result['recall'],
-            "prediction_normalized": f1_result['prediction_normalized'],
-            "ground_truth_normalized": f1_result['ground_truth_normalized']
+            "f1_score": f1_result["f1_score"],
+            "precision": f1_result["precision"],
+            "recall": f1_result["recall"],
+            "prediction_normalized": f1_result["prediction_normalized"],
+            "ground_truth_normalized": f1_result["ground_truth_normalized"],
         }
         data_points.append(data_point)
     return data_points
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Compute macro-F1 from a single baseline detailed results JSON.")
-    ap.add_argument("--detailed-json", type=Path, required=True, help="Path to a single detailed results JSON file")
-    ap.add_argument("--clean-out", type=Path, help="Optional path to write clean JSONL of parsed points")
+    ap = argparse.ArgumentParser(
+        description="Compute macro-F1 from a single baseline detailed results JSON."
+    )
+    ap.add_argument(
+        "--detailed-json",
+        type=Path,
+        required=True,
+        help="Path to a single detailed results JSON file",
+    )
+    ap.add_argument(
+        "--clean-out",
+        type=Path,
+        help="Optional path to write clean JSONL of parsed points",
+    )
     args = ap.parse_args()
 
-    with args.detailed_json.open('r', encoding='utf-8') as f:
+    with args.detailed_json.open("r", encoding="utf-8") as f:
         obj = json.load(f)
     data_points = extract_structured_data(obj)
 
@@ -75,13 +87,15 @@ def main():
     print(f"Macro-F1 Score: {f1_stats['macro_f1']:.4f}")
     print(f"Total Classes: {f1_stats['total_classes']}")
 
-    if f1_stats['class_f1_scores']:
+    if f1_stats["class_f1_scores"]:
         print(f"\nPer-Class F1 Scores:")
-        for class_name, scores in f1_stats['class_f1_scores'].items():
-            print(f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
+        for class_name, scores in f1_stats["class_f1_scores"].items():
+            print(
+                f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}"
+            )
 
     if args.clean_out:
-        with args.clean_out.open('w', encoding='utf-8') as f:
+        with args.clean_out.open("w", encoding="utf-8") as f:
             for item in data_points:
                 f.write(json.dumps(item, indent=2) + "\n")
         print(f"\nData saved to {args.clean_out}")

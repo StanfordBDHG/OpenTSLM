@@ -38,9 +38,9 @@ def parse_model_name(llm_id, model_type):
     elif "gemma-3-1b-pt" in base_name:
         base_name = "Gemma-3-1B-pt"
 
-    if model_type == "EmbedHealthSP":
+    if model_type == "OpenTSLMSP":
         type_name = "SoftPrompt"
-    elif model_type == "EmbedHealthFlamingo":
+    elif model_type == "OpenTSLMFlamingo":
         type_name = "Flamingo"
     else:
         type_name = model_type
@@ -59,18 +59,20 @@ def parse_simulation_dataset(name):
 def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
     # --- Paper-style settings ---
     plt.style.use("seaborn-v0_8-white")
-    matplotlib.rcParams.update({
-        "font.family": "serif",
-        "font.serif": ["Palatino", "Times New Roman", "DejaVu Serif"],
-        "font.size": 18,
-        "axes.labelsize": 20,
-        "axes.titlesize": 20,
-        "legend.fontsize": 17,
-        "xtick.labelsize": 17,
-        "ytick.labelsize": 17,
-        "axes.linewidth": 0.6,
-        "axes.edgecolor": "0.15",
-    })
+    matplotlib.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": ["Palatino", "Times New Roman", "DejaVu Serif"],
+            "font.size": 18,
+            "axes.labelsize": 20,
+            "axes.titlesize": 20,
+            "legend.fontsize": 17,
+            "xtick.labelsize": 17,
+            "ytick.labelsize": 17,
+            "axes.linewidth": 0.6,
+            "axes.edgecolor": "0.15",
+        }
+    )
 
     df = pd.read_csv(csv_file)
 
@@ -118,9 +120,7 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
             ax.set_title(base_model, fontsize=13, fontweight="bold")
             ax.set_facecolor("#F8F9FA")
             ax.text(
-                0.5, 0.5, "No data",
-                ha="center", va="center",
-                fontsize=10, color="gray"
+                0.5, 0.5, "No data", ha="center", va="center", fontsize=10, color="gray"
             )
             ax.set_xticks([])
             ax.set_yticks([])
@@ -136,7 +136,8 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
             # Successful runs (≤ threshold)
             ok_df = cfg_df[cfg_df["peak_cuda_reserved_gb"] <= OOM_THRESHOLD]
             ax.plot(
-                ok_df["total_length"], ok_df["peak_cuda_reserved_gb"],
+                ok_df["total_length"],
+                ok_df["peak_cuda_reserved_gb"],
                 label=cfg,
                 color=color,
                 linewidth=4.0,
@@ -161,7 +162,8 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
 
                 # red X marker
                 ax.scatter(
-                    first_oom["total_length"], OOM_THRESHOLD * 1.05,
+                    first_oom["total_length"],
+                    OOM_THRESHOLD * 1.05,
                     color="red",
                     marker="x",
                     s=80,
@@ -169,18 +171,25 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
                     zorder=5,
                 )
                 ax.text(
-                    first_oom["total_length"], OOM_THRESHOLD * 1.05,
-                    "OOM", color="red", fontsize=9,
-                    fontweight="bold", ha="center", va="bottom"
+                    first_oom["total_length"],
+                    OOM_THRESHOLD * 1.05,
+                    "OOM",
+                    color="red",
+                    fontsize=9,
+                    fontweight="bold",
+                    ha="center",
+                    va="bottom",
                 )
 
         # Titles & labels
         ax.set_title(base_model, fontsize=19, fontweight="bold")
-        
+
         # Only show axis labels on specific subplots
         if ax == axes[0]:  # Leftmost subplot
             ax.set_ylabel("Peak VRAM Usage (GB)", fontsize=18, fontweight="bold")
-            ax.set_xlabel("Total Sequence Length (N × L)", fontsize=18, fontweight="bold")
+            ax.set_xlabel(
+                "Total Sequence Length (N × L)", fontsize=18, fontweight="bold"
+            )
         else:
             ax.set_ylabel("")
             ax.set_xlabel("")
@@ -192,8 +201,14 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
 
         # Legend only in first subplot
         if ax == axes[0]:
-            leg = ax.legend(title=None, fontsize=17, loc="best", frameon=True,
-                            framealpha=0.95, edgecolor="0.3")
+            leg = ax.legend(
+                title=None,
+                fontsize=17,
+                loc="best",
+                frameon=True,
+                framealpha=0.95,
+                edgecolor="0.3",
+            )
             for text in leg.get_texts():
                 text.set_fontweight("bold")
 
