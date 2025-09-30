@@ -129,8 +129,8 @@ This work was made possible only by joint effort of many awesome collaborators:
 - Paul Schmiedmayer (ETH Zurich)
 
 <div align="center">
-  <img src="assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="120">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="assets/eth_cdhi_logo.png" alt="ETH Centre for Digital Health Interventions" height="120">
+  <img src="assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="160">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="assets/eth_cdhi_logo.png" alt="ETH Centre for Digital Health Interventions" height="160">
 </div>
 
 ## Contributing
