@@ -238,8 +238,8 @@ For researchers and project partners interested in collaboration opportunities, 
 This project is licensed under the MIT License.
 
 <div align="left">
-  <img src="assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="100">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="assets/eth_cdhi_logo.png" alt="ETH Centre for Digital Health Interventions" height="100">
-    <img src="assets/ASL_Logo2.svg" alt="ETH Agentic Systems Lab" height="100">
+  <img src="assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="90">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="assets/CDHI_white.svg" alt="ETH Centre for Digital Health Interventions" height="90">
+    <img src="assets/ASLwhite.svg" alt="ETH Agentic Systems Lab" height="90">
 
 </div>
