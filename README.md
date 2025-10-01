@@ -197,7 +197,7 @@ Each stage automatically loads the best model from the previous stage, ensuring 
 ## Authors
 
 This work was made possible through the collaborative efforts of an interdisciplinary team of researchers from computer science, medicine, and engineering. Thank you to all of the Co-authors of the TSLM publication:
-- Patrick Langer (Stanford University, ETH Zurich)
+- Patrick Langer (Stanford University, ETH Zurich, ETH Agentic Systems Lab)
 - Thomas Kaar (Stanford University, TUM)
 - Max Rosenblattl (Stanford University, TUM)
 - Maxwell A. Xu (Google Research, University of Illinois Urbana-Champaign)
