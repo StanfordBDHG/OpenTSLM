@@ -198,8 +198,8 @@ Each stage automatically loads the best model from the previous stage, ensuring 
 
 This work was made possible through the collaborative efforts of an interdisciplinary team of researchers from computer science, medicine, and engineering. Thank you to all of the Co-authors of the TSLM publication:
 - Patrick Langer (Stanford University, ETH Zurich, ETH Agentic Systems Lab)
-- Thomas Kaar (Stanford University, TUM)
-- Max Rosenblattl (Stanford University, TUM)
+- Thomas Kaar (Stanford University, TUM, ETH Agentic Systems Lab)
+- Max Rosenblattl (Stanford University, TUM, ETH Agentic Systems Lab)
 - Maxwell A. Xu (Google Research, University of Illinois Urbana-Champaign)
 - Winnie Chow (Stanford University)
 - Martin Maritsch (Amazon)
@@ -240,4 +240,6 @@ This project is licensed under the MIT License.
 <div align="left">
   <img src="assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="100">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   <img src="assets/eth_cdhi_logo.png" alt="ETH Centre for Digital Health Interventions" height="100">
+    <img src="assets/ASL_Logo2.svg" alt="ETH Agentic Systems Lab" height="100">
+
 </div>
