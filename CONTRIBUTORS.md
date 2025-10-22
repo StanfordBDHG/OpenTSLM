@@ -12,4 +12,5 @@ SPDX-License-Identifier: MIT
 * [Thomas Kaar](https://github.com/ThomasKaar)
 * [Max Rosenblattl](https://github.com/max-rosenblattl)
 * [Maxwell Xu](https://github.com/masquare)
+* [Winnie Chow](https://github.com/winnie0617)
 * [Paul Schmiedmayer](https://github.com/PSchmiedmayer)
