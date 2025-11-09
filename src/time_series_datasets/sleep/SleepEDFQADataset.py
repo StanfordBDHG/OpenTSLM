@@ -1,16 +1,36 @@
+#
+# This source file is part of the OpenTSLM open-source project
+#
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+#
+# SPDX-License-Identifier: MIT
+#
+
 from datasets import Dataset
 from typing import List, Tuple, Literal
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) )
+
+sys.path.append(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from time_series_datasets.QADataset import QADataset
 from time_series_datasets.sleep.sleepedf_cot_loader import load_sleepedf_cot_splits
 import numpy as np
 
+
 class SleepEDFCoTQADataset(QADataset):
-    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, format_sample_str: bool = False, time_series_format_function=None):
-        super().__init__(split, EOS_TOKEN, format_sample_str, time_series_format_function)
+    def __init__(
+        self,
+        split: Literal["train", "test", "validation"],
+        EOS_TOKEN: str,
+        format_sample_str: bool = False,
+        time_series_format_function=None,
+    ):
+        super().__init__(
+            split, EOS_TOKEN, format_sample_str, time_series_format_function
+        )
 
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         return load_sleepedf_cot_splits()
@@ -63,13 +83,20 @@ Rules:
         std = max(std, min_std)
         series_norm = (series - mean) / std
         text_prompt = f"The following is the EEG time series, it has mean {mean:.4f} and std {std:.4f}:"
-        
+
         return [TextTimeSeriesPrompt(text_prompt, series_norm.tolist())]
 
     @staticmethod
     def get_labels() -> List[str]:
         # This could be made dynamic, but for now, use the standard sleep stages
-        return ["Wake", "Non-REM stage 1", "Non-REM stage 2", "Non-REM stage 3", "REM sleep", "Movement"]
+        return [
+            "Wake",
+            "Non-REM stage 1",
+            "Non-REM stage 2",
+            "Non-REM stage 3",
+            "REM sleep",
+            "Movement",
+        ]
 
     def _format_sample(self, row):
         sample = super()._format_sample(row)
@@ -77,15 +104,21 @@ Rules:
         sample["original_data"] = row["time_series"]
         return sample
 
+
 if __name__ == "__main__":
     dataset = SleepEDFCoTQADataset(split="train", EOS_TOKEN="")
     dataset_val = SleepEDFCoTQADataset(split="validation", EOS_TOKEN="")
     dataset_test = SleepEDFCoTQADataset(split="test", EOS_TOKEN="")
-    print(f"Dataset sizes: Train: {len(dataset)}, Validation: {len(dataset_val)}, Test: {len(dataset_test)}")
+    print(
+        f"Dataset sizes: Train: {len(dataset)}, Validation: {len(dataset_val)}, Test: {len(dataset_test)}"
+    )
     if len(dataset) > 0:
         sample = dataset[0]
         print("Sample keys:", sample.keys())
         print("Sample answer:", sample["answer"])
-        print("Sample time series text:", sample["time_series_text"] if "time_series_text" in sample else "N/A")
+        print(
+            "Sample time series text:",
+            sample["time_series_text"] if "time_series_text" in sample else "N/A",
+        )
         print("Sample pre prompt:", sample["pre_prompt"])
-        print("Sample post prompt:", sample["post_prompt"]) 
+        print("Sample post prompt:", sample["post_prompt"])

@@ -1,3 +1,11 @@
+#
+# This source file is part of the OpenTSLM open-source project
+#
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+#
+# SPDX-License-Identifier: MIT
+#
+
 import json
 import os
 
@@ -162,6 +170,5 @@ def parse_baseline_json(input_path: str):
 
 if __name__ == "__main__":
     # Default path: update if needed
-    # TODO what should happen with this path? Should we remove it?
-    input_file = "/Users/planger/Development/EmbedHealth/evaluation/results/baseline_pod/evaluation_results_meta-llama-llama-3-2-3b_tsqadataset.json"
+    input_file = "evaluation_results_meta-llama-llama-3-2-3b_tsqadataset.json"
     parse_baseline_json(input_file)

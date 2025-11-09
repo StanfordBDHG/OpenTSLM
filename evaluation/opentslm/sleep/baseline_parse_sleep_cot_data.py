@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+#
+# This source file is part of the OpenTSLM open-source project
+#
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+#
+# SPDX-License-Identifier: MIT
+#
+
 """Parser for converting baseline sleep COT JSON files to clean format."""
 
 import json
@@ -339,8 +347,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     # Example usage with the baseline JSON file
-    # TODO what should happen with this path? Should we remove it?
-    input_file = "/Users/planger/Development/EmbedHealth/evaluation/results/baseline/detailedold/evaluation_results_meta-llama-llama-3-2-3b_sleepedfcotqadataset.json"
+    input_file = "evaluation_results_meta-llama-llama-3-2-3b_sleepedfcotqadataset.json"
     output_file = "out.jsonl"
 
     parse_baseline_sleep_cot_json(input_file, output_file)

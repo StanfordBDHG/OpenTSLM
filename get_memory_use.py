@@ -1,3 +1,11 @@
+#
+# This source file is part of the OpenTSLM open-source project
+#
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+#
+# SPDX-License-Identifier: MIT
+#
+
 import argparse
 import csv
 import os
@@ -10,7 +18,6 @@ import torch
 from tqdm.auto import tqdm
 from torch.utils.data import DataLoader
 import os as _os
-import psutil
 
 import pynvml  # type: ignore
 
@@ -43,7 +50,7 @@ from time_series_datasets.util import (
 def get_device(device_arg: str | None) -> str:
     if device_arg:
         return device_arg
-    return "cpu"  # Default to CPU for easier testing
+    return "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def measure_peak_cuda_bytes() -> int:
@@ -58,16 +65,6 @@ def measure_peak_cuda_reserved_bytes() -> int:
         return -1
     torch.cuda.synchronize()
     return int(torch.cuda.max_memory_reserved())
-
-
-def measure_peak_cpu_bytes() -> int:
-    """Measure peak CPU memory usage in bytes"""
-    try:
-        process = psutil.Process()
-        memory_info = process.memory_info()
-        return int(memory_info.rss)  # Resident Set Size (physical memory)
-    except Exception:
-        return -1
 
 
 def nvml_current_process_bytes() -> int:
@@ -163,14 +160,9 @@ def train_for_steps(
 ) -> Tuple[float, int, int, int]:
     model.train()
     optimizer = build_optimizer(model, model_type)
-
-    # Initialize memory tracking
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
-
-    # Track CPU memory baseline
-    cpu_memory_baseline = measure_peak_cpu_bytes()
 
     last_loss = 0.0
     # DataLoader with shuffle and collate that pads series
@@ -186,7 +178,6 @@ def train_for_steps(
     max_peak_bytes = -1
     max_reserved_bytes = -1
     max_nvml_bytes = -1
-    max_cpu_bytes = cpu_memory_baseline
     step = 0
     # Initialize postfix
     pbar.set_postfix(
@@ -205,7 +196,6 @@ def train_for_steps(
             loss.backward()
             optimizer.step()
         last_loss = float(loss.detach().item())
-
         # Track peak memory across steps
         if torch.cuda.is_available():
             torch.cuda.synchronize()
@@ -239,15 +229,14 @@ def train_for_steps(
         if step >= steps:
             break
     pbar.close()
-
     if torch.cuda.is_available():
         peak_bytes = max_peak_bytes
         peak_reserved_bytes = max_reserved_bytes
         nvml_peak_bytes = max_nvml_bytes
     else:
-        peak_bytes = max_cpu_bytes  # Use CPU memory as fallback
-        peak_reserved_bytes = max_cpu_bytes
-        nvml_peak_bytes = max_cpu_bytes
+        peak_bytes = -1
+        peak_reserved_bytes = -1
+        nvml_peak_bytes = -1
     return last_loss, peak_bytes, peak_reserved_bytes, nvml_peak_bytes
 
 
@@ -431,17 +420,23 @@ def main():
             res["dataset"],
             res["loss"],
             res["peak_cuda_bytes"],
-            f"{peak_gb:.4f}"
-            if isinstance(peak_gb, float) and peak_gb >= 0
-            else peak_gb,
+            (
+                f"{peak_gb:.4f}"
+                if isinstance(peak_gb, float) and peak_gb >= 0
+                else peak_gb
+            ),
             res.get("peak_cuda_reserved_bytes", -1),
-            f"{peak_reserved_gb:.4f}"
-            if isinstance(peak_reserved_gb, float) and peak_reserved_gb >= 0
-            else peak_reserved_gb,
+            (
+                f"{peak_reserved_gb:.4f}"
+                if isinstance(peak_reserved_gb, float) and peak_reserved_gb >= 0
+                else peak_reserved_gb
+            ),
             res.get("nvml_peak_bytes", -1),
-            f"{nvml_peak_gb:.4f}"
-            if isinstance(nvml_peak_gb, float) and nvml_peak_gb >= 0
-            else nvml_peak_gb,
+            (
+                f"{nvml_peak_gb:.4f}"
+                if isinstance(nvml_peak_gb, float) and nvml_peak_gb >= 0
+                else nvml_peak_gb
+            ),
             res["status"],
             res["error"],
         ],

@@ -1,3 +1,11 @@
+#
+# This source file is part of the OpenTSLM open-source project
+#
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+#
+# SPDX-License-Identifier: MIT
+#
+
 from datasets import Dataset
 from typing import List, Tuple, Literal
 
@@ -20,8 +28,16 @@ TIME_SERIES_LABELS = [
 
 
 class HARAccQADataset(QADataset):
-    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, format_sample_str: bool = False, time_series_format_function=None):
-        super().__init__(split, EOS_TOKEN, format_sample_str, time_series_format_function)
+    def __init__(
+        self,
+        split: Literal["train", "test", "validation"],
+        EOS_TOKEN: str,
+        format_sample_str: bool = False,
+        time_series_format_function=None,
+    ):
+        super().__init__(
+            split, EOS_TOKEN, format_sample_str, time_series_format_function
+        )
 
     def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
         """
@@ -99,7 +115,9 @@ if __name__ == "__main__":
     dataset_val = HARAccQADataset(split="validation", EOS_TOKEN="")
     dataset_test = HARAccQADataset(split="test", EOS_TOKEN="")
 
-    print(f"Dataset sizes: Train: {len(dataset)}, Validation: {len(dataset_val)}, Test: {len(dataset_test)}")
+    print(
+        f"Dataset sizes: Train: {len(dataset)}, Validation: {len(dataset_val)}, Test: {len(dataset_test)}"
+    )
 
     dataloader = DataLoader(
         dataset_test,

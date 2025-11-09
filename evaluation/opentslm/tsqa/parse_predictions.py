@@ -1,3 +1,11 @@
+#
+# This source file is part of the OpenTSLM open-source project
+#
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+#
+# SPDX-License-Identifier: MIT
+#
+
 import json
 import os
 from collections import Counter
@@ -101,8 +109,7 @@ def calculate_f1_stats(data_points, allowed_labels=None):
 
 
 # Path to your JSONL file
-# TODO what should happen with this path? Should we remove it?
-file_path = "/Users/planger/Development/EmbedHealth/evaluation/results/baseline/detailed/evaluation_results_openai-gpt-4o_tsqadataset.json"
+file_path = "evaluation_results_openai-gpt-4o_tsqadataset.json"
 
 # Check if file exists
 if not os.path.exists(file_path):

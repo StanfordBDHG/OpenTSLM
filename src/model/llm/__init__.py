@@ -1,10 +1,7 @@
-# Import main classes
-from .OpenTSLM import OpenTSLM
-from .OpenTSLMFlamingo import OpenTSLMFlamingo
-from .OpenTSLMSP import OpenTSLMSP
-
-__all__ = [
-    "OpenTSLM",
-    "OpenTSLMFlamingo", 
-    "OpenTSLMSP"
-]
+#
+# This source file is part of the OpenTSLM open-source project
+#
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+#
+# SPDX-License-Identifier: MIT
+#

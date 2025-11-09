@@ -1,3 +1,11 @@
+#
+# This source file is part of the OpenTSLM open-source project
+#
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+#
+# SPDX-License-Identifier: MIT
+#
+
 from datasets import Dataset
 from typing import List, Tuple
 
@@ -70,6 +78,7 @@ class PAMAP2AccQADataset(QADataset):
     def _get_post_prompt(self, _row) -> str:
         activities = ", ".join(MAIN_ACTITIVIES)
         text = f"""
+
         Answer ONLY with the activity label.
         The following activities are possible: {activities}
         You MUST end your response with 'Answer: <class label>'

@@ -1,0 +1,15 @@
+# This source file is part of the OpenTSLM open-source project
+#
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+#
+# SPDX-License-Identifier: MIT
+
+# Requirements for ECG Review Response Analyzer
+matplotlib>=3.5.0
+seaborn>=0.11.0
+pandas>=1.3.0
+numpy>=1.21.0
+scipy>=1.7.0
+openpyxl>=3.0.0
+Pillow>=8.0.0
+scikit-learn>=1.0.0

@@ -1,3 +1,11 @@
+#
+# This source file is part of the OpenTSLM open-source project
+#
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+#
+# SPDX-License-Identifier: MIT
+#
+
 import json
 import os
 import io
@@ -5,7 +13,6 @@ import re
 import sys
 import base64
 from typing import Type, Callable, Dict, List, Any, Optional
-from abc import ABC, abstractmethod
 
 import numpy as np
 import pandas as pd
@@ -110,7 +117,8 @@ class CommonEvaluator:
                 formatter = llama_formatter
                 print(f"Using Llama formatter for model: {model_name}")
             else:
-                print("Defaulting to Llama formatter for model: {model_name}")
+                print(f"Defaulting to Llama formatter for model: {model_name}")
+
                 formatter = llama_formatter
         else:
             formatter = llama_formatter
@@ -296,9 +304,6 @@ class CommonEvaluator:
                         print(f"PREDICTION: {generated_text}")
                         print("=" * 80)
                         first_error_printed = True
-
-                # total_samples is already set to dataset_size, no need to increment
-
             except Exception as e:
                 print(f"Error processing sample {idx}: {e}")
                 continue
@@ -493,9 +498,9 @@ class CommonEvaluator:
                 "dataset_name": dataset_name,
                 "total_samples": total_samples,
                 "successful_inferences": successful_inferences,
-                "success_rate": successful_inferences / total_samples
-                if total_samples > 0
-                else 0.0,
+                "success_rate": (
+                    successful_inferences / total_samples if total_samples > 0 else 0.0
+                ),
                 "metrics": aggregate_metrics,
                 "detailed_results": individual_results,
             }

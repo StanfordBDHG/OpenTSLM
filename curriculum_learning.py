@@ -1,3 +1,11 @@
+#
+# This source file is part of the OpenTSLM open-source project
+#
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+#
+# SPDX-License-Identifier: MIT
+#
+
 import sys
 import os
 
@@ -813,10 +821,7 @@ class CurriculumTrainer:
                     print(f"Merged per-rank predictions into: {final_results_file}")
             finally:
                 pass
-        # Report test loss as NaN since we skip explicit loss computation during evaluation
-        # Before, we were computing the loss explicitly, but this required to run the model twice, once for loss and once for predictions.
         avg_test_loss = float("nan")
-
         # Calculate stage-specific metrics
         metrics = {"test_loss": avg_test_loss}
         if epoch is not None:

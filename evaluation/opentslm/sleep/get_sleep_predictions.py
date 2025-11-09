@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+#
+# This source file is part of the OpenTSLM open-source project
+#
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+#
+# SPDX-License-Identifier: MIT
+#
+
 """
 Script to evaluate SleepEDFCoTQADataset with a trained OpenTSLMSP model.
 Stores time series data, ground truth labels, and rationale to CSV for later plotting.
@@ -219,8 +227,7 @@ def main():
 
     # Configuration - adjust these parameters as needed
     config = {
-        # TODO what should happen with this path? Should we remove it?
-        "model_path": "results/Llama_3_2_1B/EmbedHealthSP/stage4_sleep_cot/checkpoints/best_model.pt",  # Path to your trained model
+        "model_path": "best_model.pt",  # Path to your trained model
         "output_path": "sleep_cot_data_predictions.csv",  # Output CSV file
         "num_samples": 10,  # Number of random samples to evaluate
         "llm_id": "meta-llama/Llama-3.2-1B",  # LLM ID used for training

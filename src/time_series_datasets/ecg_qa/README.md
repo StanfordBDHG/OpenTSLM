@@ -1,4 +1,12 @@
-# ECG-QA Dataset Integration
+<!--
+This source file is part of the OpenTSLM open-source project
+
+SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+
+SPDX-License-Identifier: MIT
+-->
+
+# ECG Question-Answering Dataset
 
 ECG-QA is one of the core training datasets for **OpenTSLM**, providing comprehensive question-answering capabilities for electrocardiogram analysis. This dataset combines ECG time series data from PTB-XL with diverse medical questions, enabling text-time series LLMs to perform clinical ECG interpretation.
 

@@ -1,3 +1,11 @@
+<!--
+This source file is part of the OpenTSLM open-source project
+
+SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+
+SPDX-License-Identifier: MIT
+-->
+
 ## Example ECG Analysis
 
 **Clinical Context:** 76-year-old male patient. 12-lead ECG. clinical recording. recorded with AT-6 6. Signal quality: baseline drift noted, static noise present, burst noise present, electrode artifacts present. extra beats detected during recording. pacemaker present.
