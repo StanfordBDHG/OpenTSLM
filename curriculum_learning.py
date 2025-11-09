@@ -781,7 +781,6 @@ class CurriculumTrainer:
                                 result["ecg_id"] = sample["ecg_id"]
                             if "correct_answer" in sample:
                                 result["correct_answer"] = sample["correct_answer"]
-
                         results.append(result)
                         # Stream write each result immediately to per-rank file
                         results_fp.write(json.dumps(result, ensure_ascii=False) + "\n")
@@ -822,11 +821,7 @@ class CurriculumTrainer:
                     print(f"Merged per-rank predictions into: {final_results_file}")
             finally:
                 pass
-
-        # Report test loss as NaN since we skip explicit loss computation during evaluation
-        # Before, we were computing the loss explicitly, but this required to run the model twice, once for loss and once for predictions.
         avg_test_loss = float("nan")
-
         # Calculate stage-specific metrics
         metrics = {"test_loss": avg_test_loss}
         if epoch is not None:
@@ -848,7 +843,6 @@ class CurriculumTrainer:
                             continue
                 additional_metrics = metric_func(predictions, gold_answers)
                 metrics.update(additional_metrics)
-
         # Save results only on rank 0 (or when not distributed)
         if (not dist.is_initialized()) or (self.rank == 0):
             # Save metrics

@@ -498,9 +498,9 @@ class CommonEvaluator:
                 "dataset_name": dataset_name,
                 "total_samples": total_samples,
                 "successful_inferences": successful_inferences,
-                "success_rate": successful_inferences / total_samples
-                if total_samples > 0
-                else 0.0,
+                "success_rate": (
+                    successful_inferences / total_samples if total_samples > 0 else 0.0
+                ),
                 "metrics": aggregate_metrics,
                 "detailed_results": individual_results,
             }
