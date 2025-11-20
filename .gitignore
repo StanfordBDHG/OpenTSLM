@@ -4,7 +4,11 @@ __pycache__
 **/.DS_STORE
 
 raw_data
+data/
 
+# Download artifacts
+mimic_download.log
+nohup.out
 
 *.ts
 *.zip
