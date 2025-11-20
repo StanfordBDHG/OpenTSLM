@@ -67,6 +67,7 @@ from model_config import (
 CURRICULUM_STAGES = [
     "stage1_mcq",
     "stage2_captioning",
+    "stage_tsexam_eval",  # Evaluation only on TimeSeriesExam1
     "stage3_cot",
     "stage4_sleep_cot",
     "stage5_ecg_cot",
