@@ -17,6 +17,7 @@ import argparse
 from typing import List, Optional, Dict, Any, Callable
 from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.m4.M4QADataset import M4QADataset
+from time_series_datasets.timeseriesexam.TimeSeriesExam1QADataset import TimeSeriesExam1QADataset
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
@@ -1288,6 +1289,30 @@ class CurriculumTrainer:
             eval_only=eval_only,
         )
 
+    def stage_tsexam_eval(
+        self, batch_size: int = None, eval_only: bool = False
+    ) -> Dict[str, Any]:
+        """TimeSeriesExam1 Evaluation (evaluation only, no training).
+
+        Configuration:
+        - This stage loads the checkpoint from stage2_captioning
+        - Only runs evaluation on TimeSeriesExam1 test set
+        - Metric: Accuracy
+        """
+        return self._train_stage(
+            stage_name="stage_tsexam_eval",
+            dataset_class=TimeSeriesExam1QADataset,
+            num_epochs=1,  # Not used since eval_only
+            lr_encoder=2e-4,  # Not used since eval_only
+            lr_projector=1e-4,  # Not used since eval_only
+            lr_base=2e-4,  # Not used since eval_only
+            metric_func=lambda preds, golds: {
+                "accuracy": self._calculate_accuracy(preds, golds)
+            },
+            batch_size=batch_size,
+            eval_only=True,  # Always eval-only for this stage
+        )
+
     def stage3_cot(
         self, batch_size: int = None, eval_only: bool = False
     ) -> Dict[str, Any]:
@@ -1463,6 +1488,12 @@ class CurriculumTrainer:
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage2_captioning":
                 stage_results = self.stage2_captioning(
+                    batch_size=batch_size, eval_only=eval_only
+                )
+                results[stage] = stage_results
+                self._mark_stage_completed(stage, stage_results)
+            elif stage == "stage_tsexam_eval":
+                stage_results = self.stage_tsexam_eval(
                     batch_size=batch_size, eval_only=eval_only
                 )
                 results[stage] = stage_results
