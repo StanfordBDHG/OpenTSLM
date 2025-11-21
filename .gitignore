@@ -10,6 +10,21 @@ data/
 mimic_download.log
 nohup.out
 
+# Log files
+*.log
+training_log.txt
+interleaved_training.log
+
+# Pretrained models and checkpoints
+*.pth
+*.pt
+*.ckpt
+*.bin
+*.safetensors
+checkpoints/
+results/
+results_interleaved/
+
 *.ts
 *.zip
 ./__pycache__
