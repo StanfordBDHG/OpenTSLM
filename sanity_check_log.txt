@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+#
+# SPDX-License-Identifier: MIT
+
 The new embeddings will be initialized from a multivariate normal distribution that has old embeddings' mean and covariance. As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. To disable this, use `mean_resizing=False`
 Warning: peft not available. LoRA fine-tuning will be disabled.
 🧪 Starting SANITY CHECK
