@@ -27,7 +27,8 @@ interleaved_training.log
 *.safetensors
 checkpoints/
 results/
-results_interleaved/
+results_interleaved/*
+!results_interleaved/interleaved_session_20251120_220200/
 
 *.ts
 *.zip
