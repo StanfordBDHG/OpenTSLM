@@ -122,6 +122,7 @@ def run_sft(
         dataset_kwargs={"skip_prepare_dataset": True},
         max_length=max_seq_len,
         packing=False,
+        remove_unused_columns=False
     )
 
     def process_vision_info(messages: List[dict]):
