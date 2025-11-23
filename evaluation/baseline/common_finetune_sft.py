@@ -58,7 +58,7 @@ def run_sft(
     # if tokenizer.pad_token is None:
     #     tokenizer.pad_token = tokenizer.eos_token
 
-    processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it") # for some reason it is preferred 
+    processor = AutoProcessor.from_pretrained("google/gemma-3-4b-pt") # for some reason it is preferred 
 
 
     model = AutoModelForImageTextToText.from_pretrained(
@@ -182,7 +182,7 @@ def run_sft(
         processing_class=processor,
         train_dataset=ds,
         args=training_args,
-        data_collator=data_collator,
+        data_collator=collate_fn,
     )
 
     trainer.train()
@@ -194,3 +194,4 @@ def run_sft(
     # del model
     # del trainer
     # torch.cuda.empty_cache()
+
