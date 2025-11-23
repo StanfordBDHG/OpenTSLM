@@ -73,15 +73,30 @@ class TimeSeriesExam1QADataset(QADataset):
 
     def _get_answer(self, row) -> str:
         """
-        Get the answer text.
+        Get the answer as an option letter (e.g., "(a)", "(b)").
+
+        Converts the full text answer from the dataset to the corresponding
+        option letter by matching it against the options list.
 
         Args:
             row: Dataset row containing answer data
 
         Returns:
-            The answer string
+            The answer in option letter format (e.g., "(b)")
         """
-        return row['answer']
+        answer_text = row['answer']
+        options = row['options']
+        option_labels = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+
+        # Find which option matches the answer
+        for idx, option in enumerate(options):
+            if option == answer_text:
+                if idx < len(option_labels):
+                    return f"({option_labels[idx]})"
+
+        # Fallback: if exact match not found, return the original answer
+        # This shouldn't happen with valid data, but provides safety
+        return answer_text
 
     def _get_pre_prompt(self, row) -> str:
         """
@@ -118,6 +133,7 @@ class TimeSeriesExam1QADataset(QADataset):
         Returns:
             Post-prompt string asking for the answer
         """
+        # Original simple prompt (no explicit instruction about format)
         return "Answer:"
 
     def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:

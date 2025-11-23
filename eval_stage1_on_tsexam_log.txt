@@ -1,0 +1,58 @@
+The new embeddings will be initialized from a multivariate normal distribution that has old embeddings' mean and covariance. As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. To disable this, use `mean_resizing=False`
+================================================================================
+EVALUATING STAGE1 CHECKPOINT ON TIMESERIESEXAM
+================================================================================
+Checkpoint: results/Llama_3_2_1B/OpenTSLMFlamingo/stage1_mcq/checkpoints/best_model.pt
+Output directory: results/Llama_3_2_1B/OpenTSLMFlamingo/tsqa_on_ts_exam
+Batch size: 1
+Device: cuda:0
+Rank: 0, World size: 1
+================================================================================
+
+🔧 Creating OpenTSLMFlamingo model...
+Flamingo Using device: cuda:0
+
+📂 Loading stage1 checkpoint: results/Llama_3_2_1B/OpenTSLMFlamingo/stage1_mcq/checkpoints/best_model.pt
+✅ Loaded checkpoint from epoch 13
+   Validation loss: 0.035481471504488174
+
+📚 Loading TimeSeriesExam test dataset...
+Formatting training samples...
+Training samples:   0%|          | 0/521 [00:00<?, ?it/s]Training samples:  37%|███▋      | 191/521 [00:00<00:00, 1902.28it/s]Training samples:  73%|███████▎  | 382/521 [00:00<00:00, 1827.75it/s]Training samples: 100%|██████████| 521/521 [00:00<00:00, 1840.46it/s]
+Formatting validation samples...
+Validation samples:   0%|          | 0/75 [00:00<?, ?it/s]Validation samples: 100%|██████████| 75/75 [00:00<00:00, 1811.18it/s]
+Formatting test samples...
+Test samples:   0%|          | 0/150 [00:00<?, ?it/s]Test samples: 100%|██████████| 150/150 [00:00<00:00, 1834.99it/s]
+   Test samples: 150
+
+🔍 Running evaluation...
+Saving predictions to: results/Llama_3_2_1B/OpenTSLMFlamingo/tsqa_on_ts_exam/results/test_predictions_rank_0.jsonl
+Evaluating:   0%|          | 0/150 [00:00<?, ?it/s]Evaluating:   1%|          | 1/150 [00:00<01:18,  1.89it/s]Evaluating:   2%|▏         | 3/150 [00:00<00:27,  5.29it/s]Evaluating:   3%|▎         | 5/150 [00:00<00:18,  7.84it/s]Evaluating:   5%|▍         | 7/150 [00:00<00:16,  8.87it/s]Evaluating:   6%|▌         | 9/150 [00:01<00:13, 10.34it/s]Evaluating:   7%|▋         | 11/150 [00:01<00:11, 11.64it/s]Evaluating:   9%|▊         | 13/150 [00:01<00:10, 12.49it/s]Evaluating:  10%|█         | 15/150 [00:01<00:10, 13.07it/s]Evaluating:  11%|█▏        | 17/150 [00:01<00:09, 13.49it/s]Evaluating:  13%|█▎        | 19/150 [00:01<00:09, 13.71it/s]Evaluating:  14%|█▍        | 21/150 [00:01<00:09, 13.99it/s]Evaluating:  15%|█▌        | 23/150 [00:02<00:09, 14.08it/s]Evaluating:  17%|█▋        | 25/150 [00:02<00:08, 13.96it/s]Evaluating:  18%|█▊        | 27/150 [00:02<00:08, 14.04it/s]Evaluating:  19%|█▉        | 29/150 [00:02<00:08, 14.16it/s]Evaluating:  21%|██        | 31/150 [00:02<00:08, 14.14it/s]Evaluating:  22%|██▏       | 33/150 [00:02<00:08, 14.27it/s]Evaluating:  23%|██▎       | 35/150 [00:02<00:08, 14.06it/s]Evaluating:  25%|██▍       | 37/150 [00:03<00:07, 14.14it/s]Evaluating:  26%|██▌       | 39/150 [00:03<00:07, 14.14it/s]Evaluating:  27%|██▋       | 41/150 [00:03<00:07, 14.02it/s]Evaluating:  29%|██▊       | 43/150 [00:03<00:07, 14.08it/s]Evaluating:  30%|███       | 45/150 [00:03<00:07, 14.24it/s]Evaluating:  31%|███▏      | 47/150 [00:03<00:07, 14.35it/s]Evaluating:  33%|███▎      | 49/150 [00:03<00:07, 14.39it/s]Evaluating:  34%|███▍      | 51/150 [00:04<00:07, 13.46it/s]Evaluating:  35%|███▌      | 53/150 [00:04<00:07, 12.99it/s]Evaluating:  37%|███▋      | 55/150 [00:04<00:07, 13.45it/s]Evaluating:  38%|███▊      | 57/150 [00:04<00:06, 13.84it/s]Evaluating:  39%|███▉      | 59/150 [00:04<00:06, 14.08it/s]Evaluating:  41%|████      | 61/150 [00:04<00:06, 14.24it/s]Evaluating:  42%|████▏     | 63/150 [00:04<00:06, 14.31it/s]Evaluating:  43%|████▎     | 65/150 [00:05<00:05, 14.38it/s]Evaluating:  45%|████▍     | 67/150 [00:05<00:05, 14.53it/s]Evaluating:  46%|████▌     | 69/150 [00:05<00:05, 14.57it/s]Evaluating:  47%|████▋     | 71/150 [00:05<00:05, 14.60it/s]Evaluating:  49%|████▊     | 73/150 [00:05<00:05, 14.36it/s]Evaluating:  50%|█████     | 75/150 [00:05<00:05, 14.41it/s]Evaluating:  51%|█████▏    | 77/150 [00:05<00:05, 14.16it/s]Evaluating:  53%|█████▎    | 79/150 [00:06<00:04, 14.27it/s]Evaluating:  54%|█████▍    | 81/150 [00:06<00:04, 14.44it/s]Evaluating:  55%|█████▌    | 83/150 [00:06<00:04, 14.46it/s]Evaluating:  57%|█████▋    | 85/150 [00:06<00:04, 14.48it/s]Evaluating:  58%|█████▊    | 87/150 [00:06<00:04, 14.49it/s]Evaluating:  59%|█████▉    | 89/150 [00:06<00:04, 14.50it/s]Evaluating:  61%|██████    | 91/150 [00:06<00:04, 14.61it/s]Evaluating:  62%|██████▏   | 93/150 [00:07<00:03, 14.64it/s]Evaluating:  63%|██████▎   | 95/150 [00:07<00:03, 14.71it/s]Evaluating:  65%|██████▍   | 97/150 [00:07<00:03, 14.72it/s]Evaluating:  66%|██████▌   | 99/150 [00:07<00:03, 14.74it/s]Evaluating:  67%|██████▋   | 101/150 [00:07<00:03, 14.73it/s]Evaluating:  69%|██████▊   | 103/150 [00:07<00:03, 14.79it/s]Evaluating:  70%|███████   | 105/150 [00:07<00:03, 14.61it/s]Evaluating:  71%|███████▏  | 107/150 [00:07<00:03, 14.28it/s]Evaluating:  73%|███████▎  | 109/150 [00:08<00:02, 14.44it/s]Evaluating:  74%|███████▍  | 111/150 [00:08<00:02, 14.49it/s]Evaluating:  75%|███████▌  | 113/150 [00:08<00:02, 14.54it/s]Evaluating:  77%|███████▋  | 115/150 [00:08<00:02, 14.64it/s]Evaluating:  78%|███████▊  | 117/150 [00:08<00:02, 14.47it/s]Evaluating:  79%|███████▉  | 119/150 [00:08<00:02, 14.54it/s]Evaluating:  81%|████████  | 121/150 [00:08<00:02, 14.48it/s]Evaluating:  82%|████████▏ | 123/150 [00:09<00:01, 14.53it/s]Evaluating:  83%|████████▎ | 125/150 [00:09<00:01, 14.59it/s]Evaluating:  85%|████████▍ | 127/150 [00:09<00:02,  9.97it/s]Evaluating:  86%|████████▌ | 129/150 [00:09<00:02, 10.02it/s]Evaluating:  87%|████████▋ | 131/150 [00:09<00:01, 11.04it/s]Evaluating:  89%|████████▊ | 133/150 [00:10<00:01, 11.90it/s]Evaluating:  90%|█████████ | 135/150 [00:10<00:01, 12.57it/s]Evaluating:  91%|█████████▏| 137/150 [00:10<00:00, 13.10it/s]Evaluating:  93%|█████████▎| 139/150 [00:10<00:00, 13.57it/s]Evaluating:  94%|█████████▍| 141/150 [00:10<00:00, 13.87it/s]Evaluating:  95%|█████████▌| 143/150 [00:10<00:00, 14.15it/s]Evaluating:  97%|█████████▋| 145/150 [00:10<00:00, 14.09it/s]Evaluating:  98%|█████████▊| 147/150 [00:10<00:00, 14.26it/s]Evaluating:  99%|█████████▉| 149/150 [00:11<00:00, 14.40it/s]Evaluating: 100%|██████████| 150/150 [00:11<00:00, 13.40it/s]
+
+================================================================================
+EVALUATION RESULTS
+================================================================================
+Total samples: 150
+Accuracy: 0.0000 (0.00%)
+================================================================================
+
+✅ Metrics saved to: results/Llama_3_2_1B/OpenTSLMFlamingo/tsqa_on_ts_exam/results/metrics.json
+✅ Final predictions saved to: results/Llama_3_2_1B/OpenTSLMFlamingo/tsqa_on_ts_exam/results/test_predictions.jsonl
+
+✅ Evaluation complete!
+
+================================================================================
+SAMPLE PREDICTIONS (first 3)
+================================================================================
+
+Sample 1:
+  Gold: No, they have different level of noise<|end_of_text|>
+  Pred:  (b)
+
+Sample 2:
+  Gold: 11.87<|end_of_text|>
+  Pred:  (b)
+
+Sample 3:
+  Gold: No, they have different seasonable pattern<|end_of_text|>
+  Pred:  (b)
