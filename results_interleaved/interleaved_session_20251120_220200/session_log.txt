@@ -1,0 +1,349 @@
+================================================================================
+Interleaved Training Session Started: 20251120_220200
+Model: meta-llama/Llama-3.2-1B
+Results Directory: results_interleaved/interleaved_session_20251120_220200
+Num Cycles: 30 (Total epochs: 60)
+Batch Size: 4
+Learning Rate: 0.0002
+================================================================================
+
+
+================================================================================
+Starting Interleaved Training (TSQA <-> M4)
+================================================================================
+
+📈 Total training steps: 888000
+🔥 Warmup steps: 26640
+📊 TSQA train samples: 38400
+📊 M4 train samples: 80000
+
+
+================================================================================
+CYCLE 1/30
+================================================================================
+
+--- Training on TSQA (Epoch 1) ---
+TSQA Epoch 1 - Train Loss: 0.242995, Val Loss: 0.189105
+
+--- Training on M4 (Epoch 2) ---
+M4 Epoch 2 - Train Loss: 0.748215, Val Loss: 0.671749
+💾 Checkpoint saved: results_interleaved/interleaved_session_20251120_220200/checkpoints/cycle_1_interleaved.pt
+✅ New best validation loss: 0.430427
+
+================================================================================
+CYCLE 2/30
+================================================================================
+
+--- Training on TSQA (Epoch 3) ---
+TSQA Epoch 3 - Train Loss: 0.226935, Val Loss: 0.131355
+
+--- Training on M4 (Epoch 4) ---
+M4 Epoch 4 - Train Loss: 0.646541, Val Loss: 0.581986
+💾 Checkpoint saved: results_interleaved/interleaved_session_20251120_220200/checkpoints/cycle_2_interleaved.pt
+✅ New best validation loss: 0.356670
+
+================================================================================
+CYCLE 3/30
+================================================================================
+
+--- Training on TSQA (Epoch 5) ---
+TSQA Epoch 5 - Train Loss: 0.135967, Val Loss: 0.080399
+
+--- Training on M4 (Epoch 6) ---
+M4 Epoch 6 - Train Loss: 0.742380, Val Loss: 0.570308
+💾 Checkpoint saved: results_interleaved/interleaved_session_20251120_220200/checkpoints/cycle_3_interleaved.pt
+✅ New best validation loss: 0.325354
+
+================================================================================
+CYCLE 4/30
+================================================================================
+
+--- Training on TSQA (Epoch 7) ---
+TSQA Epoch 7 - Train Loss: 0.076632, Val Loss: 0.040161
+
+--- Training on M4 (Epoch 8) ---
+M4 Epoch 8 - Train Loss: 0.525874, Val Loss: 0.518965
+💾 Checkpoint saved: results_interleaved/interleaved_session_20251120_220200/checkpoints/cycle_4_interleaved.pt
+✅ New best validation loss: 0.279563
+
+================================================================================
+CYCLE 5/30
+================================================================================
+
+--- Training on TSQA (Epoch 9) ---
+TSQA Epoch 9 - Train Loss: 0.055438, Val Loss: 0.057545
+
+--- Training on M4 (Epoch 10) ---
+M4 Epoch 10 - Train Loss: 0.465375, Val Loss: 0.492639
+💾 Checkpoint saved: results_interleaved/interleaved_session_20251120_220200/checkpoints/cycle_5_interleaved.pt
+✅ New best validation loss: 0.275092
+
+================================================================================
+CYCLE 6/30
+================================================================================
+
+--- Training on TSQA (Epoch 11) ---
+TSQA Epoch 11 - Train Loss: 0.058932, Val Loss: 0.034060
+
+--- Training on M4 (Epoch 12) ---
+M4 Epoch 12 - Train Loss: 0.423821, Val Loss: 0.479924
+💾 Checkpoint saved: results_interleaved/interleaved_session_20251120_220200/checkpoints/cycle_6_interleaved.pt
+✅ New best validation loss: 0.256992
+
+================================================================================
+CYCLE 7/30
+================================================================================
+
+--- Training on TSQA (Epoch 13) ---
+TSQA Epoch 13 - Train Loss: 0.038911, Val Loss: 0.035669
+
+--- Training on M4 (Epoch 14) ---
+M4 Epoch 14 - Train Loss: 0.386178, Val Loss: 0.478513
+
+================================================================================
+CYCLE 8/30
+================================================================================
+
+--- Training on TSQA (Epoch 15) ---
+TSQA Epoch 15 - Train Loss: 0.035187, Val Loss: 0.028198
+
+--- Training on M4 (Epoch 16) ---
+M4 Epoch 16 - Train Loss: 0.350114, Val Loss: 0.488049
+
+================================================================================
+CYCLE 9/30
+================================================================================
+
+--- Training on TSQA (Epoch 17) ---
+TSQA Epoch 17 - Train Loss: 0.029975, Val Loss: 0.030728
+
+--- Training on M4 (Epoch 18) ---
+M4 Epoch 18 - Train Loss: 0.313977, Val Loss: 0.498400
+
+================================================================================
+CYCLE 10/30
+================================================================================
+
+--- Training on TSQA (Epoch 19) ---
+TSQA Epoch 19 - Train Loss: 0.027252, Val Loss: 0.032500
+
+--- Training on M4 (Epoch 20) ---
+M4 Epoch 20 - Train Loss: 0.277646, Val Loss: 0.525104
+
+================================================================================
+CYCLE 11/30
+================================================================================
+
+--- Training on TSQA (Epoch 21) ---
+TSQA Epoch 21 - Train Loss: 0.025504, Val Loss: 0.024632
+
+--- Training on M4 (Epoch 22) ---
+M4 Epoch 22 - Train Loss: 0.241528, Val Loss: 0.560474
+
+================================================================================
+CYCLE 12/30
+================================================================================
+
+--- Training on TSQA (Epoch 23) ---
+TSQA Epoch 23 - Train Loss: 0.026644, Val Loss: 0.026442
+
+--- Training on M4 (Epoch 24) ---
+M4 Epoch 24 - Train Loss: 0.207218, Val Loss: 0.605435
+
+================================================================================
+CYCLE 13/30
+================================================================================
+
+--- Training on TSQA (Epoch 25) ---
+TSQA Epoch 25 - Train Loss: 0.018900, Val Loss: 0.016522
+
+--- Training on M4 (Epoch 26) ---
+M4 Epoch 26 - Train Loss: 0.176291, Val Loss: 0.662890
+
+================================================================================
+CYCLE 14/30
+================================================================================
+
+--- Training on TSQA (Epoch 27) ---
+TSQA Epoch 27 - Train Loss: 0.018266, Val Loss: 0.016862
+
+--- Training on M4 (Epoch 28) ---
+M4 Epoch 28 - Train Loss: 0.148462, Val Loss: 0.728854
+
+================================================================================
+CYCLE 15/30
+================================================================================
+
+--- Training on TSQA (Epoch 29) ---
+TSQA Epoch 29 - Train Loss: 0.016073, Val Loss: 0.023721
+
+--- Training on M4 (Epoch 30) ---
+M4 Epoch 30 - Train Loss: 0.124453, Val Loss: 0.790146
+
+================================================================================
+CYCLE 16/30
+================================================================================
+
+--- Training on TSQA (Epoch 31) ---
+TSQA Epoch 31 - Train Loss: 0.014997, Val Loss: 0.020972
+
+--- Training on M4 (Epoch 32) ---
+M4 Epoch 32 - Train Loss: 0.103343, Val Loss: 0.854196
+
+================================================================================
+CYCLE 17/30
+================================================================================
+
+--- Training on TSQA (Epoch 33) ---
+TSQA Epoch 33 - Train Loss: 0.013086, Val Loss: 0.027517
+
+--- Training on M4 (Epoch 34) ---
+M4 Epoch 34 - Train Loss: 0.085255, Val Loss: 0.922560
+
+================================================================================
+CYCLE 18/30
+================================================================================
+
+--- Training on TSQA (Epoch 35) ---
+TSQA Epoch 35 - Train Loss: 0.012013, Val Loss: 0.022343
+
+--- Training on M4 (Epoch 36) ---
+M4 Epoch 36 - Train Loss: 0.070192, Val Loss: 0.986561
+
+================================================================================
+CYCLE 19/30
+================================================================================
+
+--- Training on TSQA (Epoch 37) ---
+TSQA Epoch 37 - Train Loss: 0.009238, Val Loss: 0.017629
+
+--- Training on M4 (Epoch 38) ---
+M4 Epoch 38 - Train Loss: 0.056859, Val Loss: 1.047983
+
+================================================================================
+CYCLE 20/30
+================================================================================
+
+--- Training on TSQA (Epoch 39) ---
+TSQA Epoch 39 - Train Loss: 0.007865, Val Loss: 0.024174
+
+--- Training on M4 (Epoch 40) ---
+M4 Epoch 40 - Train Loss: 0.045718, Val Loss: 1.121984
+
+================================================================================
+CYCLE 21/30
+================================================================================
+
+--- Training on TSQA (Epoch 41) ---
+TSQA Epoch 41 - Train Loss: 0.007016, Val Loss: 0.023573
+
+--- Training on M4 (Epoch 42) ---
+M4 Epoch 42 - Train Loss: 0.035850, Val Loss: 1.184632
+
+================================================================================
+CYCLE 22/30
+================================================================================
+
+--- Training on TSQA (Epoch 43) ---
+TSQA Epoch 43 - Train Loss: 0.005910, Val Loss: 0.027713
+
+--- Training on M4 (Epoch 44) ---
+M4 Epoch 44 - Train Loss: 0.027700, Val Loss: 1.237101
+
+================================================================================
+CYCLE 23/30
+================================================================================
+
+--- Training on TSQA (Epoch 45) ---
+TSQA Epoch 45 - Train Loss: 0.004896, Val Loss: 0.015512
+
+--- Training on M4 (Epoch 46) ---
+M4 Epoch 46 - Train Loss: 0.020704, Val Loss: 1.281093
+
+================================================================================
+CYCLE 24/30
+================================================================================
+
+--- Training on TSQA (Epoch 47) ---
+TSQA Epoch 47 - Train Loss: 0.003690, Val Loss: 0.026520
+
+--- Training on M4 (Epoch 48) ---
+M4 Epoch 48 - Train Loss: 0.014745, Val Loss: 1.336116
+
+================================================================================
+CYCLE 25/30
+================================================================================
+
+--- Training on TSQA (Epoch 49) ---
+TSQA Epoch 49 - Train Loss: 0.003014, Val Loss: 0.024102
+
+--- Training on M4 (Epoch 50) ---
+M4 Epoch 50 - Train Loss: 0.009740, Val Loss: 1.375365
+
+================================================================================
+CYCLE 26/30
+================================================================================
+
+--- Training on TSQA (Epoch 51) ---
+TSQA Epoch 51 - Train Loss: 0.002527, Val Loss: 0.023873
+
+--- Training on M4 (Epoch 52) ---
+M4 Epoch 52 - Train Loss: 0.005957, Val Loss: 1.400205
+
+================================================================================
+CYCLE 27/30
+================================================================================
+
+--- Training on TSQA (Epoch 53) ---
+TSQA Epoch 53 - Train Loss: 0.001473, Val Loss: 0.031386
+
+--- Training on M4 (Epoch 54) ---
+M4 Epoch 54 - Train Loss: 0.003259, Val Loss: 1.428539
+
+================================================================================
+CYCLE 28/30
+================================================================================
+
+--- Training on TSQA (Epoch 55) ---
+TSQA Epoch 55 - Train Loss: 0.000935, Val Loss: 0.025920
+
+--- Training on M4 (Epoch 56) ---
+M4 Epoch 56 - Train Loss: 0.001495, Val Loss: 1.455336
+
+================================================================================
+CYCLE 29/30
+================================================================================
+
+--- Training on TSQA (Epoch 57) ---
+TSQA Epoch 57 - Train Loss: 0.000361, Val Loss: 0.034475
+
+--- Training on M4 (Epoch 58) ---
+M4 Epoch 58 - Train Loss: 0.000619, Val Loss: 1.481005
+
+================================================================================
+CYCLE 30/30
+================================================================================
+
+--- Training on TSQA (Epoch 59) ---
+TSQA Epoch 59 - Train Loss: 0.000203, Val Loss: 0.037443
+
+--- Training on M4 (Epoch 60) ---
+M4 Epoch 60 - Train Loss: 0.000264, Val Loss: 1.498650
+
+================================================================================
+Interleaved Training Completed!
+Best Average Validation Loss: 0.256992
+================================================================================
+
+
+================================================================================
+Starting TimeSeriesExam Evaluation
+================================================================================
+
+📊 TimeSeriesExam Results:
+   Accuracy: 0.0000
+   Num Samples: 150
+   Results saved to: results_interleaved/interleaved_session_20251120_220200/timeseriesexam_results.json
+   Predictions saved to: results_interleaved/interleaved_session_20251120_220200/timeseriesexam_predictions.jsonl
+
+📋 Training summary saved to: results_interleaved/interleaved_session_20251120_220200/training_summary.json
