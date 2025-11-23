@@ -1,0 +1,110 @@
+The new embeddings will be initialized from a multivariate normal distribution that has old embeddings' mean and covariance. As described in this article: https://nlp.stanford.edu/~johnhew/vocab-expansion.html. To disable this, use `mean_resizing=False`
+Warning: peft not available. LoRA fine-tuning will be disabled.
+🧪 Starting SANITY CHECK
+============================================================
+This will run minimal training to verify the fix:
+  - Stages: stage1_mcq, stage2_captioning, stage_tsexam_eval
+  - Epochs: 1 per stage
+  - Batch size: 2
+============================================================
+Flamingo Using device: cuda
+
+============================================================
+🧪 SANITY CHECK: Running stage1_mcq with 1 epoch
+============================================================
+
+🚀 Starting stage1_mcq Training with OpenTSLMFlamingo
+============================================================
+📊 Stage Configuration:
+   Epochs: 1
+   Base LR: 2.00e-04
+   Batch size per GPU: 2
+
+🆕 Starting with fresh model (first stage)
+
+✅ Evaluation already completed for stage1_mcq, skipping training and evaluation
+📂 Loading existing metrics...
+📊 Existing results for stage1_mcq:
+   test_loss: nan
+   epoch: 13.0000
+   accuracy: 0.9308
+   completed: 1.0000
+   completion_epoch: 13.0000
+✅ Stage stage1_mcq marked as completed
+
+============================================================
+🧪 SANITY CHECK: Running stage2_captioning with 1 epoch
+============================================================
+
+🚀 Starting stage2_captioning Training with OpenTSLMFlamingo
+============================================================
+📊 Stage Configuration:
+   Epochs: 1
+   Base LR: 2.00e-04
+   Batch size per GPU: 2
+
+Loading checkpoint from previous stage:  results/Llama_3_2_1B/OpenTSLMFlamingo/stage1_mcq/checkpoints/best_model.pt and model type:  OpenTSLMFlamingo and llm_id:  meta-llama/Llama-3.2-1B
+This might take a while
+📂 Loading best model from stage1_mcq:
+   Achieved at epoch: 13
+   Validation loss: 0.0355
+   test_loss: nan
+   epoch: 13.0000
+   accuracy: 0.9308
+   completed: 1.0000
+   completion_epoch: 13.0000
+
+✅ Evaluation already completed for stage2_captioning, skipping training and evaluation
+📂 Loading existing metrics...
+📊 Existing results for stage2_captioning:
+   test_loss: nan
+   epoch: 8.0000
+   completed: 1.0000
+   completion_epoch: 8.0000
+✅ Stage stage2_captioning marked as completed
+
+============================================================
+🧪 SANITY CHECK: Running stage_tsexam_eval (eval-only)
+============================================================
+
+🚀 Starting stage_tsexam_eval Training with OpenTSLMFlamingo
+🔍 EVAL-ONLY MODE: Skipping training, only running evaluation
+============================================================
+📊 Stage Configuration:
+   Epochs: 1
+   Base LR: 2.00e-04
+   Batch size per GPU: 2
+
+Loading checkpoint from previous stage:  results/Llama_3_2_1B/OpenTSLMFlamingo/stage2_captioning/checkpoints/best_model.pt and model type:  OpenTSLMFlamingo and llm_id:  meta-llama/Llama-3.2-1B
+This might take a while
+📂 Loading best model from stage2_captioning:
+   Achieved at epoch: 8
+   Validation loss: 0.5394
+   test_loss: nan
+   epoch: 8.0000
+   completed: 1.0000
+   completion_epoch: 8.0000
+
+📋 Copying checkpoint from stage2_captioning to stage_tsexam_eval for eval-only mode
+✅ Checkpoint copied to results/Llama_3_2_1B/OpenTSLMFlamingo/stage_tsexam_eval/checkpoints/best_model.pt
+📊 Learning rate for OpenTSLMFlamingo:
+   Base LR: 2.00e-04
+Formatting training samples...
+Training samples:   0%|          | 0/521 [00:00<?, ?it/s]Training samples:  37%|███▋      | 192/521 [00:00<00:00, 1906.91it/s]Training samples:  74%|███████▎  | 383/521 [00:00<00:00, 1831.80it/s]Training samples: 100%|██████████| 521/521 [00:00<00:00, 1842.78it/s]
+Formatting validation samples...
+Validation samples:   0%|          | 0/75 [00:00<?, ?it/s]Validation samples: 100%|██████████| 75/75 [00:00<00:00, 1810.88it/s]
+Formatting test samples...
+Test samples:   0%|          | 0/150 [00:00<?, ?it/s]Test samples: 100%|██████████| 150/150 [00:00<00:00, 1798.69it/s]
+📈 Total training steps: 261
+🔥 Warmup steps: 7
+📂 Resuming stage_tsexam_eval from epoch 8 (val_loss: 0.5394)
+⏭️  Skipping training loop (eval_only mode)
+📂 Using existing checkpoint for evaluation
+📂 Loaded best checkpoint from epoch 8 for evaluation.
+🏁 Training completed for stage_tsexam_eval
+   Total epochs run: 8
+   Best validation loss: 0.5394
+   Epochs without improvement: 0
+[Eval] rank=0, world_size=1
+Saving per-rank test predictions to: results/Llama_3_2_1B/OpenTSLMFlamingo/stage_tsexam_eval/results/test_predictions_rank_0.jsonl
+Evaluating stage_tsexam_eval:   0%|          | 0/150 [00:00<?, ?it/s]Evaluating stage_tsexam_eval:   1%|          | 1/150 [00:03<09:29,  3.82s/it]Evaluating stage_tsexam_eval:   1%|▏         | 2/150 [00:34<48:22, 19.61s/it]Evaluating stage_tsexam_eval:   2%|▏         | 3/150 [01:05<1:00:17, 24.61s/it]Evaluating stage_tsexam_eval:   3%|▎         | 4/150 [01:35<1:05:39, 26.98s/it]Evaluating stage_tsexam_eval:   3%|▎         | 5/150 [01:37<43:30, 18.00s/it]  Evaluating stage_tsexam_eval:   4%|▍         | 6/150 [02:08<53:38, 22.35s/it]Evaluating stage_tsexam_eval:   5%|▍         | 7/150 [02:39<59:38, 25.02s/it]Evaluating stage_tsexam_eval:   5%|▌         | 8/150 [03:09<1:03:23, 26.78s/it]Evaluating stage_tsexam_eval:   6%|▌         | 9/150 [03:40<1:05:42, 27.96s/it]Evaluating stage_tsexam_eval:   7%|▋         | 10/150 [04:10<1:07:03, 28.74s/it]Evaluating stage_tsexam_eval:   7%|▋         | 11/150 [04:41<1:07:53, 29.31s/it]Evaluating stage_tsexam_eval:   8%|▊         | 12/150 [05:11<1:08:17, 29.69s/it]Evaluating stage_tsexam_eval:   9%|▊         | 13/150 [05:42<1:08:23, 29.95s/it]Evaluating stage_tsexam_eval:   9%|▉         | 14/150 [05:45<49:12, 21.71s/it]  Evaluating stage_tsexam_eval:  10%|█         | 15/150 [06:15<54:53, 24.40s/it]Evaluating stage_tsexam_eval:  11%|█         | 16/150 [06:46<58:39, 26.27s/it]Evaluating stage_tsexam_eval:  11%|█▏        | 17/150 [07:16<1:01:09, 27.59s/it]Evaluating stage_tsexam_eval:  12%|█▏        | 18/150 [07:17<42:32, 19.34s/it]  Evaluating stage_tsexam_eval:  13%|█▎        | 19/150 [07:18<30:37, 14.03s/it]Evaluating stage_tsexam_eval:  13%|█▎        | 20/150 [07:49<41:15, 19.04s/it]Evaluating stage_tsexam_eval:  14%|█▍        | 21/150 [08:20<48:30, 22.56s/it]Evaluating stage_tsexam_eval:  15%|█▍        | 22/150 [08:50<53:22, 25.02s/it]Evaluating stage_tsexam_eval:  15%|█▌        | 23/150 [09:21<56:26, 26.66s/it]Evaluating stage_tsexam_eval:  16%|█▌        | 24/150 [09:52<58:29, 27.85s/it]Evaluating stage_tsexam_eval:  17%|█▋        | 25/150 [10:22<59:47, 28.70s/it]Evaluating stage_tsexam_eval:  17%|█▋        | 26/150 [10:28<44:53, 21.72s/it]
