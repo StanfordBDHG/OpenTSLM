@@ -1,0 +1,8 @@
+{
+  "accuracy": 0.3467,
+  "correct": 52,
+  "num_samples": 150,
+  "timestamp": "2025-11-23T19:50:29.398056",
+  "corrected": true,
+  "correction_note": "Original accuracy was incorrectly computed as 0.0 because model predictions were option letters (e.g., '(b)') while gold answers were option texts. Corrected by mapping prediction letters to option texts before comparison."
+}

@@ -1,0 +1,9 @@
+{
+  "training_completed": true,
+  "num_cycles": 30,
+  "total_epochs": 60,
+  "best_val_loss": 0.2569922132621588,
+  "timeseriesexam_accuracy": 0.0,
+  "session_dir": "results_interleaved/interleaved_session_20251120_220200",
+  "timestamp": "2025-11-23T19:50:29.398971"
+}

@@ -1,0 +1,150 @@
+{"prediction": " (b)", "gold": "No, they have different level of noise<|end_of_text|>"}
+{"prediction": " (a)", "gold": "11.87<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they have different seasonable pattern<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes<|end_of_text|>"}
+{"prediction": " (b)", "gold": "SawtoothWave<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Yes, they both have the same level of noise<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes<|end_of_text|>"}
+{"prediction": " (c)", "gold": "Log<|end_of_text|>"}
+{"prediction": " (b)", "gold": "3.65<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes, they have the same underlying distribution: Gaussian White Noise<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they have different seasonal pattern: Square Wave and Swatooth Wave<|end_of_text|>"}
+{"prediction": " (a)", "gold": "No influence, Sinewave<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they have different underlying distribution<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Sine wave with linear trend<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they have different underlying distribution<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Flip: the pattern is flipped at certain point in time<|end_of_text|>"}
+{"prediction": " (a)", "gold": "No<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes, they have the same underlying distribution<|end_of_text|>"}
+{"prediction": " (a)", "gold": "70.86<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Time Series 2<|end_of_text|>"}
+{"prediction": " (c)", "gold": "Time series 1 with cutoff anomaly and time series 2 with speed up/down anomaly<|end_of_text|>"}
+{"prediction": " (b)", "gold": "1.53<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Time series 1 has higher period<|end_of_text|>"}
+{"prediction": " (c)", "gold": "No, the mean is different overtime<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No significant noise<|end_of_text|>"}
+{"prediction": " (b)", "gold": "50.14<|end_of_text|>"}
+{"prediction": " (c)", "gold": "No trend<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes, Time series 1 and time series 2 both have flip anomaly<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Additive<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No<|end_of_text|>"}
+{"prediction": " (c)", "gold": "Yes, they are lagged versions<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they have different underlying distribution<|end_of_text|>"}
+{"prediction": " (b)", "gold": "2.7<|end_of_text|>"}
+{"prediction": " (b)", "gold": "23.77<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they have different noise: white noise and red noise<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they do not share similar pattern<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they do not share similar pattern<|end_of_text|>"}
+{"prediction": " (a)", "gold": "18.13<|end_of_text|>"}
+{"prediction": " (a)", "gold": "SquareWave<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they have different underlying distribution: AR(1) and MA(5)<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Log trend and sawtooth wave<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they have different level of noise<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Abrupt frequency change<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Exponential trend and sine wave<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Sawtooth wave with exponential trend<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Speedup: the period of cyclic components is different from other parts of the time series and Flip: the pattern is flipped at certain point in time<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they have different underlying distribution<|end_of_text|>"}
+{"prediction": " (a)", "gold": "6.14<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No<|end_of_text|>"}
+{"prediction": " (b)", "gold": "10.81<|end_of_text|>"}
+{"prediction": " (a)", "gold": "0<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Additive<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Square wave with log trend<|end_of_text|>"}
+{"prediction": " (b)", "gold": "-16.81<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Increase<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Time series 2 has higher slope<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, time series 2 granger causes time series 1<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Remain the same<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes, they have the same underlying distribution: AR(1)<|end_of_text|>"}
+{"prediction": " (a)", "gold": "No, they are not lagged versions<|end_of_text|>"}
+{"prediction": " (c)", "gold": "3<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Yes, it's pattern is flipped at certain point in time<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Time Series 2<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, the variance is different overtime<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Sudden shift in trend direction<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they are not granger causal<|end_of_text|>"}
+{"prediction": " (b)", "gold": "3.96<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Gaussian White Noise<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Remain the same<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Sawtooth wave times linear trend<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes, they both have Gaussian white noise<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Speedup: the period of cyclic components is different from other parts of the time series and Cutoff: the pattern of time series disappeared for certain point in time and became flat<|end_of_text|>"}
+{"prediction": " (c)", "gold": "No, the mean is different overtime<|end_of_text|>"}
+{"prediction": " (c)", "gold": "Yes<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Additive<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Gaussian White Noise<|end_of_text|>"}
+{"prediction": " (b)", "gold": "0<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Yes, time series 1 is a scaled version of time series 2<|end_of_text|>"}
+{"prediction": " (c)", "gold": "Yes, they share a similar pattern<|end_of_text|>"}
+{"prediction": " (b)", "gold": "58.28<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they have different seasonal pattern: Square Wave and Swatooth Wave<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Sawtooth wave with exponential trend<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Yes, Linear Trend and Sine Wave<|end_of_text|>"}
+{"prediction": " (b)", "gold": "1.1<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No Pattern at all<|end_of_text|>"}
+{"prediction": " (c)", "gold": "Linear<|end_of_text|>"}
+{"prediction": " (b)", "gold": "26.4<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Yes, they have similar seasonal pattern<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Multiplicative<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Exponential<|end_of_text|>"}
+{"prediction": " (c)", "gold": "Yes, they are flipped versions<|end_of_text|>"}
+{"prediction": " (a)", "gold": "2.09<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes<|end_of_text|>"}
+{"prediction": " (c)", "gold": "Exponential -> Linear -> Log<|end_of_text|>"}
+{"prediction": " (b)", "gold": "7.26<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Yes, it's pattern is flipped at certain point in time<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Additive<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes, it's pattern is distorted by random spikes or noises<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Linear<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Time series 2<|end_of_text|>"}
+{"prediction": " (c)", "gold": "Time series 1 with cutoff anomaly and time series 2 with speed up/down anomaly<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, time series 2 has higher variance<|end_of_text|>"}
+{"prediction": " (a)", "gold": "No<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No. They have different types of anomalies: cutoff and spikes<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Sawtooth wave times linear trend<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Amplitude increase over time<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No Trend<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they have different underlying distribution<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Time Series 2<|end_of_text|>"}
+{"prediction": " (b)", "gold": "4<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, time series 2 granger causes time series 1<|end_of_text|>"}
+{"prediction": " (a)", "gold": "No, time series 1 has exponential trend and time series 2 has log trend<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Decrease<|end_of_text|>"}
+{"prediction": " (b)", "gold": "-11.95<|end_of_text|>"}
+{"prediction": " (b)", "gold": "10.54<|end_of_text|>"}
+{"prediction": " (c)", "gold": "Linear -> Exponential -> Log<|end_of_text|>"}
+{"prediction": " (b)", "gold": "0.43<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Amplitude increase over time<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Downward<|end_of_text|>"}
+{"prediction": " (b)", "gold": "SawtoothWave + SquareWave<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Yes, they are lagged versions<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they have different underlying distribution: AR(1) and MA(5)<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes, they have the same underlying distribution: AR(1)<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they do not share similar pattern<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Distort the pattern<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Linear -> Exponential<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Time Series 1<|end_of_text|>"}
+{"prediction": " (b)", "gold": "2<|end_of_text|>"}
+{"prediction": " (b)", "gold": "7.08<|end_of_text|>"}
+{"prediction": " (c)", "gold": "No<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, they do not share similar pattern<|end_of_text|>"}
+{"prediction": " (c)", "gold": "Yes, they are flipped versions<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No, time series 2 is a lagged version of time series 1<|end_of_text|>"}
+{"prediction": " (a)", "gold": "No<|end_of_text|>"}
+{"prediction": " (b)", "gold": "No<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Time series 1 has higher period<|end_of_text|>"}
+{"prediction": " (a)", "gold": "Cutoff: the pattern of time series disappeared for certain point in time and became flat and Flip: the pattern is flipped at certain point in time<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Time series 1<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Time series 2<|end_of_text|>"}
+{"prediction": " (b)", "gold": "10.41<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Remain the same<|end_of_text|>"}
+{"prediction": " (b)", "gold": "Yes, they both have Gaussian white noise<|end_of_text|>"}

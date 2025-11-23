@@ -1,0 +1,7 @@
+{
+  "accuracy": 0.3933333333333333,
+  "total_samples": 150,
+  "checkpoint": "results/Llama_3_2_1B/OpenTSLMFlamingo/stage1_mcq/checkpoints/best_model.pt",
+  "model_type": "OpenTSLMFlamingo",
+  "stage": "stage1_mcq_on_tsexam"
+}

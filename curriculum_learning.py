@@ -17,6 +17,7 @@ import argparse
 from typing import List, Optional, Dict, Any, Callable
 from time_series_datasets.TSQADataset import TSQADataset
 from time_series_datasets.m4.M4QADataset import M4QADataset
+from time_series_datasets.timeseriesexam.TimeSeriesExam1QADataset import TimeSeriesExam1QADataset
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
@@ -66,6 +67,7 @@ from model_config import (
 CURRICULUM_STAGES = [
     "stage1_mcq",
     "stage2_captioning",
+    "stage_tsexam_eval",  # Evaluation only on TimeSeriesExam1
     "stage3_cot",
     "stage4_sleep_cot",
     "stage5_ecg_cot",
@@ -931,13 +933,7 @@ class CurriculumTrainer:
                 print(f"   Effective batch size: {batch_size * self.world_size}")
             print()
 
-        # Check if checkpoint exists when in eval_only mode
-        if eval_only and not self._checkpoint_exists(stage_name):
-            raise RuntimeError(
-                f"Eval-only mode requires a checkpoint for {stage_name}, but none found at {os.path.join(self.results_dir, stage_name, 'checkpoints', 'best_model.pt')}"
-            )
-
-        # Load previous stage model and display metrics
+        # Load previous stage model and display metrics first
         try:
             previous_stage_info = self._load_previous_stage_model(stage_name)
             if previous_stage_info:
@@ -968,6 +964,34 @@ class CurriculumTrainer:
             if self.rank == 0:
                 print(f"❌ Error loading previous stage: {e}")
             raise Exception(f"Error loading previous stage: {e}")
+
+        # Handle eval-only mode: if no checkpoint exists for current stage, copy from previous stage
+        if eval_only and not self._checkpoint_exists(stage_name):
+            if previous_stage_info is None:
+                raise RuntimeError(
+                    f"Eval-only mode requires a checkpoint, but {stage_name} has no checkpoint and no previous stage to load from"
+                )
+
+            # Copy checkpoint from previous stage to current stage
+            previous_stage = previous_stage_info['stage']
+            src_checkpoint = os.path.join(
+                self.results_dir, previous_stage, "checkpoints", "best_model.pt"
+            )
+            dst_checkpoint = os.path.join(
+                self.results_dir, stage_name, "checkpoints", "best_model.pt"
+            )
+
+            if self.rank == 0:
+                print(f"📋 Copying checkpoint from {previous_stage} to {stage_name} for eval-only mode")
+                os.makedirs(os.path.dirname(dst_checkpoint), exist_ok=True)
+
+                import shutil
+                shutil.copy2(src_checkpoint, dst_checkpoint)
+                print(f"✅ Checkpoint copied to {dst_checkpoint}")
+
+            # Synchronize all ranks
+            if dist.is_initialized():
+                dist.barrier()
 
         # Check if evaluation was already completed
         evaluation_completed = self._is_evaluation_completed(stage_name)
@@ -1288,6 +1312,30 @@ class CurriculumTrainer:
             eval_only=eval_only,
         )
 
+    def stage_tsexam_eval(
+        self, batch_size: int = None, eval_only: bool = False
+    ) -> Dict[str, Any]:
+        """TimeSeriesExam1 Evaluation (evaluation only, no training).
+
+        Configuration:
+        - This stage loads the checkpoint from stage2_captioning
+        - Only runs evaluation on TimeSeriesExam1 test set
+        - Metric: Accuracy
+        """
+        return self._train_stage(
+            stage_name="stage_tsexam_eval",
+            dataset_class=TimeSeriesExam1QADataset,
+            num_epochs=1,  # Not used since eval_only
+            lr_encoder=2e-4,  # Not used since eval_only
+            lr_projector=1e-4,  # Not used since eval_only
+            lr_base=2e-4,  # Not used since eval_only
+            metric_func=lambda preds, golds: {
+                "accuracy": self._calculate_accuracy(preds, golds)
+            },
+            batch_size=batch_size,
+            eval_only=True,  # Always eval-only for this stage
+        )
+
     def stage3_cot(
         self, batch_size: int = None, eval_only: bool = False
     ) -> Dict[str, Any]:
@@ -1463,6 +1511,12 @@ class CurriculumTrainer:
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage2_captioning":
                 stage_results = self.stage2_captioning(
+                    batch_size=batch_size, eval_only=eval_only
+                )
+                results[stage] = stage_results
+                self._mark_stage_completed(stage, stage_results)
+            elif stage == "stage_tsexam_eval":
+                stage_results = self.stage_tsexam_eval(
                     batch_size=batch_size, eval_only=eval_only
                 )
                 results[stage] = stage_results
