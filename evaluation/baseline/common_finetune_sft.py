@@ -61,7 +61,7 @@ def run_sft(
     processor = AutoProcessor.from_pretrained("google/gemma-3-4b-pt") # for some reason it is preferred 
 
 
-    model = AutoModelForImageTextToText.from_pretrained(
+    model = AutoModelForImageTextToText.from_pretrained( 
         llm_id,
         attn_implementation="eager",
         torch_dtype="auto", #torch.bfloat16
