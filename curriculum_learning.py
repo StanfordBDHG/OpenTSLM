@@ -933,13 +933,7 @@ class CurriculumTrainer:
                 print(f"   Effective batch size: {batch_size * self.world_size}")
             print()
 
-        # Check if checkpoint exists when in eval_only mode
-        if eval_only and not self._checkpoint_exists(stage_name):
-            raise RuntimeError(
-                f"Eval-only mode requires a checkpoint for {stage_name}, but none found at {os.path.join(self.results_dir, stage_name, 'checkpoints', 'best_model.pt')}"
-            )
-
-        # Load previous stage model and display metrics
+        # Load previous stage model and display metrics first
         try:
             previous_stage_info = self._load_previous_stage_model(stage_name)
             if previous_stage_info:
@@ -970,6 +964,34 @@ class CurriculumTrainer:
             if self.rank == 0:
                 print(f"❌ Error loading previous stage: {e}")
             raise Exception(f"Error loading previous stage: {e}")
+
+        # Handle eval-only mode: if no checkpoint exists for current stage, copy from previous stage
+        if eval_only and not self._checkpoint_exists(stage_name):
+            if previous_stage_info is None:
+                raise RuntimeError(
+                    f"Eval-only mode requires a checkpoint, but {stage_name} has no checkpoint and no previous stage to load from"
+                )
+
+            # Copy checkpoint from previous stage to current stage
+            previous_stage = previous_stage_info['stage']
+            src_checkpoint = os.path.join(
+                self.results_dir, previous_stage, "checkpoints", "best_model.pt"
+            )
+            dst_checkpoint = os.path.join(
+                self.results_dir, stage_name, "checkpoints", "best_model.pt"
+            )
+
+            if self.rank == 0:
+                print(f"📋 Copying checkpoint from {previous_stage} to {stage_name} for eval-only mode")
+                os.makedirs(os.path.dirname(dst_checkpoint), exist_ok=True)
+
+                import shutil
+                shutil.copy2(src_checkpoint, dst_checkpoint)
+                print(f"✅ Checkpoint copied to {dst_checkpoint}")
+
+            # Synchronize all ranks
+            if dist.is_initialized():
+                dist.barrier()
 
         # Check if evaluation was already completed
         evaluation_completed = self._is_evaluation_completed(stage_name)
