@@ -1,0 +1,6 @@
+{
+  "accuracy": 0.3466666666666667,
+  "correct": 52,
+  "total": 150,
+  "original_predictions_file": "results_interleaved/interleaved_session_20251120_220200/timeseriesexam_predictions.jsonl"
+}
