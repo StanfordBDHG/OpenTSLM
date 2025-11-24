@@ -10,6 +10,7 @@ Dependencies:
 from __future__ import annotations
 import os
 from typing import List
+import io
 
 from datasets import Dataset
 from transformers import AutoModelForImageTextToText, AutoProcessor, AutoModelForCausalLM
@@ -17,6 +18,7 @@ import torch
 from peft import LoraConfig
 from trl import SFTTrainer
 from trl.trainer.sft_config import SFTConfig
+from PIL import Image
 
 
 def run_sft(
@@ -58,7 +60,7 @@ def run_sft(
     # if tokenizer.pad_token is None:
     #     tokenizer.pad_token = tokenizer.eos_token
 
-    processor = AutoProcessor.from_pretrained("google/gemma-3-4b-pt") # for some reason it is preferred 
+    processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it") # for some reason it is preferred 
 
 
     model = AutoModelForImageTextToText.from_pretrained( 
@@ -136,10 +138,23 @@ def run_sft(
                     "image" in element or element.get("type") == "image"
                 ):
                     image = element.get("image", element)
+                    # Skip None images
+                    if image is None:
+                        continue
+                    
+                    # Handle dict with 'bytes' key (HuggingFace datasets format)
+                    if isinstance(image, dict):
+                        if "bytes" in image and image["bytes"] is not None:
+                            image = Image.open(io.BytesIO(image["bytes"]))
+                        elif "path" in image and image["path"] is not None:
+                            image = Image.open(image["path"])
+                        else:
+                            continue  # Skip if no valid image data
+                    
                     # Expect PIL.Image, convert to RGB
                     if hasattr(image, "convert"):
                         image = image.convert("RGB")
-                    image_inputs.append(image)
+                        image_inputs.append(image)
         return image_inputs
 
     def collate_fn(examples: List[dict]):
@@ -186,10 +201,10 @@ def run_sft(
         data_collator=collate_fn,
     )
 
-    trainer.train()
-    trainer.model.save_pretrained(output_dir)
-    processor.save_pretrained(output_dir)
-    print(f"Saved LoRA adapters and processor to: {output_dir}")
+    # trainer.train()
+    # trainer.model.save_pretrained(output_dir)
+    # processor.save_pretrained(output_dir)
+    # print(f"Saved LoRA adapters and processor to: {output_dir}")
 
     # # free the memory again
     # del model

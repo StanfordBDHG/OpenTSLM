@@ -156,7 +156,7 @@ def main():
     # Build training chat examples with images from SleepEDF train split
     ds = SleepEDFCoTQADataset(split="train", EOS_TOKEN="")
     n = len(ds) if args.max_samples is None else min(args.max_samples, len(ds))
-    train_examples = [_build_messages_from_sample(ds[i]) for i in range(n)]
+    train_examples = [_build_messages_from_sample(ds[i]) for i in range(10)]
 
     # print(_build_messages_from_sample(ds[0]))
     run_sft(
