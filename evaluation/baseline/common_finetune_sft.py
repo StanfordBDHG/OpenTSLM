@@ -20,6 +20,8 @@ from trl import SFTTrainer
 from trl.trainer.sft_config import SFTConfig
 from PIL import Image
 
+# export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+# export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
 
 def run_sft(
     train_examples: List[dict],
@@ -65,17 +67,18 @@ def run_sft(
 
     model = AutoModelForImageTextToText.from_pretrained( 
         llm_id,
-        attn_implementation="eager",
-        torch_dtype="auto", #torch.bfloat16
+        attn_implementation="flash_attention_2",  # More memory efficient
+        torch_dtype=torch.bfloat16,  # Explicit bfloat16 for memory savings
         device_map="auto",
+        low_cpu_mem_usage=True,  # Reduce CPU memory usage during loading
     )
 
-    # LoRA config
+    # LoRA config - reduce rank to save memory
     # target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
     lora_cfg = LoraConfig(
-        lora_alpha=16,
+        lora_alpha=8,  # Reduced from 16
         lora_dropout=0.05,
-        r=16,
+        r=8,  # Reduced rank from 16 to 8 for memory savings
         bias="none",
         target_modules="all-linear",
         task_type="CAUSAL_LM",
@@ -122,9 +125,14 @@ def run_sft(
         # SFT-specific fields: we provide our own collator, so skip text field processing
         dataset_text_field="",
         dataset_kwargs={"skip_prepare_dataset": True},
-        max_length=max_seq_len,
+        max_seq_length=max_seq_len,
         packing=False,
-        remove_unused_columns=False
+        remove_unused_columns=False,
+        # Memory optimization settings
+        gradient_checkpointing=True,  # Trade compute for memory
+        gradient_checkpointing_kwargs={"use_reentrant": False},
+        optim="adamw_8bit",  # Use 8-bit optimizer to save memory
+        max_grad_norm=0.3,  # Gradient clipping
     )
 
     def process_vision_info(messages: List[dict]):
@@ -201,13 +209,13 @@ def run_sft(
         data_collator=collate_fn,
     )
 
-    # trainer.train()
-    # trainer.model.save_pretrained(output_dir)
-    # processor.save_pretrained(output_dir)
-    # print(f"Saved LoRA adapters and processor to: {output_dir}")
+    trainer.train()
+    trainer.model.save_pretrained(output_dir)
+    processor.save_pretrained(output_dir)
+    print(f"Saved LoRA adapters and processor to: {output_dir}")
 
-    # # free the memory again
-    # del model
-    # del trainer
-    # torch.cuda.empty_cache()
+    # Free the memory again
+    del model
+    del trainer
+    torch.cuda.empty_cache()
 
