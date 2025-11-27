@@ -3,15 +3,39 @@
 Inference script for the fine-tuned LoRA model on sleep data.
 Loads the base model + LoRA adapters and runs inference on new examples.
 """
+import os
+import sys
 import torch
 from transformers import AutoModelForImageTextToText, AutoProcessor
 from peft import PeftModel
 from PIL import Image
 import numpy as np
 
+# Add project paths
+PROJECT_SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
+if PROJECT_SRC not in sys.path:
+    sys.path.insert(0, PROJECT_SRC)
 
-def load_model_and_processor(base_model_id: str, lora_adapter_path: str):
-    """Load the base model with LoRA adapters and processor."""
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+
+# Import the helper function from finetune_sleep_plot
+try:
+    from finetune_sleep_plot import _time_series_to_pil
+except ModuleNotFoundError:
+    from evaluation.baseline.finetune_sleep_plot import _time_series_to_pil
+
+
+def load_model_and_processor(base_model_id: str, lora_adapter_path: str = None):
+    """Load the base model with optional LoRA adapters and processor.
+    
+    Args:
+        base_model_id: HuggingFace model ID for the base model
+        lora_adapter_path: Path to LoRA adapters. If None, loads only the base model.
+    """
     print(f"Loading base model: {base_model_id}")
     
     # Load base model
@@ -23,13 +47,18 @@ def load_model_and_processor(base_model_id: str, lora_adapter_path: str):
         low_cpu_mem_usage=True,
     )
     
-    # Load LoRA adapters
-    print(f"Loading LoRA adapters from: {lora_adapter_path}")
-    model = PeftModel.from_pretrained(model, lora_adapter_path)
-    model.eval()  # Set to evaluation mode
+    # Load LoRA adapters if path is provided
+    if lora_adapter_path:
+        print(f"Loading LoRA adapters from: {lora_adapter_path}")
+        model = PeftModel.from_pretrained(model, lora_adapter_path)
+        # Load processor from LoRA path
+        processor = AutoProcessor.from_pretrained(lora_adapter_path)
+    else:
+        print("No LoRA adapters specified - using base model only")
+        # Load processor from base model
+        processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
     
-    # Load processor
-    processor = AutoProcessor.from_pretrained(lora_adapter_path)
+    model.eval()  # Set to evaluation mode
     
     print("Model and processor loaded successfully!")
     return model, processor
@@ -126,51 +155,47 @@ def create_sleep_plot_image(time_series_data):
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Run inference with LoRA model")
+    parser = argparse.ArgumentParser(description="Run inference with LoRA model on SleepEDF test data")
     parser.add_argument("--base-model", type=str, default="google/gemma-3-4b-pt")
-    parser.add_argument("--lora-path", type=str, default="runs/gemma3-4b-pt-sleep-lora")
+    parser.add_argument("--lora-path", type=str, default="runs/gemma3-4b-pt-sleep-lora",
+                        help="Path to LoRA adapters. Set to 'none' or empty to use base model only.")
     parser.add_argument("--max-new-tokens", type=int, default=256)
     parser.add_argument("--temperature", type=float, default=0.7)
+    parser.add_argument("--sample-idx", type=int, default=0, help="Which test sample to use")
+    parser.add_argument("--split", type=str, default="test", choices=["train", "test", "validation"])
     args = parser.parse_args()
     
     # Configuration
     BASE_MODEL_ID = args.base_model
-    LORA_ADAPTER_PATH = args.lora_path
+    # Handle 'none' or empty string as no LoRA
+    LORA_ADAPTER_PATH = args.lora_path if args.lora_path and args.lora_path.lower() != 'none' else None
     
     # Load model and processor
     model, processor = load_model_and_processor(BASE_MODEL_ID, LORA_ADAPTER_PATH)
     
-    # Example 1: With image matching training prompt structure
-    print("\n" + "="*80)
-    print("Example 1: Sleep EEG Classification (matching training prompt)")
-    print("="*80)
+    # Load SleepEDF dataset
+    print(f"\nLoading SleepEDF {args.split} split...")
+    ds = SleepEDFCoTQADataset(split=args.split, EOS_TOKEN="")
+    print(f"Dataset size: {len(ds)}")
     
-    # Create a dummy time series plot (replace with your actual data)
-    dummy_data = np.random.randn(1000).cumsum()
-    sleep_image = create_sleep_plot_image(dummy_data)
+    # Get a test sample
+    sample = ds[args.sample_idx]
     
-    # Match the exact prompt structure from training
-    pre_prompt = """
-        You are given a 30-second EEG time series segment. Your task is to classify the sleep stage based on analysis of the data.
-
-        Instructions:
-        - Analyze the data objectively without presuming a particular label.
-        - Reason carefully and methodically about what the signal patterns suggest regarding sleep stage.
-        - Write your reasoning as a single, coherent paragraph. Do not use bullet points, lists, or section headers.
-        - Only reveal the correct class at the very end.
-        - Never state that you are uncertain or unable to classify the data. You must always provide a rationale and a final answer.
-
-        
-        """
+    # Extract prompts and data from the sample
+    pre_prompt = (sample.get("pre_prompt") or "").strip()
+    post_prompt = (sample.get("post_prompt") or "").strip()
+    ground_truth = (sample.get("answer") or "").strip()
+    label = sample.get("label", "Unknown")
     
-    post_prompt = """Possible sleep stages are:
-        Wake, Non-REM stage 1, Non-REM stage 2, Non-REM stage 3, REM sleep, Movement
-
-        - Please now write your rationale. Make sure that your last word is the answer. You MUST end your response with "Answer: """
+    # Get the time series and convert to image
+    ts = sample.get("original_data", sample.get("time_series", None))
+    sleep_image = _time_series_to_pil(ts)
     
-    user_text = "\n\n".join([pre_prompt.strip(), post_prompt.strip()])
+    # Build the user text
+    user_text = "\n\n".join([pre_prompt, post_prompt])
     
-    messages_with_image = [
+    # Build messages matching training format
+    messages = [
         {
             "role": "system",
             "content": [{"type": "text", "text": "You are a helpful medical AI that analyzes sleep EEG."}],
@@ -184,8 +209,21 @@ def main():
         }
     ]
     
-    response = run_inference(model, processor, messages_with_image, max_new_tokens=args.max_new_tokens, temperature=args.temperature)
-    print(f"\nResponse: {response}\n")
+    # Print sample info
+    print("\n" + "="*80)
+    print(f"SAMPLE {args.sample_idx} from {args.split} split")
+    print("="*80)
+    print(f"\nGround Truth Label: {label}")
+    print(f"\nQUESTION:\n{user_text}\n")
+    print(f"GROUND TRUTH ANSWER:\n{ground_truth}\n")
+    
+    # Run inference
+    print("Generating model response...")
+    response = run_inference(model, processor, messages, max_new_tokens=args.max_new_tokens, temperature=args.temperature)
+    
+    print("="*80)
+    print(f"MODEL RESPONSE:\n{response}")
+    print("="*80)
     
     print("\n" + "="*80)
     print("Inference completed successfully!")
