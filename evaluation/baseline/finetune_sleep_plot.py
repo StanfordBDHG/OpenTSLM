@@ -31,44 +31,6 @@ except ModuleNotFoundError:
     from evaluation.baseline.common_finetune_sft import run_sft
 
 
-def plot_time_series(time_series, out_path=None):
-    """
-    Minimal version of evaluate_sleep_plot.generate_time_series_plot:
-    Accepts a list/array of 1D series or a 2D array (rows = channels).
-    """
-    if time_series is None:
-        print("No time_series provided")
-        return
-
-    # Normalize to list of 1D arrays
-    if isinstance(time_series, np.ndarray):
-        if time_series.ndim == 1:
-            ts_list = [time_series]
-        elif time_series.ndim == 2:
-            ts_list = [time_series[i] for i in range(time_series.shape[0])]
-        else:
-            raise ValueError(f"Unsupported ndarray shape: {time_series.shape}")
-    else:
-        ts_list = list(time_series)
-        if len(ts_list) > 0 and not hasattr(ts_list[0], "__len__"):
-            ts_list = [ts_list]
-
-    axis_names = {0: "EEG", 1: "EOG", 2: "EMG"}
-    n = len(ts_list)
-    fig, axes = plt.subplots(n, 1, figsize=(10, 4 * n), sharex=True)
-    if n == 1:
-        axes = [axes]
-
-    for i, s in enumerate(ts_list):
-        s = np.asarray(s)
-        axes[i].plot(s, marker="o", linestyle="-", markersize=0)
-        axes[i].grid(True, alpha=0.3)
-        axes[i].set_title(axis_names.get(i, f"Axis {i+1}"))
-
-    plt.tight_layout()
-    plt.show()
-
-
 def _time_series_to_pil(time_series) -> Image.Image:
     """Render a 1D or 2D time series array to a PIL RGB image (no disk I/O)."""
     # Normalize to list of 1D arrays
@@ -156,7 +118,7 @@ def main():
     # Build training chat examples with images from SleepEDF train split
     ds = SleepEDFCoTQADataset(split="train", EOS_TOKEN="")
     n = len(ds) if args.max_samples is None else min(args.max_samples, len(ds))
-    train_examples = [_build_messages_from_sample(ds[i]) for i in range(10)]
+    train_examples = [_build_messages_from_sample(ds[i]) for i in range(n)]
 
     # print(_build_messages_from_sample(ds[0]))
     run_sft(

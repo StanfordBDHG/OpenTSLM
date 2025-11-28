@@ -10,6 +10,8 @@ from transformers import AutoModelForImageTextToText, AutoProcessor
 from peft import PeftModel
 from PIL import Image
 import numpy as np
+import csv
+from tqdm import tqdm
 
 # Add project paths
 PROJECT_SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
@@ -161,8 +163,11 @@ def main():
                         help="Path to LoRA adapters. Set to 'none' or empty to use base model only.")
     parser.add_argument("--max-new-tokens", type=int, default=256)
     parser.add_argument("--temperature", type=float, default=0.7)
-    parser.add_argument("--sample-idx", type=int, default=0, help="Which test sample to use")
     parser.add_argument("--split", type=str, default="test", choices=["train", "test", "validation"])
+    parser.add_argument("--output-csv", type=str, default="inference_results.csv",
+                        help="Path to save results CSV file")
+    parser.add_argument("--max-samples", type=int, default=None,
+                        help="Maximum number of samples to process (default: all)")
     args = parser.parse_args()
     
     # Configuration
@@ -178,53 +183,81 @@ def main():
     ds = SleepEDFCoTQADataset(split=args.split, EOS_TOKEN="")
     print(f"Dataset size: {len(ds)}")
     
-    # Get a test sample
-    sample = ds[args.sample_idx]
+    # Determine number of samples to process
+    num_samples = len(ds) if args.max_samples is None else min(args.max_samples, len(ds))
+    print(f"Processing {num_samples} samples...\n")
     
-    # Extract prompts and data from the sample
-    pre_prompt = (sample.get("pre_prompt") or "").strip()
-    post_prompt = (sample.get("post_prompt") or "").strip()
-    ground_truth = (sample.get("answer") or "").strip()
-    label = sample.get("label", "Unknown")
+    # Store results
+    results = []
     
-    # Get the time series and convert to image
-    ts = sample.get("original_data", sample.get("time_series", None))
-    sleep_image = _time_series_to_pil(ts)
-    
-    # Build the user text
-    user_text = "\n\n".join([pre_prompt, post_prompt])
-    
-    # Build messages matching training format
-    messages = [
-        {
-            "role": "system",
-            "content": [{"type": "text", "text": "You are a helpful medical AI that analyzes sleep EEG."}],
-        },
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": user_text},
-                {"type": "image", "image": sleep_image},
-            ]
+    # Process all samples
+    for idx in tqdm(range(num_samples), desc="Running inference"):
+        sample = ds[idx]
+        
+        # Extract prompts and data from the sample
+        pre_prompt = (sample.get("pre_prompt") or "").strip()
+        post_prompt = (sample.get("post_prompt") or "").strip()
+        # ground_truth = (sample.get("answer") or "").strip()
+        ground_truth = sample.get("label", "Unknown")
+        
+        # Get the time series and convert to image
+        ts = sample.get("original_data", sample.get("time_series", None))
+        sleep_image = _time_series_to_pil(ts)
+        
+        # Build the user text
+        user_text = "\n\n".join([pre_prompt, post_prompt])
+        sanity_check = "\n\nDescribe this EEG signal in as much detail as possible."
+        
+        # Build messages matching training format
+        messages = [
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": "You are a helpful medical AI that analyzes sleep EEG."}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_text},
+                    {"type": "image", "image": sleep_image},
+                ]
+            }
+        ]
+        
+        # Run inference
+        response = run_inference(model, processor, messages, max_new_tokens=args.max_new_tokens, temperature=args.temperature)
+        
+        # Store result
+        result = {
+            "sample_idx": idx,
+            "input_text": user_text,
+            "target_answer": ground_truth,
+            "generated_answer": response,
         }
-    ]
+        results.append(result)
+        
+        # Print first 5 results
+        if idx < 5:
+            print("\n" + "="*80)
+            print(f"SAMPLE {idx} from {args.split} split")
+            print("="*80)
+            print(f"\nGround Truth Label: {ground_truth}")
+            print(f"\nQUESTION:\n{user_text}")  # Truncate for readability
+            print(f"\nGT REASONING:\n{sample.get('answer', '')}")
+            print(f"\nGROUND TRUTH ANSWER:\n{ground_truth}")
+            print(f"\nMODEL RESPONSE:\n{response}")
+            print("="*80)
     
-    # Print sample info
-    print("\n" + "="*80)
-    print(f"SAMPLE {args.sample_idx} from {args.split} split")
-    print("="*80)
-    print(f"\nGround Truth Label: {label}")
-    print(f"\nQUESTION:\n{user_text}\n")
-    print(f"GROUND TRUTH ANSWER:\n{ground_truth}\n")
+    # Save results to CSV
+    print(f"\n\nSaving results to {args.output_csv}...")
+    with open(args.output_csv, 'w', newline='', encoding='utf-8') as csvfile:
+        fieldnames = ["sample_idx", "input_text", "target_answer", "generated_answer"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        
+        writer.writeheader()
+        for result in results:
+            writer.writerow(result)
     
-    # Run inference
-    print("Generating model response...")
-    response = run_inference(model, processor, messages, max_new_tokens=args.max_new_tokens, temperature=args.temperature)
-    
-    print("="*80)
-    print(f"MODEL RESPONSE:\n{response}")
-    print("="*80)
-    
+    print(f"✓ Saved {len(results)} results to {args.output_csv}")
     print("\n" + "="*80)
     print("Inference completed successfully!")
     print("="*80)
