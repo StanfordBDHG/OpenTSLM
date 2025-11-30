@@ -22,7 +22,7 @@ from torch.utils.data import DataLoader
 from model_config import PATCH_SIZE
 
 # Model repository ID - change this to test different models
-REPO_ID = "OpenTSLM/llama-3.2-1b-har-flamingo"
+REPO_ID = "OpenTSLM/llama-3.2-1b-har-sp"
 
 def main():
     print("=" * 60)
