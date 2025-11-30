@@ -28,13 +28,16 @@ import zipfile
 from typing import Dict, List, Literal, Optional, Tuple
 from datasets import Dataset
 from sklearn.model_selection import train_test_split
+from time_series_datasets.constants import RAW_DATA
 
 # ---------------------------
 # Constants
 # ---------------------------
 
 RELEASE_URL = "https://polybox.ethz.ch/index.php/s/MT3y9WdEebT8wfj/download/M4TimeSeriesCaptionDatasetV02.zip"
-DATA_DIR = "data/M4TimeSeriesCaptionDataset"
+
+
+DATA_DIR = os.path.join(RAW_DATA, "M4TimeSeriesCaptionDataset")
 GENERATED_DATA_DIR = os.path.join(DATA_DIR, "M4TimeSeriesCaptionDataset")
 
 AVAILABLE_FREQUENCIES = ["Daily", "Hourly", "Monthly", "Quarterly", "Weekly", "Yearly"]

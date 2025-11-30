@@ -105,6 +105,56 @@ output = model.eval_prompt(prompt, normalize=True)
 print(output)
 ```
 
+### 🤗 HuggingFace Demo Scripts
+
+We provide ready-to-use demo scripts in the `demo/huggingface/` directory that demonstrate how to load pretrained models from HuggingFace Hub and run inference on the evaluation sets for each task:
+
+- **`01_test_hf_tsqa.py`** - Test TSQA (Time Series Question Answering) models
+- **`02_test_hf_m4.py`** - Test M4 (Time Series Captioning) models  
+- **`03_test_hf_har_cot.py`** - Test HAR CoT (Human Activity Recognition Chain-of-Thought) models
+- **`04_test_hf_sleep_cot.py`** - Test Sleep CoT (Sleep Stage Classification) models
+- **`05_test_hf_ecg_qa_cot.py`** - Test ECG QA CoT (ECG Question Answering) models
+
+Each script:
+1. Downloads the model checkpoint from HuggingFace Hub automatically (change repo id as neededs)
+2. Loads the corresponding test dataset
+3. Runs inference on the evaluation set
+4. Prints model outputs with sample information
+
+**Note:** The scripts above use the OpenTSLM-SP models except for ECG-QA, as they require less VRAM and should run on most hardware. Change the model checkpoints as needed in each file. 
+
+**Usage:**
+
+```bash
+# Run any of the demo scripts
+python demo/huggingface/01_test_hf_tsqa.py
+python demo/huggingface/02_test_hf_m4.py
+python demo/huggingface/03_test_hf_har_cot.py
+python demo/huggingface/04_test_hf_sleep_cot.py
+python demo/huggingface/05_test_hf_ecg_qa_cot.py
+```
+
+**Customizing the model:**
+
+Edit the `REPO_ID` variable at the top of each script to test different model variants. For example:
+
+```python
+# In 01_test_hf_tsqa.py
+REPO_ID = "OpenTSLM/llama-3.2-1b-tsqa-sp"  # Soft Prompt model
+# or
+REPO_ID = "OpenTSLM/llama-3.2-1b-tsqa-flamingo"  # Flamingo model
+```
+
+**Available models on HuggingFace:**
+
+All pretrained models are available under the `OpenTSLM` organization on HuggingFace Hub. Model names follow the pattern:
+- `OpenTSLM/{base_model}-{dataset}-{model_type}`
+  - `base_model`: `llama-3.2-1b`, `llama-3.2-3b`, `gemma-3-1b-pt`, `gemma-3-270m`
+  - `dataset`: `tsqa`, `m4`, `har`, `sleep`, `ecg`
+  - `model_type`: `sp` (Soft Prompt) or `flamingo` (Flamingo)
+
+Example: `OpenTSLM/llama-3.2-1b-ecg-flamingo`
+
 ## Training: Multi-stage training (Curriculum)
 
 OpenTSLM uses curriculum learning with progressive training stages:

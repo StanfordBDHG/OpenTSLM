@@ -45,6 +45,7 @@ class OpenTSLM:
         repo_id: str,
         device: Optional[str] = None,
         cache_dir: Optional[str] = None,
+        enable_lora: Optional[bool] = False,
     ) -> Union[OpenTSLMSP, OpenTSLMFlamingo]:
         """
         Load a pretrained model from Hugging Face Hub.
@@ -53,6 +54,7 @@ class OpenTSLM:
             repo_id: Hugging Face repository ID (e.g., "OpenTSLM/gemma-3-270m-pt-sleep-flamingo")
             device: Device to load the model on (default: auto-detect)
             cache_dir: Directory to cache downloaded models (optional)
+            enable_lora: Whether to enable LoRA (default: False)
 
         Returns:
             Union[OpenTSLMSP, OpenTSLMFlamingo]: The loaded model instance
@@ -76,6 +78,8 @@ class OpenTSLM:
         if model_type == ModelType.SP:
             # OpenTSLMSP uses default parameters from curriculum learning
             model = OpenTSLMSP(llm_id=base_llm_id, device=device)
+            if enable_lora:
+                model.enable_lora()
         elif model_type == ModelType.FLAMINGO:
             # OpenTSLMFlamingo with fixed parameters from curriculum learning
             model = OpenTSLMFlamingo(
@@ -127,7 +131,7 @@ class OpenTSLM:
             # Download the main model checkpoint file
             checkpoint_path = hf_hub_download(
                 repo_id=repo_id,
-                filename="model.pt",
+                filename="model_checkpoint.pt",
                 cache_dir=cache_dir,
                 local_files_only=False,
             )
@@ -137,7 +141,7 @@ class OpenTSLM:
         except Exception as e:
             raise RuntimeError(
                 f"Failed to download model from {repo_id}. "
-                f"Tried 'model.pt'. "
+                f"Tried 'model_checkpoint.pt'. "
                 f"Original error: {e}"
             )
 
