@@ -34,7 +34,7 @@ def run_sft(
     gradient_accumulation_steps: int = 4,
     max_seq_len: int = 4096,
     logging_steps: int = 10,
-    save_steps: int = 500,
+    save_steps: int = 10000,  # Save less frequently to save disk space
     bf16: bool = True,
 ) -> None:
     """Run LoRA SFT on chat-style examples (with images) and save adapters.
@@ -119,7 +119,7 @@ def run_sft(
         gradient_accumulation_steps=gradient_accumulation_steps,
         learning_rate=learning_rate,
         logging_steps=logging_steps,
-        save_steps=save_steps,
+        save_strategy="epoch",  # Only save at end of epoch to save disk space
         bf16=bf16,
         report_to=[],
         # SFT-specific fields: we provide our own collator, so skip text field processing
@@ -209,7 +209,22 @@ def run_sft(
         data_collator=collate_fn,
     )
 
-    trainer.train()
+    # Resume from checkpoint if it exists and is valid
+    resume_from_checkpoint = None
+    import glob
+    import os as os_module
+    checkpoints = glob.glob(f"{output_dir}/checkpoint-*")
+    if checkpoints:
+        # Get the latest checkpoint by sorting
+        latest_checkpoint = max(checkpoints, key=lambda x: int(x.split("-")[-1]))
+        # Check if trainer_state.json exists (valid checkpoint)
+        if os_module.path.exists(os_module.path.join(latest_checkpoint, "trainer_state.json")):
+            resume_from_checkpoint = latest_checkpoint
+            print(f"Resuming from checkpoint: {resume_from_checkpoint}")
+        else:
+            print(f"Checkpoint {latest_checkpoint} is incomplete, starting from scratch")
+    
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     trainer.model.save_pretrained(output_dir)
     processor.save_pretrained(output_dir)
     print(f"Saved LoRA adapters and processor to: {output_dir}")

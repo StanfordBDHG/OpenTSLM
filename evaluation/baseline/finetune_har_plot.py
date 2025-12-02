@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Minimal: load SleepEDF train split and plot first sample
+# Minimal: load HAR train split and plot first sample
 #
 
 import os
@@ -22,7 +22,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 
 # Prefer local import when running from evaluation/baseline, fall back to package path
 try:
@@ -78,15 +78,20 @@ def _build_messages_from_sample(sample: dict, eos_token: str = "") -> dict:
     if eos_token:
         ans = ans + eos_token
 
-    # Prefer original_data field injected by SleepEDFCoTQADataset
-    ts = sample.get("original_data", sample.get("time_series", None))
+    # Extract the 3-axis accelerometer data
+    x_axis = sample.get("x_axis", [])
+    y_axis = sample.get("y_axis", [])
+    z_axis = sample.get("z_axis", [])
+    
+    # Stack into a 2D array (3 channels x time_steps)
+    ts = np.array([x_axis, y_axis, z_axis])
     img = _time_series_to_pil(ts)
 
     user_text = "\n\n".join([p for p in [pre, post] if p])
     messages = [
         {
             "role": "system",
-            "content": [{"type": "text", "text": "You are a helpful medical AI that analyzes sleep EEG."}],
+            "content": [{"type": "text", "text": "You are a helpful AI that analyzes accelerometer data for human activity recognition."}],
         },
         {
             "role": "user",
@@ -105,10 +110,10 @@ def _build_messages_from_sample(sample: dict, eos_token: str = "") -> dict:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plot the first SleepEDF train sample (default) or run Gemma SFT with --sft."
+        description="Plot the first HAR train sample (default) or run Gemma SFT with --sft."
     )
     # SFT options
-    parser.add_argument("--output-dir", type=str, default="runs/gemma3-4b-pt-sleep-lora")
+    parser.add_argument("--output-dir", type=str, default="runs/gemma3-4b-pt-har-lora")
     parser.add_argument("--llm-id", type=str, default="google/gemma-3-4b-pt")
     parser.add_argument("--max-samples", type=int, default=1000)
     parser.add_argument("--epochs", type=int, default=1)
@@ -124,8 +129,8 @@ def main():
     processor = AutoProcessor.from_pretrained("google/gemma-3-4b-it")
     eos_token = processor.tokenizer.eos_token
 
-    # Build training chat examples with images from SleepEDF train split
-    ds = SleepEDFCoTQADataset(split="train", EOS_TOKEN="")
+    # Build training chat examples with images from HAR train split
+    ds = HARCoTQADataset(split="train", EOS_TOKEN="")
     n = len(ds) if args.max_samples is None else min(args.max_samples, len(ds))
     train_examples = [_build_messages_from_sample(ds[i], eos_token=eos_token) for i in range(n)]
 
@@ -140,14 +145,6 @@ def main():
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         max_seq_len=args.max_seq_len,
     )
-
-    # SleepEDFCoTQADataset._format_sample adds 'original_data'
-    # time_series = sample.get("original_data", None)
-    # if time_series is None:
-    #     # Fallback: try the raw dataset field if present
-    #     time_series = sample.get("time_series", None)
-
-    # plot_time_series(time_series)
 
 
 if __name__ == "__main__":
