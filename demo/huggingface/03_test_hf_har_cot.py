@@ -26,6 +26,7 @@ from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
 from torch.utils.data import DataLoader
 from model_config import PATCH_SIZE
+import torch
 
 # Model repository ID - change this to test different models
 REPO_ID = "OpenTSLM/llama-3.2-1b-har-sp"
@@ -40,7 +41,7 @@ def main():
     enable_lora = False
     if "-sp" in REPO_ID:
         enable_lora = True
-    model = OpenTSLM.load_pretrained(REPO_ID, enable_lora=enable_lora)
+    model = OpenTSLM.load_pretrained(REPO_ID, enable_lora=enable_lora, device="cuda" if torch.cuda.is_available() else "cpu")
 
    
     

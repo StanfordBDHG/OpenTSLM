@@ -80,32 +80,49 @@ Other variants may work but have not been extensively tested.
 
 
 
-## 🚀 Quickstart with pretrained models
+## 🤗 Quickstart with pretrained models on HuggingFace
 
 A factory class called `OpenTSLM` for easily loading pre-trained models from Hugging Face Hub. The `load_pretrained` method automatically detects the model type and returns the appropriate model instance.
 
+There are [demo scripts](demo/huggingface/) available which use the following minimal code. If you want to create your own applications, create a new file in **this repo folder** and use the following code as start:
 
 ```python
-from src import OpenTSLM, TextPrompt, TextTimeSeriesPrompt, FullPrompt
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 
-# Load model
-model = OpenTSLM.load_pretrained("OpenTSLM/gemma-3-270m-pt-har-flamingo")
+from model.llm.OpenTSLM import OpenTSLM
+from time_series_datasets.TSQADataset import TSQADataset
+from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
+from torch.utils.data import DataLoader
+from model_config import PATCH_SIZE
 
-# Create prompt with raw time series data (normalization handled automatically)
-prompt = FullPrompt(
-    pre_prompt=TextPrompt("You are an expert in HAR analysis."),
-    text_time_series_prompt_list=[
-        TextTimeSeriesPrompt("X-axis accelerometer", [2.34, 2.34, 7.657, 3.21, -1.2])
-    ],
-    post_prompt=TextPrompt("What activity is this? Reasn step by step providing a full rationale before replying.")
+REPO_ID = "OpenTSLM/llama-3.2-1b-tsqa-sp"
+
+# Use CPU or CUDA for inference. MPS does NOT work for pretrained HF checkpoints.
+model = OpenTSLM.load_pretrained(REPO_ID, device="cuda" if torch.cuda.is_available() else "cpu")
+test_dataset = TSQADataset("test", EOS_TOKEN=model.get_eos_token())
+
+test_loader = DataLoader(
+   test_dataset,
+   shuffle=False,
+   batch_size=1,
+   collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
+      batch, patch_size=PATCH_SIZE
+   ),
 )
 
-# Generate response
-output = model.eval_prompt(prompt, normalize=True)
-print(output)
+for i, batch in enumerate(test_loader):
+   predictions = model.generate(batch, max_new_tokens=200)
+   for sample, pred in zip(batch, predictions):
+      print("Question:", sample.get("pre_prompt", "N/A"))
+      print("Answer:", sample.get("answer", "N/A"))
+      print("Output:", pred)
+   if i >= 4:
+      break
 ```
 
-### 🤗 HuggingFace Demo Scripts
+### HuggingFace Demo Scripts
 
 We provide ready-to-use demo scripts in the `demo/huggingface/` directory that demonstrate how to load pretrained models from HuggingFace Hub and run inference on the evaluation sets for each task:
 
