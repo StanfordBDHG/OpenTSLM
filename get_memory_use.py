@@ -420,17 +420,23 @@ def main():
             res["dataset"],
             res["loss"],
             res["peak_cuda_bytes"],
-            f"{peak_gb:.4f}"
-            if isinstance(peak_gb, float) and peak_gb >= 0
-            else peak_gb,
+            (
+                f"{peak_gb:.4f}"
+                if isinstance(peak_gb, float) and peak_gb >= 0
+                else peak_gb
+            ),
             res.get("peak_cuda_reserved_bytes", -1),
-            f"{peak_reserved_gb:.4f}"
-            if isinstance(peak_reserved_gb, float) and peak_reserved_gb >= 0
-            else peak_reserved_gb,
+            (
+                f"{peak_reserved_gb:.4f}"
+                if isinstance(peak_reserved_gb, float) and peak_reserved_gb >= 0
+                else peak_reserved_gb
+            ),
             res.get("nvml_peak_bytes", -1),
-            f"{nvml_peak_gb:.4f}"
-            if isinstance(nvml_peak_gb, float) and nvml_peak_gb >= 0
-            else nvml_peak_gb,
+            (
+                f"{nvml_peak_gb:.4f}"
+                if isinstance(nvml_peak_gb, float) and nvml_peak_gb >= 0
+                else nvml_peak_gb
+            ),
             res["status"],
             res["error"],
         ],

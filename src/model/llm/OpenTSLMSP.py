@@ -21,9 +21,9 @@ except ImportError:
     print("Warning: peft not available. LoRA fine-tuning will be disabled.")
 
 from model_config import ENCODER_OUTPUT_DIM
-from model.llm.TimeSeriesLLM import TimeSeriesLLM
-from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
-from model.projector.MLPProjector import MLPProjector
+from .TimeSeriesLLM import TimeSeriesLLM
+from ..encoder.TransformerCNNEncoder import TransformerCNNEncoder
+from ..projector.MLPProjector import MLPProjector
 from prompt.full_prompt import FullPrompt
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
@@ -493,13 +493,17 @@ class OpenTSLMSP(TimeSeriesLLM):
 
         return 0
 
-    def eval_prompt(self, prompt: FullPrompt, max_new_tokens: int = 30000) -> str:
+    def eval_prompt(
+        self, prompt: FullPrompt, max_new_tokens: int = 30000, normalize: bool = False
+    ) -> str:
         """
         Evaluate a prompt and return the generated text.
         """
 
         batch = [prompt.to_dict()]
         self.eval()
-        batch = extend_time_series_to_match_patch_size_and_aggregate(batch)
+        batch = extend_time_series_to_match_patch_size_and_aggregate(
+            batch, normalize=normalize
+        )
         output = self.generate(batch, max_new_tokens=max_new_tokens)
         return output[0]

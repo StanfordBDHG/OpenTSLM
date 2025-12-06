@@ -9,3 +9,4 @@ raw_data
 *.ts
 *.zip
 ./__pycache__
+upload_to_huggingface.py

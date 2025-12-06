@@ -29,7 +29,6 @@ OpenTSLM models can reason over multiple time series of any length at once, gene
 
 </p>
 
-
 ## Installation
 
 1. **Clone the Repository**
@@ -80,7 +79,83 @@ OpenTSLM has been tested and works with the following models:
 Other variants may work but have not been extensively tested.
 
 
-## Multi-stage training (Curriculum)
+
+## 🚀 Quickstart with pretrained models
+
+EmbedHealth provides a factory class called `OpenTSLM` for easily loading pre-trained models from Hugging Face Hub. The `load_pretrained` method automatically detects the model type and returns the appropriate model instance.
+
+
+```python
+from src import OpenTSLM, TextPrompt, TextTimeSeriesPrompt, FullPrompt
+
+# Load model
+model = OpenTSLM.load_pretrained("OpenTSLM/gemma-3-270m-pt-har-flamingo")
+
+# Create prompt with raw time series data (normalization handled automatically)
+prompt = FullPrompt(
+    pre_prompt=TextPrompt("You are an expert in HAR analysis."),
+    text_time_series_prompt_list=[
+        TextTimeSeriesPrompt("X-axis accelerometer", [2.34, 2.34, 7.657, 3.21, -1.2])
+    ],
+    post_prompt=TextPrompt("What activity is this? Reasn step by step providing a full rationale before replying.")
+)
+
+# Generate response
+output = model.eval_prompt(prompt, normalize=True)
+print(output)
+```
+
+### 🤗 HuggingFace Demo Scripts
+
+We provide ready-to-use demo scripts in the `demo/huggingface/` directory that demonstrate how to load pretrained models from HuggingFace Hub and run inference on the evaluation sets for each task:
+
+- **`01_test_hf_tsqa.py`** - Test TSQA (Time Series Question Answering) models
+- **`02_test_hf_m4.py`** - Test M4 (Time Series Captioning) models  
+- **`03_test_hf_har_cot.py`** - Test HAR CoT (Human Activity Recognition Chain-of-Thought) models
+- **`04_test_hf_sleep_cot.py`** - Test Sleep CoT (Sleep Stage Classification) models
+- **`05_test_hf_ecg_qa_cot.py`** - Test ECG QA CoT (ECG Question Answering) models
+
+Each script:
+1. Downloads the model checkpoint from HuggingFace Hub automatically (change repo id as neededs)
+2. Loads the corresponding test dataset
+3. Runs inference on the evaluation set
+4. Prints model outputs with sample information
+
+**Note:** The scripts above use the OpenTSLM-SP models except for ECG-QA, as they require less VRAM and should run on most hardware. Change the model checkpoints as needed in each file. 
+
+**Usage:**
+
+```bash
+# Run any of the demo scripts
+python demo/huggingface/01_test_hf_tsqa.py
+python demo/huggingface/02_test_hf_m4.py
+python demo/huggingface/03_test_hf_har_cot.py
+python demo/huggingface/04_test_hf_sleep_cot.py
+python demo/huggingface/05_test_hf_ecg_qa_cot.py
+```
+
+**Customizing the model:**
+
+Edit the `REPO_ID` variable at the top of each script to test different model variants. For example:
+
+```python
+# In 01_test_hf_tsqa.py
+REPO_ID = "OpenTSLM/llama-3.2-1b-tsqa-sp"  # Soft Prompt model
+# or
+REPO_ID = "OpenTSLM/llama-3.2-1b-tsqa-flamingo"  # Flamingo model
+```
+
+**Available models on HuggingFace:**
+
+All pretrained models are available under the `OpenTSLM` organization on HuggingFace Hub. Model names follow the pattern:
+- `OpenTSLM/{base_model}-{dataset}-{model_type}`
+  - `base_model`: `llama-3.2-1b`, `llama-3.2-3b`, `gemma-3-1b-pt`, `gemma-3-270m`
+  - `dataset`: `tsqa`, `m4`, `har`, `sleep`, `ecg`
+  - `model_type`: `sp` (Soft Prompt) or `flamingo` (Flamingo)
+
+Example: `OpenTSLM/llama-3.2-1b-ecg-flamingo`
+
+## Training: Multi-stage training (Curriculum)
 
 OpenTSLM uses curriculum learning with progressive training stages:
 
@@ -136,6 +211,11 @@ python curriculum_learning.py --model OpenTSLMFlamingo --eval_only
 - `--batch_size`: Batch size for training
 - `--gradient_checkpointing`: Enable gradient checkpointing for memory efficiency
 - `--verbose`: Enable verbose logging
+
+### Repository Naming Convention
+
+- Repository IDs ending with `-sp` will load and return `EmbedHealthSP` models
+- Repository IDs ending with `-flamingo` will load and return `EmbedHealthFlamingo` models
 
 
 ## 📁 Results Structure

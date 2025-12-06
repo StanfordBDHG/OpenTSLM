@@ -5,3 +5,11 @@
 #
 # SPDX-License-Identifier: MIT
 #
+
+dirs:
+  - .
+useGitIgnore: true
+ignorePatterns:
+  - pattern: "doc:/"
+  - pattern: "http://localhost"
+  - pattern: "https://doi.org"
