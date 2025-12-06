@@ -82,7 +82,7 @@ Other variants may work but have not been extensively tested.
 
 ## 🚀 Quickstart with pretrained models
 
-EmbedHealth provides a factory class called `OpenTSLM` for easily loading pre-trained models from Hugging Face Hub. The `load_pretrained` method automatically detects the model type and returns the appropriate model instance.
+A factory class called `OpenTSLM` for easily loading pre-trained models from Hugging Face Hub. The `load_pretrained` method automatically detects the model type and returns the appropriate model instance.
 
 
 ```python
@@ -214,8 +214,8 @@ python curriculum_learning.py --model OpenTSLMFlamingo --eval_only
 
 ### Repository Naming Convention
 
-- Repository IDs ending with `-sp` will load and return `EmbedHealthSP` models
-- Repository IDs ending with `-flamingo` will load and return `EmbedHealthFlamingo` models
+- Repository IDs ending with `-sp` will load and return `OpenTSLMSP` models
+- Repository IDs ending with `-flamingo` will load and return `OpenTSLMFlamingo` models
 
 
 ## 📁 Results Structure
