@@ -1,12 +1,13 @@
-venv
+.venv
+.vscode
 __pycache__
 .DS_STORE
-**/.DS_STORE
 
 raw_data
 
+**/data/*
+!**/data/.gitkeep
 
 *.ts
 *.zip
-./__pycache__
 upload_to_huggingface.py

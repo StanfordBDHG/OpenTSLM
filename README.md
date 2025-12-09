@@ -34,13 +34,19 @@ OpenTSLM models can reason over multiple time series of any length at once, gene
 1. **Clone the Repository**
 
    ```bash
-   git clone https://github.com/StanfordBDHG/OpenTSLM.git --recurse-submodules
+   git clone https://github.com/StanfordBDHG/OpenTSLM.git
    ```
 
 2. **Install Dependencies**
    ```bash
-   pip install -r requirements.txt
+   # install uv if not exists
+   which uv > /dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
+
+   # sync dependencies
+   uv sync
    ```
+   
+   OpenTSLM uses [uv](https://docs.astral.sh/uv/) for package management.This will install all dependencies with Python 3.12 as specified in `.python-version`. Follow the [official installation guide](https://docs.astral.sh/uv/getting-started/installation/) for other installation methods.
 
 
 ## LLM Setup
@@ -144,11 +150,11 @@ Each script:
 
 ```bash
 # Run any of the demo scripts
-python demo/huggingface/01_test_hf_tsqa.py
-python demo/huggingface/02_test_hf_m4.py
-python demo/huggingface/03_test_hf_har_cot.py
-python demo/huggingface/04_test_hf_sleep_cot.py
-python demo/huggingface/05_test_hf_ecg_qa_cot.py
+uv run demo/huggingface/01_test_hf_tsqa.py
+uv run demo/huggingface/02_test_hf_m4.py
+uv run demo/huggingface/03_test_hf_har_cot.py
+uv run demo/huggingface/04_test_hf_sleep_cot.py
+uv run demo/huggingface/05_test_hf_ecg_qa_cot.py
 ```
 
 **Customizing the model:**
@@ -192,30 +198,30 @@ OpenTSLM uses curriculum learning with progressive training stages:
 
 ```bash
 # Run full curriculum with OpenTSLMFlamingo
-python curriculum_learning.py --model OpenTSLMSP
+uv run curriculum_learning.py --model OpenTSLMSP
 
 # Run full curriculum with OpenTSLMSP
-python curriculum_learning.py --model OpenTSLMFlamingo
+uv run curriculum_learning.py --model OpenTSLMFlamingo
 
 # Run specific stages
-python curriculum_learning.py --model OpenTSLMFlamingo --stages stage1_mcq
-python curriculum_learning.py --model OpenTSLMFlamingo --stages stage2_captioning
-python curriculum_learning.py --model OpenTSLMFlamingo --stages stage3_cot
-python curriculum_learning.py --model OpenTSLMFlamingo --stages stage4_sleep_cot
-python curriculum_learning.py --model OpenTSLMFlamingo --stages stage5_ecg_cot
+uv run curriculum_learning.py --model OpenTSLMFlamingo --stages stage1_mcq
+uv run curriculum_learning.py --model OpenTSLMFlamingo --stages stage2_captioning
+uv run curriculum_learning.py --model OpenTSLMFlamingo --stages stage3_cot
+uv run curriculum_learning.py --model OpenTSLMFlamingo --stages stage4_sleep_cot
+uv run curriculum_learning.py --model OpenTSLMFlamingo --stages stage5_ecg_cot
 
 # Run multiple stages
-python curriculum_learning.py --model OpenTSLMFlamingo --stages stage1_mcq stage2_captioning stage3_cot
+uv run curriculum_learning.py --model OpenTSLMFlamingo --stages stage1_mcq stage2_captioning stage3_cot
 
 # Specify device
-python curriculum_learning.py --model OpenTSLMFlamingo --device cuda
+uv run curriculum_learning.py --model OpenTSLMFlamingo --device cuda
 
 # Use different models
-python curriculum_learning.py --model OpenTSLMFlamingo --llm_id meta-llama/Llama-3.2-1B
-python curriculum_learning.py --model OpenTSLMFlamingo --llm_id google/gemma-3-270m
+uv run curriculum_learning.py --model OpenTSLMFlamingo --llm_id meta-llama/Llama-3.2-1B
+uv run curriculum_learning.py --model OpenTSLMFlamingo --llm_id google/gemma-3-270m
 
 # Run only evaluation
-python curriculum_learning.py --model OpenTSLMFlamingo --eval_only
+uv run curriculum_learning.py --model OpenTSLMFlamingo --eval_only
 ```
 
 ### Command Line Arguments
@@ -228,6 +234,24 @@ python curriculum_learning.py --model OpenTSLMFlamingo --eval_only
 - `--batch_size`: Batch size for training
 - `--gradient_checkpointing`: Enable gradient checkpointing for memory efficiency
 - `--verbose`: Enable verbose logging
+
+### Helper Scripts
+
+Helper scripts for analysis, testing, and batch processing are available in the `scripts/` directory:
+
+**Shell Scripts:**
+- **`run_all_memory.sh`** - Run comprehensive memory usage analysis across all stages
+- **`run_all_memory_missing.sh`** - Run memory analysis for missing stages only
+
+**Python Scripts:**
+- **`create_doctor_eval_dataset.py`** - Create evaluation dataset for doctor assessments
+- **`get_memory_use.py`** - Analyze and report memory usage across stages
+- **`plot_memory_usage.py`** - Visualize memory usage patterns
+- **`plot_memory_simulation.py`** - Simulate and plot memory requirements
+- **`plot_memory_simulation_per_length.py`** - Analyze memory usage by sequence length
+- **`hf_test.py`** - Test HuggingFace model loading and inference
+
+These scripts can be customized by editing the parameters directly or by passing command-line arguments.
 
 ### Repository Naming Convention
 

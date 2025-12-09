@@ -11,8 +11,8 @@ from model.encoder.CNNTokenizer import CNNTokenizer
 from model.llm.TimeSeriesFlamingoWithTrainableEncoder import (
     TimeSeriesFlamingoWithTrainableEncoder,
 )
-from open_flamingo.open_flamingo.src.flamingo_lm import FlamingoLMMixin
-from open_flamingo.open_flamingo.src.utils import extend_instance
+from open_flamingo.src.flamingo_lm import FlamingoLMMixin
+from open_flamingo.src.utils import extend_instance
 import torch
 import torch._dynamo
 from typing import List, Dict, Tuple
@@ -26,7 +26,7 @@ from time_series_datasets.util import (
 )
 
 # Monkey-patch FlamingoLayer to add attention_type property for compatibility with newer transformers
-from open_flamingo.open_flamingo.src.flamingo_lm import FlamingoLayer
+from open_flamingo.src.flamingo_lm import FlamingoLayer
 
 
 def _attention_type_property(self):

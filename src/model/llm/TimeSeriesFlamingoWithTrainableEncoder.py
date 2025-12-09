@@ -8,7 +8,7 @@
 
 import torch
 from torch import nn
-from open_flamingo.open_flamingo.src.flamingo import Flamingo
+from open_flamingo.src.flamingo import Flamingo
 from einops import rearrange
 
 
