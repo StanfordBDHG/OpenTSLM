@@ -16,7 +16,7 @@ The evaluation framework consists of:
 
 1. **`common_evaluator.py`** - Core evaluation logic that can be reused across datasets
 2. **`evaluate_tsqa.py`** - TSQA-specific evaluation
-3. **`evaluate_pamap.py`** - PAMAP-specific evaluation  
+3. **`evaluate_pamap.py`** - PAMAP-specific evaluation
 4. **`evaluate_all.py`** - Combined evaluation across all datasets
 5. **`test_baseline.py`** - Original baseline test (legacy)
 
@@ -64,10 +64,10 @@ def evaluate_newdataset(ground_truth: str, prediction: str) -> Dict[str, Any]:
     """Evaluate predictions for new dataset."""
     gt_clean = ground_truth.lower().strip()
     pred_clean = prediction.lower().strip()
-    
+
     exact_match = gt_clean == pred_clean
     similarity = SequenceMatcher(None, gt_clean, pred_clean).ratio()
-    
+
     return {
         "exact_match": int(exact_match),
         "similarity": similarity,
@@ -145,10 +145,10 @@ To add custom metrics, modify the evaluation function:
 ```python
 def evaluate_custom(ground_truth: str, prediction: str) -> Dict[str, Any]:
     # ... existing metrics ...
-    
+
     # Add custom metric
     custom_metric = calculate_custom_metric(ground_truth, prediction)
-    
+
     return {
         # ... existing metrics ...
         "custom_metric": custom_metric,
@@ -189,20 +189,20 @@ if idx < 10:  # Print more samples for debugging
 1. **Use GPU**: The framework automatically detects and uses CUDA/MPS if available
 2. **Batch Processing**: For multiple models, consider running them in parallel
 3. **Sample Limiting**: Use `max_samples` for quick testing before full evaluation
-4. **Model Caching**: Models are loaded once per evaluation run 
+4. **Model Caching**: Models are loaded once per evaluation run
 
 ## Using OpenAI Models (ChatGPT, GPT-4, etc.)
 
 You can now evaluate OpenAI models (e.g., ChatGPT, GPT-4) using the same evaluation scripts. To do so:
 
 1. **Set your OpenAI API key** (required):
-   
+
    ```bash
    export OPENAI_API_KEY=sk-...
    ```
 
 2. **Run the evaluation script with an OpenAI model name prefixed by `openai-`**:
-   
+
    ```bash
    python evaluate_tsqa.py openai-gpt-4
    python evaluate_pamap.py openai-gpt-3.5-turbo
@@ -211,4 +211,4 @@ You can now evaluate OpenAI models (e.g., ChatGPT, GPT-4) using the same evaluat
 
 3. **Notes:**
    - The model name after `openai-` should match the OpenAI API model name (e.g., `gpt-4`, `gpt-3.5-turbo`).
-   - You can adjust `max_new_tokens` and other parameters as usual. 
+   - You can adjust `max_new_tokens` and other parameters as usual.

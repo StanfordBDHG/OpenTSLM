@@ -9,9 +9,8 @@
 import torch
 import torch.nn as nn
 
-
-from src.model_config import TRANSFORMER_INPUT_DIM, ENCODER_OUTPUT_DIM, PATCH_SIZE
 from model.encoder.TimeSeriesEncoderBase import TimeSeriesEncoderBase
+from src.model_config import ENCODER_OUTPUT_DIM, PATCH_SIZE, TRANSFORMER_INPUT_DIM
 
 
 class TransformerMLPEncoder(TimeSeriesEncoderBase):
@@ -40,9 +39,7 @@ class TransformerMLPEncoder(TimeSeriesEncoderBase):
         self.patch_size = patch_size
 
         if input_dim % patch_size != 0:
-            raise RuntimeError(
-                "transformer encoder input dim must be divisible by patch size"
-            )
+            raise RuntimeError("transformer encoder input dim must be divisible by patch size")
         transformer_input_size = self.input_dim // patch_size
         self.patch_embed = nn.Linear(self.input_dim, transformer_input_size)
 
@@ -72,9 +69,7 @@ class TransformerMLPEncoder(TimeSeriesEncoderBase):
         """
         B, L = x.shape
         if L % self.patch_size != 0:
-            raise ValueError(
-                f"Sequence length {L} not divisible by patch_size {self.patch_size}"
-            )
+            raise ValueError(f"Sequence length {L} not divisible by patch_size {self.patch_size}")
 
         # reshape to (B, 1, L)
         x = x.unsqueeze(1)
@@ -89,7 +84,7 @@ class TransformerMLPEncoder(TimeSeriesEncoderBase):
         N = x.size(1)
         if N > self.pos_embed.size(1):
             raise ValueError(
-                f"Time series of length {N*4} is too long; max supported is {self.pos_embed.size(1)*4}. Change max_patches parameter in {__file__}"
+                f"Time series of length {N * 4} is too long; max supported is {self.pos_embed.size(1) * 4}. Change max_patches parameter in {__file__}"
             )
         pos = self.pos_embed[:, :N, :]
         x = x + pos

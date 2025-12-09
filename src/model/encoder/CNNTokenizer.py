@@ -9,9 +9,8 @@
 import torch
 import torch.nn as nn
 
-
-from model_config import TRANSFORMER_INPUT_DIM, ENCODER_OUTPUT_DIM, PATCH_SIZE
 from model.encoder.TimeSeriesEncoderBase import TimeSeriesEncoderBase
+from model_config import ENCODER_OUTPUT_DIM, PATCH_SIZE, TRANSFORMER_INPUT_DIM
 
 
 class CNNTokenizer(TimeSeriesEncoderBase):
@@ -46,9 +45,7 @@ class CNNTokenizer(TimeSeriesEncoderBase):
         )
 
         # 2) Learnable positional embeddings
-        self.pos_embed = nn.Parameter(
-            torch.randn(1, max_patches, transformer_input_dim)
-        )
+        self.pos_embed = nn.Parameter(torch.randn(1, max_patches, transformer_input_dim))
 
         # 3) Input norm + dropout
         self.input_norm = nn.LayerNorm(transformer_input_dim)
@@ -64,9 +61,7 @@ class CNNTokenizer(TimeSeriesEncoderBase):
 
         B, L = x.shape
         if L % self.patch_size != 0:
-            raise ValueError(
-                f"Sequence length {L} not divisible by patch_size {self.patch_size}"
-            )
+            raise ValueError(f"Sequence length {L} not divisible by patch_size {self.patch_size}")
 
         # reshape to (B, 1, L)
         x = x.unsqueeze(1)
@@ -81,7 +76,7 @@ class CNNTokenizer(TimeSeriesEncoderBase):
         N = x.size(1)
         if N > self.pos_embed.size(1):
             raise ValueError(
-                f"Time series of length {N*4} is too long; max supported is {self.pos_embed.size(1)*4}. Change max_patches parameter in {__file__}"
+                f"Time series of length {N * 4} is too long; max supported is {self.pos_embed.size(1) * 4}. Change max_patches parameter in {__file__}"
             )
         pos = self.pos_embed[:, :N, :]
         x = x + pos

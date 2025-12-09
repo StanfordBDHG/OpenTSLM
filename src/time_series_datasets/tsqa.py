@@ -6,18 +6,19 @@
 # SPDX-License-Identifier: MIT
 #
 
-from typing import Literal, Optional
+from typing import Literal
 
-from time_series_datasets.util import load_qa_dataset
 from datasets import load_dataset
+
 from src.model_config import *
+from time_series_datasets.util import load_qa_dataset
 
 
 def get_tsqa_dataset(
     split: Literal["train", "validation", "test"] = "train",
     *,
     EOS_TOKEN,
-    max_samples: Optional[int] = None,
+    max_samples: int | None = None,
 ):
     return load_qa_dataset(
         load_dataset("ChengsenWang/TSQA", split="train"),

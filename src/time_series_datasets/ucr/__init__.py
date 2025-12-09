@@ -6,4 +6,4 @@
 # SPDX-License-Identifier: MIT
 #
 
-from .ucr_loader import get_ucr_loader, load_ucr_dataset, UCRDataset, collate_fn
+from .ucr_loader import UCRDataset, collate_fn, get_ucr_loader, load_ucr_dataset

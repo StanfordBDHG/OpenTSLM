@@ -11,12 +11,15 @@
 Plot SleepEDF time series samples from sleep_cot_data.csv.
 Each sample is plotted as a PNG with EEG data and the full_prediction as text.
 """
-import os
+
 import json
-import pandas as pd
-import numpy as np
+import os
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
+
 
 CSV_PATH = "sleep_cot_data.csv"
 OUTPUT_DIR = "sleep_cot_plots"
@@ -95,14 +98,12 @@ def plot_sample(row, idx):
         ha="left",
         va="top",
         wrap=True,
-        bbox=dict(
-            boxstyle="round", facecolor="whitesmoke", alpha=0.9, edgecolor="gray"
-        ),
+        bbox=dict(boxstyle="round", facecolor="whitesmoke", alpha=0.9, edgecolor="gray"),
     )
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
 
-    fname = f"sample_{idx+1:03d}_gt_{pretty_gt.lower().replace(' ', '_').replace('-', '_')}.png"
+    fname = f"sample_{idx + 1:03d}_gt_{pretty_gt.lower().replace(' ', '_').replace('-', '_')}.png"
     plt.savefig(os.path.join(OUTPUT_DIR, fname), dpi=300, bbox_inches="tight")
     plt.close()
     print(f"Saved {fname}")

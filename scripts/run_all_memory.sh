@@ -66,7 +66,7 @@ for llm in "${LLM_IDS[@]}"; do
         echo "[ERROR] Failed for llm_id=$llm model=$model dataset=$dataset (exit $status)"
       fi
     done
-    
+
     # Run SimulationQADataset with all combinations of length and num_series
     for length in "${SIMULATION_LENGTHS[@]}"; do
       for num_series in "${SIMULATION_NUM_SERIES[@]}"; do
@@ -84,4 +84,3 @@ for llm in "${LLM_IDS[@]}"; do
 done
 
 echo "All runs completed."
-

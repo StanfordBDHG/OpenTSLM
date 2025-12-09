@@ -23,28 +23,24 @@ Output:
     - CSV file with time series data, ground truth labels, and rationale
 """
 
-import sys
-import os
-import torch
-import pandas as pd
-import numpy as np
-import random
-from typing import List, Dict, Any
 import json
+import os
+import random
+import sys
+from typing import Any
+
+import pandas as pd
+import torch
+
 
 # Add src to path
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
-)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "src")))
 
 from model.llm.OpenTSLMSP import OpenTSLMSP
-from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 from prompt.full_prompt import FullPrompt
 from prompt.text_prompt import TextPrompt
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
-from time_series_datasets.util import (
-    extend_time_series_to_match_patch_size_and_aggregate,
-)
+from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 
 
 def setup_device():
@@ -93,7 +89,7 @@ def run_inference_and_collect_data(
     num_samples: int = 10,
     max_new_tokens: int = 300,
     random_seed: int = 42,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Run inference on random samples and collect time series data, labels, and rationale."""
     print(f"Collecting data from {num_samples} random samples...")
 
@@ -103,9 +99,7 @@ def run_inference_and_collect_data(
 
     # Select random indices
     dataset_size = len(dataset)
-    selected_indices = random.sample(
-        range(dataset_size), min(num_samples, dataset_size)
-    )
+    selected_indices = random.sample(range(dataset_size), min(num_samples, dataset_size))
 
     results = []
 
@@ -135,9 +129,7 @@ def run_inference_and_collect_data(
 
                 # Create time series prompts using the data from the dataset
                 ts_prompts = []
-                for ts_text, ts_data in zip(
-                    row["time_series_text"], row["time_series"]
-                ):
+                for ts_text, ts_data in zip(row["time_series_text"], row["time_series"]):
                     ts_prompts.append(TextTimeSeriesPrompt(ts_text, ts_data))
 
                 # Create full prompt
@@ -187,7 +179,7 @@ def extract_sleep_label(prediction: str) -> str:
             return "unknown"
 
 
-def save_results_to_csv(results: List[Dict[str, Any]], output_path: str):
+def save_results_to_csv(results: list[dict[str, Any]], output_path: str):
     """Save the results to a CSV file."""
     print(f"Saving results to {output_path}...")
 
@@ -213,7 +205,7 @@ def save_results_to_csv(results: List[Dict[str, Any]], output_path: str):
     print(f"✅ Results saved to {output_path}")
 
     # Print summary
-    print(f"\n📊 Summary:")
+    print("\n📊 Summary:")
     print(f"Total samples: {len(results)}")
     correct = sum(1 for r in results if r["ground_truth_label"] == r["predicted_label"])
     accuracy = correct / len(results) if results else 0

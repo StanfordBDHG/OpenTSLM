@@ -11,29 +11,37 @@
 Test script for the PAMAP2 CoT loader.
 """
 
-import unittest
-import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', "src"))
+import sys
+import unittest
+
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Import and set up global logger with verbose mode
 from logger import get_logger, set_global_verbose
 from time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSampler
+
+
 class TestPAMAP2CoTLoader(unittest.TestCase):
     """
     Unit tests for the PAMAP2 CoT loader functions.
     """
+
     def setUp(self):
         # Set up global logger with verbose mode for detailed output
         set_global_verbose(True)
         self.logger = get_logger()
-        
+
         from time_series_datasets.pamap2.pamap2_cot_loader import load_pamap2_cot_splits
+
         self.load_pamap2_cot_splits = load_pamap2_cot_splits
-        
+
         self.logger.loading("Loading PAMAP2 CoT dataset splits...")
         self.train, self.val, self.test = self.load_pamap2_cot_splits()
-        self.logger.success(f"Dataset loaded successfully: Train={len(self.train)}, Val={len(self.val)}, Test={len(self.test)}")
+        self.logger.success(
+            f"Dataset loaded successfully: Train={len(self.train)}, Val={len(self.val)}, Test={len(self.test)}"
+        )
 
     def test_dataset_sizes(self):
         """Test that the datasets are non-empty and splits are correct."""
@@ -72,33 +80,38 @@ class TestPAMAP2CoTLoader(unittest.TestCase):
     def test_example_data(self):
         """Print example data to show what the dataset looks like."""
         sample = self.train[0]
-        self.logger.info("="*80)
+        self.logger.info("=" * 80)
         self.logger.info("EXAMPLE PAMAP2 COT DATASET SAMPLE")
-        self.logger.info("="*80)
+        self.logger.info("=" * 80)
         self.logger.info(f"Label: '{sample['label']}'")
-        if 'rationale' in sample:
+        if "rationale" in sample:
             self.logger.info(f"Rationale: '{sample['rationale']}'")
         for axis in ["x_axis", "y_axis", "z_axis"]:
             self.logger.info(f"{axis}: length={len(sample[axis])}, first 5: {sample[axis][:5]}")
-        self.logger.info("="*80)
+        self.logger.info("=" * 80)
+
 
 class TestPAMAP2CoTQADataset(unittest.TestCase):
     """
     Unit tests for the PAMAP2CoTQADataset class.
     """
+
     def setUp(self):
         # Set up global logger with verbose mode for detailed output
         set_global_verbose(True)
         self.logger = get_logger()
-        
+
         from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
+
         self.PAMAP2CoTQADataset = PAMAP2CoTQADataset
-        
+
         self.logger.loading("Initializing PAMAP2CoTQADataset...")
         self.train_dataset = self.PAMAP2CoTQADataset(split="train", EOS_TOKEN="")
         self.val_dataset = self.PAMAP2CoTQADataset(split="validation", EOS_TOKEN="")
         self.test_dataset = self.PAMAP2CoTQADataset(split="test", EOS_TOKEN="")
-        self.logger.success(f"Datasets initialized: Train={len(self.train_dataset)}, Val={len(self.val_dataset)}, Test={len(self.test_dataset)}")
+        self.logger.success(
+            f"Datasets initialized: Train={len(self.train_dataset)}, Val={len(self.val_dataset)}, Test={len(self.test_dataset)}"
+        )
 
     def test_dataset_sizes(self):
         """Test that the datasets are non-empty and splits are correct."""
@@ -137,12 +150,13 @@ class TestPAMAP2CoTQADataset(unittest.TestCase):
     def test_time_series_text_includes_mean_std(self):
         """Test that each time_series_text includes 'mean' and 'std', and both are followed by a number."""
         import re
+
         self.logger.info("Testing time series text format...")
         sample = self.train_dataset[0]
-        for i, text in enumerate(sample['time_series_text']):
+        for i, text in enumerate(sample["time_series_text"]):
             self.logger.debug(f"Testing text {i}: {text[:100]}...")
-            self.assertIn('mean', text)
-            self.assertIn('std', text)
+            self.assertIn("mean", text)
+            self.assertIn("std", text)
             # Allow for any whitespace after 'mean' and 'std'
             mean_match = re.search(r"mean\s+(-?\d+\.\d+)", text)
             if not mean_match:
@@ -157,19 +171,20 @@ class TestPAMAP2CoTQADataset(unittest.TestCase):
     def test_example_data_QA(self):
         """Print example data for PAMAP2CoTQADataset, showing all time series and text."""
         sample = self.train_dataset[0]
-        self.logger.info("="*80)
+        self.logger.info("=" * 80)
         self.logger.info("EXAMPLE PAMAP2CoTQADataset SAMPLE")
-        self.logger.info("="*80)
+        self.logger.info("=" * 80)
         self.logger.info(f"Pre-prompt: '{sample['pre_prompt']}'")
         self.logger.info(f"Post-prompt: '{sample['post_prompt']}'")
         self.logger.info(f"Answer (rationale): '{sample['answer']}'")
         self.logger.info(f"Number of time series: {len(sample['time_series'])}")
-        for i, (ts, ts_text) in enumerate(zip(sample['time_series'], sample['time_series_text'])):
+        for i, (ts, ts_text) in enumerate(zip(sample["time_series"], sample["time_series_text"])):
             self.logger.info(f"Time series {i} text: '{ts_text}'")
             self.logger.info(f"Time series {i} length: {len(ts)}")
             self.logger.info(f"First 10 values: {ts[:10]}")
             self.logger.info(f"Last 10 values: {ts[-10:]}")
-        self.logger.info("="*80)
+        self.logger.info("=" * 80)
+
 
 class TestBalancedBatchSampler(unittest.TestCase):
     def test_balanced_batches(self):
@@ -180,7 +195,7 @@ class TestBalancedBatchSampler(unittest.TestCase):
         This ensures the sampler yields perfectly balanced mini-batches, even when the dataset is imbalanced.
         """
         # Create a toy label list with imbalance
-        labels = ['a'] * 10 + ['b'] * 4 + ['c'] * 6
+        labels = ["a"] * 10 + ["b"] * 4 + ["c"] * 6
         batch_size = 6  # 3 classes, so 2 samples per class per batch
         sampler = BalancedBatchSampler(labels, batch_size)
         for batch in sampler:
@@ -197,18 +212,20 @@ class TestBalancedBatchSampler(unittest.TestCase):
         Test that BalancedBatchSampler produces balanced batches on the real PAMAP2CoTQADataset training split.
         Prints batch labels and class counts for each batch.
         """
-        from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
         from time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSampler
+        from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
+
         # Helper to extract label from answer string
         def extract_label_from_answer(answer: str) -> str:
             # Assumes answer ends with 'Answer: <label>' or 'Answer: <label>.'
-            if 'Answer:' in answer:
-                label = answer.split('Answer:')[-1].strip()
+            if "Answer:" in answer:
+                label = answer.split("Answer:")[-1].strip()
                 # Remove trailing period if present
-                if label.endswith('.'):
+                if label.endswith("."):
                     label = label[:-1]
                 return label.strip()
-            return ''
+            return ""
+
         # Load the real dataset
         dataset = PAMAP2CoTQADataset(split="train", EOS_TOKEN="")
         labels = [extract_label_from_answer(row["answer"]) for row in dataset]
@@ -223,5 +240,6 @@ class TestBalancedBatchSampler(unittest.TestCase):
             for l, count in counts.items():
                 self.assertEqual(count, 2, f"Expected 2 samples for class {l} per batch, got {count}")
 
+
 if __name__ == "__main__":
-    unittest.main() 
+    unittest.main()

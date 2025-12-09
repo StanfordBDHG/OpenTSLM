@@ -6,20 +6,20 @@
 # SPDX-License-Identifier: MIT
 #
 
-from datasets import Dataset
-from typing import List, Tuple
 
+from datasets import Dataset
 import numpy as np
-from prompt.text_time_series_prompt import TextTimeSeriesPrompt
-from time_series_datasets.QADataset import QADataset
-from time_series_datasets.pamap2.PAMAP2Dataset import PAMAP2Dataset, ACTIVITIY_ID_DICT
-from time_series_datasets.pamap2.pamap2_loader import PAMAP2_DIR
-from time_series_datasets.util import (
-    extend_time_series_to_match_patch_size_and_aggregate,
-)
 import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
+
+from prompt.text_time_series_prompt import TextTimeSeriesPrompt
+from time_series_datasets.pamap2.pamap2_loader import PAMAP2_DIR
+from time_series_datasets.pamap2.PAMAP2Dataset import PAMAP2Dataset
+from time_series_datasets.QADataset import QADataset
+from time_series_datasets.util import (
+    extend_time_series_to_match_patch_size_and_aggregate,
+)
 
 
 TIME_SERIS_LABELS = [
@@ -45,7 +45,7 @@ MAIN_ACTITIVIES = [
 
 
 class PAMAP2AccQADataset(QADataset):
-    def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
+    def _load_splits(self) -> tuple[Dataset, Dataset, Dataset]:
         train = PAMAP2Dataset(
             [
                 f"{PAMAP2_DIR}/Protocol/subject101.dat",
@@ -85,7 +85,7 @@ class PAMAP2AccQADataset(QADataset):
         """
         return text
 
-    def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
+    def _get_text_time_series_prompt_list(self, row) -> list[TextTimeSeriesPrompt]:
         series = torch.tensor(
             np.array(
                 [
@@ -108,9 +108,7 @@ class PAMAP2AccQADataset(QADataset):
 
         return [
             TextTimeSeriesPrompt(time_series_label, time_series)
-            for time_series_label, time_series in zip(
-                TIME_SERIS_LABELS, series.tolist()
-            )
+            for time_series_label, time_series in zip(TIME_SERIS_LABELS, series.tolist())
         ]
 
 
@@ -123,9 +121,7 @@ if __name__ == "__main__":
         dataset,
         batch_size=4,
         shuffle=True,
-        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
-            batch, patch_size=4
-        ),
+        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(batch, patch_size=4),
     )
 
     for batch in tqdm(dataloader):

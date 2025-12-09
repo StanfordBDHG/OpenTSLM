@@ -6,18 +6,20 @@
 # SPDX-License-Identifier: MIT
 #
 
-from datasets import Dataset
-from typing import List, Tuple, Literal
+from typing import Literal
 
-from prompt.text_time_series_prompt import TextTimeSeriesPrompt
-from time_series_datasets.QADataset import QADataset
-from time_series_datasets.har_cot.har_cot_loader import load_har_cot_splits
+from datasets import Dataset
 import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
+
+from prompt.text_time_series_prompt import TextTimeSeriesPrompt
+from time_series_datasets.har_cot.har_cot_loader import load_har_cot_splits
+from time_series_datasets.QADataset import QADataset
 from time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
+
 
 # Simple axis labels (no stats in-text for Acc variant)
 TIME_SERIES_LABELS = [
@@ -35,11 +37,9 @@ class HARAccQADataset(QADataset):
         format_sample_str: bool = False,
         time_series_format_function=None,
     ):
-        super().__init__(
-            split, EOS_TOKEN, format_sample_str, time_series_format_function
-        )
+        super().__init__(split, EOS_TOKEN, format_sample_str, time_series_format_function)
 
-    def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
+    def _load_splits(self) -> tuple[Dataset, Dataset, Dataset]:
         """
         Load the HAR dataset splits using the har_cot_loader, but ignore rationales.
 
@@ -67,7 +67,7 @@ The following activities (class labels) are possible: {activities}
 """
         return text
 
-    def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
+    def _get_text_time_series_prompt_list(self, row) -> list[TextTimeSeriesPrompt]:
         """
         Convert the time series data into a list of TextTimeSeriesPrompt objects.
         Does not normalize the data.
@@ -83,13 +83,11 @@ The following activities (class labels) are possible: {activities}
 
         return [
             TextTimeSeriesPrompt(time_series_label, time_series)
-            for time_series_label, time_series in zip(
-                TIME_SERIES_LABELS, series.tolist()
-            )
+            for time_series_label, time_series in zip(TIME_SERIES_LABELS, series.tolist())
         ]
 
     @staticmethod
-    def get_labels() -> List[str]:
+    def get_labels() -> list[str]:
         return [
             "biking",
             "lying",
@@ -115,17 +113,13 @@ if __name__ == "__main__":
     dataset_val = HARAccQADataset(split="validation", EOS_TOKEN="")
     dataset_test = HARAccQADataset(split="test", EOS_TOKEN="")
 
-    print(
-        f"Dataset sizes: Train: {len(dataset)}, Validation: {len(dataset_val)}, Test: {len(dataset_test)}"
-    )
+    print(f"Dataset sizes: Train: {len(dataset)}, Validation: {len(dataset_val)}, Test: {len(dataset_test)}")
 
     dataloader = DataLoader(
         dataset_test,
         batch_size=1,
         shuffle=True,
-        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
-            batch, patch_size=4
-        ),
+        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(batch, patch_size=4),
     )
 
     for batch in tqdm(dataloader, total=1):

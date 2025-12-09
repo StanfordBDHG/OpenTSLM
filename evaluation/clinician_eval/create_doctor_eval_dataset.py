@@ -13,27 +13,29 @@ This script extracts ECG-QA templates with correct model outputs from llama3b_fl
 and creates organized folders with ECG plots, CSV data, and evaluation materials.
 """
 
+from collections import defaultdict
 import json
 import os
-import sys
 import re
-import pandas as pd
-import numpy as np
+import sys
+
 import matplotlib.pyplot as plt
-import wfdb
-from pathlib import Path
-from typing import Dict, List, Set, Tuple
-from collections import defaultdict
+import numpy as np
+import pandas as pd
 from tqdm import tqdm
-import shutil
+import wfdb
+
 
 # Add the src directory to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
-from time_series_datasets.ecg_qa.plot_example import draw_ecg, get_ptbxl_ecg_path
+from time_series_datasets.ecg_qa.plot_example import get_ptbxl_ecg_path
+
 
 # Configuration
-MODEL_PREDICTIONS_FILE = "/Users/planger/Development/EmbedHealth/evaluation/opentslm/ecg_qa_cot/llama3b_flamingo_predictions.jsonl"
+MODEL_PREDICTIONS_FILE = (
+    "/Users/planger/Development/EmbedHealth/evaluation/opentslm/ecg_qa_cot/llama3b_flamingo_predictions.jsonl"
+)
 OUTPUT_DIR = "ecg_doctor_eval"
 SAMPLES_PER_TEMPLATE = 2
 
@@ -56,13 +58,13 @@ def is_correct_prediction(generated_text: str, correct_answer: str) -> bool:
     return predicted_answer.lower().strip() == correct_answer.lower().strip()
 
 
-def load_model_predictions() -> Dict[int, List[Dict]]:
+def load_model_predictions() -> dict[int, list[dict]]:
     """Load model predictions and group by template_id"""
     print(f"Loading model predictions from {MODEL_PREDICTIONS_FILE}")
 
     template_predictions = defaultdict(list)
 
-    with open(MODEL_PREDICTIONS_FILE, "r", encoding="utf-8") as f:
+    with open(MODEL_PREDICTIONS_FILE, encoding="utf-8") as f:
         for line_num, line in enumerate(tqdm(f, desc="Loading predictions"), 1):
             try:
                 data = json.loads(line.strip())
@@ -79,9 +81,7 @@ def load_model_predictions() -> Dict[int, List[Dict]]:
                     template_predictions[template_id].append(
                         {
                             "template_id": template_id,
-                            "ecg_id": data.get("ecg_id", [None])[0]
-                            if data.get("ecg_id")
-                            else None,
+                            "ecg_id": data.get("ecg_id", [None])[0] if data.get("ecg_id") else None,
                             "generated": generated_text,
                             "correct_answer": correct_answer,
                             "pre_prompt": data.get("pre_prompt", ""),
@@ -121,7 +121,7 @@ def extract_question_from_prompt(pre_prompt: str) -> str:
     return "Question not available"
 
 
-def get_answer_options_for_template(template_id: int) -> List[str]:
+def get_answer_options_for_template(template_id: int) -> list[str]:
     """Get answer options for a template"""
     try:
         return ECGQACoTQADataset.get_possible_answers_for_template(template_id)
@@ -130,7 +130,7 @@ def get_answer_options_for_template(template_id: int) -> List[str]:
         return []
 
 
-def load_ecg_data(ecg_id: int) -> Tuple[np.ndarray, str]:
+def load_ecg_data(ecg_id: int) -> tuple[np.ndarray, str]:
     """Load ECG data for a given ECG ID"""
     try:
         ecg_path = get_ptbxl_ecg_path(ecg_id)
@@ -203,7 +203,7 @@ def create_ecg_plot(
     template_id: int,
     ecg_id: int,
     question: str,
-    answer_options: List[str],
+    answer_options: list[str],
     clinical_context: str,
     model_output: str,
     correct_answer: str,
@@ -248,20 +248,12 @@ def create_ecg_plot(
 
             # Add grid lines (millimeter paper style)
             # Major grid lines (every 0.2s and 0.5mV)
-            ax.vlines(
-                np.arange(0, 10, 0.2), -2.5, 2.5, colors="r", alpha=0.3, linewidth=0.5
-            )
-            ax.hlines(
-                np.arange(-2.5, 2.5, 0.5), 0, 10, colors="r", alpha=0.3, linewidth=0.5
-            )
+            ax.vlines(np.arange(0, 10, 0.2), -2.5, 2.5, colors="r", alpha=0.3, linewidth=0.5)
+            ax.hlines(np.arange(-2.5, 2.5, 0.5), 0, 10, colors="r", alpha=0.3, linewidth=0.5)
 
             # Minor grid lines (every 0.04s and 0.1mV)
-            ax.vlines(
-                np.arange(0, 10, 0.04), -2.5, 2.5, colors="r", alpha=0.1, linewidth=0.3
-            )
-            ax.hlines(
-                np.arange(-2.5, 2.5, 0.1), 0, 10, colors="r", alpha=0.1, linewidth=0.3
-            )
+            ax.vlines(np.arange(0, 10, 0.04), -2.5, 2.5, colors="r", alpha=0.1, linewidth=0.3)
+            ax.hlines(np.arange(-2.5, 2.5, 0.1), 0, 10, colors="r", alpha=0.1, linewidth=0.3)
 
             ax.set_xticks(np.arange(0, 11, 1.0))
             ax.set_ylabel(f"Lead {lead_name} (mV)", fontweight="bold")
@@ -312,7 +304,7 @@ def create_evaluation_text_file(
     template_id: int,
     ecg_id: int,
     question: str,
-    answer_options: List[str],
+    answer_options: list[str],
     clinical_context: str,
     model_output: str,
     correct_answer: str,
@@ -321,18 +313,18 @@ def create_evaluation_text_file(
 
     txt_filename = f"{output_dir}/evaluation_info.txt"
     with open(txt_filename, "w") as f:
-        f.write(f"ECG-QA Doctor Evaluation\n")
-        f.write(f"=" * 50 + "\n\n")
+        f.write("ECG-QA Doctor Evaluation\n")
+        f.write("=" * 50 + "\n\n")
 
         f.write(f"Template ID: {template_id}\n")
         f.write(f"ECG ID: {ecg_id}\n\n")
 
         f.write(f"Question:\n{question}\n\n")
 
-        f.write(f"Answer Options:\n")
+        f.write("Answer Options:\n")
         for i, option in enumerate(answer_options, 1):
             f.write(f"{i}. {option}\n")
-        f.write(f"\n")
+        f.write("\n")
 
         f.write(f"Clinical Context:\n{clinical_context}\n\n")
 
@@ -345,9 +337,7 @@ def create_doctor_evaluation_dataset():
     """Main function to create the doctor evaluation dataset"""
 
     print("Creating doctor evaluation dataset...")
-    print(
-        "Note: Each template_id can have multiple different questions - using the specific question from each sample"
-    )
+    print("Note: Each template_id can have multiple different questions - using the specific question from each sample")
 
     # Create output directory
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -366,14 +356,10 @@ def create_doctor_evaluation_dataset():
         predictions = template_predictions[template_id]
 
         if len(predictions) < SAMPLES_PER_TEMPLATE:
-            print(
-                f"Template {template_id}: Only {len(predictions)} correct predictions, skipping"
-            )
+            print(f"Template {template_id}: Only {len(predictions)} correct predictions, skipping")
             continue
 
-        print(
-            f"\nProcessing template {template_id} with {len(predictions)} correct predictions"
-        )
+        print(f"\nProcessing template {template_id} with {len(predictions)} correct predictions")
 
         # Get answer options for this template
         answer_options = get_answer_options_for_template(template_id)
@@ -388,17 +374,13 @@ def create_doctor_evaluation_dataset():
             try:
                 ecg_id = prediction["ecg_id"]
                 if ecg_id is None:
-                    print(
-                        f"Template {template_id}, Sample {sample_idx}: No ECG ID, skipping"
-                    )
+                    print(f"Template {template_id}, Sample {sample_idx}: No ECG ID, skipping")
                     continue
 
                 print(f"  Processing sample {sample_idx}: ECG {ecg_id}")
 
                 # Create sample directory
-                sample_dir = (
-                    f"{OUTPUT_DIR}/template_{template_id:02d}/sample{sample_idx}"
-                )
+                sample_dir = f"{OUTPUT_DIR}/template_{template_id:02d}/sample{sample_idx}"
                 os.makedirs(sample_dir, exist_ok=True)
 
                 # Extract information
@@ -420,7 +402,7 @@ def create_doctor_evaluation_dataset():
                 # Save ECG as CSV files
                 try:
                     save_ecg_as_csv(ecg_data, sample_dir, ecg_id)
-                    print(f"    Saved ECG CSV files")
+                    print("    Saved ECG CSV files")
                 except Exception as e:
                     print(f"    Error saving ECG CSV: {e}")
 
@@ -453,7 +435,7 @@ def create_doctor_evaluation_dataset():
                         model_output,
                         correct_answer,
                     )
-                    print(f"    Created evaluation text file")
+                    print("    Created evaluation text file")
                 except Exception as e:
                     print(f"    Error creating text file: {e}")
 
@@ -464,7 +446,7 @@ def create_doctor_evaluation_dataset():
         processed_templates += 1
         print(f"Completed template {template_id}")
 
-    print(f"\nDoctor evaluation dataset creation completed!")
+    print("\nDoctor evaluation dataset creation completed!")
     print(f"Processed {processed_templates} templates")
     print(f"Output directory: {OUTPUT_DIR}")
 
@@ -472,7 +454,7 @@ def create_doctor_evaluation_dataset():
     create_summary_file(template_predictions)
 
 
-def create_summary_file(template_predictions: Dict[int, List[Dict]]):
+def create_summary_file(template_predictions: dict[int, list[dict]]):
     """Create a summary file with statistics"""
     summary_file = f"{OUTPUT_DIR}/dataset_summary.txt"
 
@@ -480,47 +462,37 @@ def create_summary_file(template_predictions: Dict[int, List[Dict]]):
         f.write("ECG-QA Doctor Evaluation Dataset Summary\n")
         f.write("=" * 50 + "\n\n")
 
-        f.write(
-            f"Total templates with correct predictions: {len(template_predictions)}\n"
-        )
+        f.write(f"Total templates with correct predictions: {len(template_predictions)}\n")
         f.write(f"Samples per template: {SAMPLES_PER_TEMPLATE}\n")
-        f.write(
-            f"Total samples created: {len(template_predictions) * SAMPLES_PER_TEMPLATE}\n\n"
-        )
+        f.write(f"Total samples created: {len(template_predictions) * SAMPLES_PER_TEMPLATE}\n\n")
 
         f.write("Template Statistics:\n")
         f.write("-" * 30 + "\n")
 
         for template_id in sorted(template_predictions.keys()):
             predictions = template_predictions[template_id]
-            f.write(
-                f"Template {template_id:2d}: {len(predictions):3d} correct predictions\n"
-            )
+            f.write(f"Template {template_id:2d}: {len(predictions):3d} correct predictions\n")
 
-        f.write(f"\nDataset Structure:\n")
-        f.write(f"ecg_doctor_eval/\n")
-        f.write(f"├── template_01/\n")
-        f.write(f"│   ├── sample1/\n")
-        f.write(f"│   │   ├── ecg_plot.png\n")
-        f.write(f"│   │   ├── evaluation_info.txt\n")
-        f.write(f"│   │   ├── lead_I.csv\n")
-        f.write(f"│   │   ├── lead_II.csv\n")
-        f.write(f"│   │   └── ... (all 12 leads)\n")
-        f.write(f"│   └── sample2/\n")
-        f.write(f"│       └── ... (same structure)\n")
-        f.write(f"├── template_02/\n")
-        f.write(f"│   └── ...\n")
-        f.write(f"└── dataset_summary.txt\n")
+        f.write("\nDataset Structure:\n")
+        f.write("ecg_doctor_eval/\n")
+        f.write("├── template_01/\n")
+        f.write("│   ├── sample1/\n")
+        f.write("│   │   ├── ecg_plot.png\n")
+        f.write("│   │   ├── evaluation_info.txt\n")
+        f.write("│   │   ├── lead_I.csv\n")
+        f.write("│   │   ├── lead_II.csv\n")
+        f.write("│   │   └── ... (all 12 leads)\n")
+        f.write("│   └── sample2/\n")
+        f.write("│       └── ... (same structure)\n")
+        f.write("├── template_02/\n")
+        f.write("│   └── ...\n")
+        f.write("└── dataset_summary.txt\n")
 
-        f.write(f"\nNotes:\n")
-        f.write(
-            f"- All predictions are CORRECT (model answer matches expected answer)\n"
-        )
-        f.write(f"- ECG data is downsampled to 100Hz for consistency\n")
-        f.write(
-            f"- Each sample includes clinical context, question, answer options, and model reasoning\n"
-        )
-        f.write(f"- CSV files contain time series data for each ECG lead\n")
+        f.write("\nNotes:\n")
+        f.write("- All predictions are CORRECT (model answer matches expected answer)\n")
+        f.write("- ECG data is downsampled to 100Hz for consistency\n")
+        f.write("- Each sample includes clinical context, question, answer options, and model reasoning\n")
+        f.write("- CSV files contain time series data for each ECG lead\n")
 
     print(f"Summary file created: {summary_file}")
 

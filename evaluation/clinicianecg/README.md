@@ -164,7 +164,7 @@ python -m ipykernel install --user --name=clinicianecg --display-name="ECG Analy
    ```bash
    python3 1_dataset_analyzer.py
    ```
-   - Creates `../reviewer_workbooks/` directory 
+   - Creates `../reviewer_workbooks/` directory
    - Generates `reviewer_assignments.pkl` and `review_assignments_summary.csv`
    - Reads ECG data from `../data/` directory
    - Uses configuration from `config.json` for reviewer assignment

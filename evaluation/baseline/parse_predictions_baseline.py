@@ -14,9 +14,8 @@ Parse baseline evaluation results and compute macro-F1 from detailed per-sample 
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, List
-
 import sys
+
 
 # Ensure repository root is on sys.path so 'evaluation' package is importable
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -24,17 +23,17 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from evaluation.opentslm.parse_predictions import (
+    calculate_accuracy_stats,
     calculate_f1_score,
     calculate_f1_stats,
-    calculate_accuracy_stats,
     extract_answer,
 )
 
 
-def extract_structured_data(obj: Dict) -> List[Dict]:
+def extract_structured_data(obj: dict) -> list[dict]:
     """Extract structured per-sample data points from a detailed results JSON object."""
     items = obj.get("detailed_results", [])
-    data_points: List[Dict] = []
+    data_points: list[dict] = []
     for it in items:
         ground_truth = it.get("target_answer", "")
         generated = it.get("generated_answer", "")
@@ -60,9 +59,7 @@ def extract_structured_data(obj: Dict) -> List[Dict]:
 
 
 def main():
-    ap = argparse.ArgumentParser(
-        description="Compute macro-F1 from a single baseline detailed results JSON."
-    )
+    ap = argparse.ArgumentParser(description="Compute macro-F1 from a single baseline detailed results JSON.")
     ap.add_argument(
         "--detailed-json",
         type=Path,
@@ -82,7 +79,7 @@ def main():
 
     # Accuracy stats
     accuracy_stats = calculate_accuracy_stats(data_points)
-    print(f"\nAccuracy Statistics:")
+    print("\nAccuracy Statistics:")
     print(f"Total samples: {accuracy_stats['total_samples']}")
     print(f"Correct predictions: {accuracy_stats['correct_predictions']}")
     print(f"Incorrect predictions: {accuracy_stats['incorrect_predictions']}")
@@ -90,17 +87,15 @@ def main():
 
     # F1 stats
     f1_stats = calculate_f1_stats(data_points)
-    print(f"\nF1 Score Statistics:")
+    print("\nF1 Score Statistics:")
     print(f"Average F1 Score: {f1_stats['average_f1']:.4f}")
     print(f"Macro-F1 Score: {f1_stats['macro_f1']:.4f}")
     print(f"Total Classes: {f1_stats['total_classes']}")
 
     if f1_stats["class_f1_scores"]:
-        print(f"\nPer-Class F1 Scores:")
+        print("\nPer-Class F1 Scores:")
         for class_name, scores in f1_stats["class_f1_scores"].items():
-            print(
-                f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}"
-            )
+            print(f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
 
     if args.clean_out:
         with args.clean_out.open("w", encoding="utf-8") as f:

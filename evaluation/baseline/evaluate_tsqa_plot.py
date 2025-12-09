@@ -6,19 +6,19 @@
 # SPDX-License-Identifier: MIT
 #
 
+import base64
+import io
 import re
 import sys
-import io
-import base64
-from typing import Dict, Any
-
-import matplotlib.pyplot as plt
+from typing import Any
 
 from common_evaluator_plot import CommonEvaluatorPlot
+import matplotlib.pyplot as plt
+
 from time_series_datasets.TSQADataset import TSQADataset
 
 
-def evaluate_tsqa(ground_truth: str, prediction: str) -> Dict[str, Any]:
+def evaluate_tsqa(ground_truth: str, prediction: str) -> dict[str, Any]:
     """
     Evaluate TSQA predictions against ground truth.
 

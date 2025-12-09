@@ -41,10 +41,10 @@ generated texts if labels are not provided.
 
 import argparse
 import json
-import re
 from pathlib import Path
-from typing import Dict, List
+import re
 import sys
+
 
 # Ensure repository root is on sys.path so 'evaluation' package is importable
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -52,9 +52,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from evaluation.opentslm.parse_predictions import (
+    calculate_accuracy_stats,
     calculate_f1_score,
     calculate_f1_stats,
-    calculate_accuracy_stats,
     extract_answer,
 )
 
@@ -90,7 +90,7 @@ def normalize_label(s: str) -> str:
     return s
 
 
-def extract_structured_data(obj: Dict) -> List[Dict]:
+def extract_structured_data(obj: dict) -> list[dict]:
     """Extract structured per-sample data points from the Sleep JSON results object.
 
     Returns a list of dicts with keys:
@@ -102,7 +102,7 @@ def extract_structured_data(obj: Dict) -> List[Dict]:
       - prediction_normalized, ground_truth_normalized
     """
     items = obj.get("detailed_results", [])
-    data_points: List[Dict] = []
+    data_points: list[dict] = []
 
     for it in items:
         metrics = it.get("metrics", {}) or {}
@@ -182,7 +182,7 @@ def main():
 
     # Accuracy stats (computed from per-sample)
     accuracy_stats = calculate_accuracy_stats(data_points)
-    print(f"\nAccuracy Statistics:")
+    print("\nAccuracy Statistics:")
     print(f"Total samples: {accuracy_stats.get('total_samples', 0)}")
     print(f"Correct predictions: {accuracy_stats.get('correct_predictions', 0)}")
     print(f"Incorrect predictions: {accuracy_stats.get('incorrect_predictions', 0)}")
@@ -190,18 +190,15 @@ def main():
 
     # F1 stats
     f1_stats = calculate_f1_stats(data_points)
-    print(f"\nF1 Score Statistics:")
+    print("\nF1 Score Statistics:")
     print(f"Average F1 Score: {f1_stats.get('average_f1', 0.0):.4f}")
     print(f"Macro-F1 Score: {f1_stats.get('macro_f1', 0.0):.4f}")
     print(f"Total Classes: {f1_stats.get('total_classes', 0)}")
 
     if f1_stats.get("class_f1_scores"):
-        print(f"\nPer-Class F1 Scores:")
+        print("\nPer-Class F1 Scores:")
         for class_name, scores in f1_stats["class_f1_scores"].items():
-            print(
-                f"  {class_name}: F1={scores['f1']:.4f}, "
-                f"P={scores['precision']:.4f}, R={scores['recall']:.4f}"
-            )
+            print(f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
 
     # Optional clean JSONL output
     if args.clean_out:

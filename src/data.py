@@ -7,12 +7,14 @@
 #
 
 import ast
-from typing import Literal, Optional
+from typing import Literal
 
-import torch
 from datasets import load_dataset
+import torch
 from torch.utils.data import DataLoader
+
 from src.model_config import *
+
 
 # ---------------------------
 # Constants
@@ -27,7 +29,7 @@ from src.model_config import *
 def load_tsqa(
     split: Literal["train", "validation", "test"] = "train",
     *,
-    max_samples: Optional[int] = None,
+    max_samples: int | None = None,
     val_frac: float = 0.1,
     test_frac: float = 0.1,
     seed: int = 42,
@@ -52,9 +54,7 @@ def load_tsqa(
     train_val, test = ds_full.train_test_split(test_size=test_frac, seed=seed).values()
 
     # 3) From the remaining data take validation
-    train, val = train_val.train_test_split(
-        test_size=val_frac / (1 - test_frac), seed=seed + 1
-    ).values()
+    train, val = train_val.train_test_split(test_size=val_frac / (1 - test_frac), seed=seed + 1).values()
 
     # 4) Choose the requested split
     if split == "train":
@@ -121,8 +121,8 @@ def get_loader(
     *,
     batch_size: int = BATCH_SIZE,
     patch_size: int = PATCH_SIZE,
-    max_samples: Optional[int] = None,
-    shuffle: Optional[bool] = None,  # default True for train, False otherwise
+    max_samples: int | None = None,
+    shuffle: bool | None = None,  # default True for train, False otherwise
     EOS_TOKEN="",
 ):
     """Convenience wrapper that returns a ``torch.utils.data.DataLoader`` for the requested split."""

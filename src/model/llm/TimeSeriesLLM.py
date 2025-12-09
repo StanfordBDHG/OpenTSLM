@@ -6,14 +6,12 @@
 # SPDX-License-Identifier: MIT
 #
 
+
 import torch
 import torch.nn as nn
-from typing import List, Dict, Tuple
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from torch.nn.utils.rnn import pad_sequence
 
-from model_config import ENCODER_OUTPUT_DIM
 from prompt.full_prompt import FullPrompt
+
 
 class TimeSeriesLLM(nn.Module):
     def __init__(
@@ -23,14 +21,10 @@ class TimeSeriesLLM(nn.Module):
         super().__init__()
         self.device = device
 
-    
-    def generate(
-        self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
-    ) -> List[str]:
-        
+    def generate(self, batch: list[dict[str, any]], max_new_tokens: int = 50, **generate_kwargs) -> list[str]:
         raise NotImplementedError("Generate method should be implemented by the subclass")
 
-    def compute_loss(self, batch: List[Dict[str, any]]) -> torch.Tensor:
+    def compute_loss(self, batch: list[dict[str, any]]) -> torch.Tensor:
         """
         batch: same format as generate()
         answers: List[str] of length B

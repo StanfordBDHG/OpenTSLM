@@ -10,16 +10,18 @@
 """Parser for converting baseline sleep COT JSON files to clean format."""
 
 import json
-import re
-import sys
 import os
 from pathlib import Path
-from collections import Counter
+import re
+import sys
+
 from tqdm import tqdm
+
 
 # Add the src directory to the path to import from the dataset class
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+
 
 # We'll determine supported labels dynamically from the actual ground truth data
 # Start with the dataset class labels as a fallback
@@ -120,9 +122,7 @@ def calculate_f1_stats(data_points):
     # Use discovered labels if available, otherwise fall back to dataset labels
     labels_to_use = SUPPORTED_LABELS if SUPPORTED_LABELS else FALLBACK_LABELS
     supported_lower = {label.lower(): label for label in labels_to_use}
-    class_predictions = {
-        lab.lower(): {"tp": 0, "fp": 0, "fn": 0} for lab in labels_to_use
-    }
+    class_predictions = {lab.lower(): {"tp": 0, "fp": 0, "fn": 0} for lab in labels_to_use}
 
     for point in data_points:
         gt_class = point.get("ground_truth_normalized", "")
@@ -153,11 +153,7 @@ def calculate_f1_stats(data_points):
 
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        f1 = (
-            2 * (precision * recall) / (precision + recall)
-            if (precision + recall) > 0
-            else 0
-        )
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
 
         # Use canonical casing in output keys
         pretty_name = supported_lower.get(class_name, class_name)
@@ -225,7 +221,7 @@ def parse_baseline_sleep_cot_json(input_file, output_file=None):
 
         # Calculate and display accuracy statistics
         accuracy_stats = calculate_accuracy_stats(extracted_data)
-        print(f"\nAccuracy Statistics:")
+        print("\nAccuracy Statistics:")
         print(f"Total samples: {accuracy_stats['total_samples']}")
         print(f"Correct predictions: {accuracy_stats['correct_predictions']}")
         print(f"Incorrect predictions: {accuracy_stats['incorrect_predictions']}")
@@ -233,18 +229,16 @@ def parse_baseline_sleep_cot_json(input_file, output_file=None):
 
         # Calculate and display F1 statistics
         f1_stats = calculate_f1_stats(extracted_data)
-        print(f"\nF1 Score Statistics:")
+        print("\nF1 Score Statistics:")
         print(f"Average F1 Score: {f1_stats['average_f1']:.4f}")
         print(f"Macro-F1 Score: {f1_stats['macro_f1']:.4f}")
         print(f"Total Classes: {f1_stats['total_classes']}")
 
         # Display per-class F1 scores
         if f1_stats["class_f1_scores"]:
-            print(f"\nPer-Class F1 Scores:")
+            print("\nPer-Class F1 Scores:")
             for class_name, scores in f1_stats["class_f1_scores"].items():
-                print(
-                    f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}"
-                )
+                print(f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
 
         with open(output_file, "w", encoding="utf-8") as f:
             for item in extracted_data:
@@ -261,7 +255,7 @@ def discover_ground_truth_labels(input_file):
     """Discover actual labels from ground truth data in the JSON file"""
     discovered_labels = set()
 
-    with open(input_file, "r", encoding="utf-8") as f:
+    with open(input_file, encoding="utf-8") as f:
         data = json.load(f)
 
         # Navigate to detailed_results
@@ -281,7 +275,7 @@ def extract_structured_data(input_file):
     """Extract structured data from baseline JSON file"""
     data_points = []
 
-    with open(input_file, "r", encoding="utf-8") as f:
+    with open(input_file, encoding="utf-8") as f:
         data = json.load(f)
 
         # Navigate to detailed_results
@@ -324,9 +318,7 @@ def extract_structured_data(input_file):
                 }
                 data_points.append(data_point)
             except Exception as e:
-                print(
-                    f"Error processing sample {result.get('sample_idx', 'unknown')}: {e}"
-                )
+                print(f"Error processing sample {result.get('sample_idx', 'unknown')}: {e}")
                 continue
 
     return data_points

@@ -6,33 +6,24 @@
 # SPDX-License-Identifier: MIT
 #
 
-import torch
+import os
+import sys
+
 import numpy as np
 import pandas as pd
+import torch
 
-import sys
-import os
 
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
-)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
+from prompt.full_prompt import FullPrompt
 from prompt.text_prompt import TextPrompt
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
-from prompt.full_prompt import FullPrompt
-from time_series_datasets.util import (
-    extend_time_series_to_match_patch_size_and_aggregate,
-)
+
 
 # 1. Load the model
-device = (
-    "cuda"
-    if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
-)
+device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 print(f"Using device: {device}")
 model = OpenTSLMFlamingo(
@@ -49,11 +40,7 @@ df = pd.read_csv(csv_path)
 row = df[df["id"] == "series-M42150"].iloc[0]
 series_str = row["series"]
 # Remove brackets and split
-series = [
-    float(x)
-    for x in series_str.strip("[]").replace("\n", "").replace(" ", "").split(",")
-    if x
-]
+series = [float(x) for x in series_str.strip("[]").replace("\n", "").replace(" ", "").split(",") if x]
 series = np.array(series, dtype=np.float32)
 mean = series.mean()
 std = series.std()

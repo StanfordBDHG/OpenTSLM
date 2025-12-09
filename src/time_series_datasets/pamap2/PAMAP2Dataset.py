@@ -6,10 +6,11 @@
 # SPDX-License-Identifier: MIT
 #
 
-from typing import Tuple
 import pandas as pd
-from time_series_datasets.pamap2.pamap2_loader import ensure_pamap2_data
 from torch.utils.data import Dataset
+
+from time_series_datasets.pamap2.pamap2_loader import ensure_pamap2_data
+
 
 ACTIVITIY_ID_DICT = {
     0: "transient",
@@ -57,10 +58,10 @@ class PAMAP2Dataset(Dataset):
         dataCollection = dataCollection.drop(
             dataCollection[dataCollection.activityID == 0].index
         )  # removal of any row of activity 0 as it is transient activity which it is not used
-        dataCollection = dataCollection.apply(
-            pd.to_numeric, errors="coerce"
-        )  # removal of non numeric data in cells
-        dataCollection = dataCollection.interpolate()  # removal of any remaining NaN value cells by constructing new data points in known set of data points
+        dataCollection = dataCollection.apply(pd.to_numeric, errors="coerce")  # removal of non numeric data in cells
+        dataCollection = (
+            dataCollection.interpolate()
+        )  # removal of any remaining NaN value cells by constructing new data points in known set of data points
 
         return dataCollection
 
@@ -150,9 +151,7 @@ class PAMAP2Dataset(Dataset):
         self.df = self._load_data(list_of_files)
 
         # create 3-second windows and store them as tensors + labels
-        self.time_series, self.labels = self._make_windows(
-            window_size="3s", min_pct=0.5
-        )
+        self.time_series, self.labels = self._make_windows(window_size="3s", min_pct=0.5)
 
     def _make_windows(self, window_size, min_pct=0.5):
         """

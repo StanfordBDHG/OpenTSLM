@@ -6,27 +6,27 @@
 # SPDX-License-Identifier: MIT
 #
 
+import base64
+from collections.abc import Callable
+import io
 import json
 import os
-import io
 import re
 import sys
-import base64
-from typing import Type, Callable, Dict, List, Any, Optional
+from time import sleep
+from typing import Any
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers.pipelines import pipeline
-import matplotlib.pyplot as plt
-from time import sleep
+
 
 # Add src to path
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
-)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src")))
 
 # Import OpenAIPipeline
 from openai_pipeline import OpenAIPipeline
@@ -37,7 +37,7 @@ class CommonEvaluator:
     A common evaluation framework for testing LLMs on time series datasets.
     """
 
-    def __init__(self, device: Optional[str] = None):
+    def __init__(self, device: str | None = None):
         """
         Initialize the evaluator.
 
@@ -69,9 +69,7 @@ class CommonEvaluator:
         """
         Load a model using transformers pipeline or OpenAI API.
         """
-        self.current_model_name = (
-            model_name  # Track the current model name for formatter selection
-        )
+        self.current_model_name = model_name  # Track the current model name for formatter selection
         if model_name.startswith("openai-"):
             # Use OpenAI API
             openai_model = model_name.replace("openai-", "")
@@ -91,10 +89,10 @@ class CommonEvaluator:
 
     def load_dataset(
         self,
-        dataset_class: Type[Dataset],
+        dataset_class: type[Dataset],
         split: str = "test",
         format_sample_str: bool = True,
-        max_samples: Optional[int] = None,
+        max_samples: int | None = None,
         **dataset_kwargs,
     ) -> Dataset:
         """
@@ -146,12 +144,12 @@ class CommonEvaluator:
     def evaluate_model_on_dataset(
         self,
         model_name: str,
-        dataset_class: Type[Dataset],
-        evaluation_function: Callable[[str, str], Dict[str, Any]],
-        max_samples: Optional[int] = None,
+        dataset_class: type[Dataset],
+        evaluation_function: Callable[[str, str], dict[str, Any]],
+        max_samples: int | None = None,
         use_plot: bool = False,
         **pipeline_kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Evaluate a model on a dataset using a custom evaluation function.
 
@@ -165,9 +163,7 @@ class CommonEvaluator:
         Returns:
             Dictionary containing evaluation results
         """
-        print(
-            f"Starting evaluation with model {model_name} on dataset {dataset_class.__name__}"
-        )
+        print(f"Starting evaluation with model {model_name} on dataset {dataset_class.__name__}")
         print("=" * 60)
 
         # Load model
@@ -177,9 +173,7 @@ class CommonEvaluator:
         dataset = self.load_dataset(dataset_class, max_samples=max_samples)
 
         # Check for existing results to resume from
-        existing_count = self._get_existing_results_count(
-            model_name, dataset_class.__name__
-        )
+        existing_count = self._get_existing_results_count(model_name, dataset_class.__name__)
         start_idx = existing_count
 
         # Limit samples if specified
@@ -212,7 +206,7 @@ class CommonEvaluator:
             print(f"📂 Loading existing results from {start_idx} completed samples...")
             jsonl_file = self._get_jsonl_file_path(model_name, dataset_class.__name__)
             if os.path.exists(jsonl_file):
-                with open(jsonl_file, "r") as f:
+                with open(jsonl_file) as f:
                     for line in f:
                         if line.strip():
                             result = json.loads(line.strip())
@@ -260,9 +254,7 @@ class CommonEvaluator:
 
                         sig = inspect.signature(evaluation_function)
                         if len(sig.parameters) >= 3:
-                            metrics = evaluation_function(
-                                target_answer, generated_text, sample
-                            )
+                            metrics = evaluation_function(target_answer, generated_text, sample)
                         else:
                             metrics = evaluation_function(target_answer, generated_text)
                     except Exception:
@@ -284,9 +276,7 @@ class CommonEvaluator:
                     results.append(result)
 
                     # Save individual result immediately to prevent data loss
-                    self._save_individual_result(
-                        result, model_name, dataset_class.__name__
-                    )
+                    self._save_individual_result(result, model_name, dataset_class.__name__)
 
                     # Print progress for first few samples
                     if idx < 10:
@@ -331,12 +321,10 @@ class CommonEvaluator:
             self._print_summary(final_results)
 
             # Consolidate JSONL results into final JSON file
-            consolidated_file = self._consolidate_jsonl_results(
-                model_name, dataset_class.__name__
-            )
+            consolidated_file = self._consolidate_jsonl_results(model_name, dataset_class.__name__)
             if consolidated_file:
                 # Update the consolidated file with correct total_samples
-                with open(consolidated_file, "r") as f:
+                with open(consolidated_file) as f:
                     consolidated_data = json.load(f)
                 consolidated_data["total_samples"] = total_samples
                 consolidated_data["success_rate"] = success_rate
@@ -356,7 +344,7 @@ class CommonEvaluator:
                 "detailed_results": [],
             }
 
-    def _aggregate_metrics(self, metrics_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _aggregate_metrics(self, metrics_list: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Aggregate metrics across all samples.
 
@@ -390,7 +378,7 @@ class CommonEvaluator:
 
         return aggregated
 
-    def _print_summary(self, results: Dict[str, Any]):
+    def _print_summary(self, results: dict[str, Any]):
         """Print evaluation summary."""
         print("\n" + "=" * 80)
         print("EVALUATION RESULTS")
@@ -409,19 +397,15 @@ class CommonEvaluator:
                 else:
                     print(f"  {metric_name}: {metric_values}")
 
-    def _save_results(self, results: Dict[str, Any]):
+    def _save_results(self, results: dict[str, Any]):
         """Save detailed results to file."""
         import os
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        detailed_dir = os.path.join(
-            current_dir, "..", "results", "baseline", "detailed"
-        )
+        detailed_dir = os.path.join(current_dir, "..", "results", "baseline", "detailed")
         os.makedirs(detailed_dir, exist_ok=True)
         normalized_model_id = re.sub(r"[^a-z0-9]", "-", results["model_name"].lower())
-        normalized_dataset_name = re.sub(
-            r"[^a-z0-9]", "-", results["dataset_name"].lower()
-        )
+        normalized_dataset_name = re.sub(r"[^a-z0-9]", "-", results["dataset_name"].lower())
         results_file = os.path.join(
             detailed_dir,
             f"evaluation_results_{normalized_model_id}_{normalized_dataset_name}.json",
@@ -432,16 +416,12 @@ class CommonEvaluator:
 
         print(f"\nDetailed results saved to: {results_file}")
 
-    def _save_individual_result(
-        self, result: Dict[str, Any], model_name: str, dataset_name: str
-    ):
+    def _save_individual_result(self, result: dict[str, Any], model_name: str, dataset_name: str):
         """Save individual result incrementally to prevent data loss."""
         import os
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        detailed_dir = os.path.join(
-            current_dir, "..", "results", "baseline", "detailed"
-        )
+        detailed_dir = os.path.join(current_dir, "..", "results", "baseline", "detailed")
         os.makedirs(detailed_dir, exist_ok=True)
         normalized_model_id = re.sub(r"[^a-z0-9]", "-", model_name.lower())
         normalized_dataset_name = re.sub(r"[^a-z0-9]", "-", dataset_name.lower())
@@ -460,9 +440,7 @@ class CommonEvaluator:
         import os
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        detailed_dir = os.path.join(
-            current_dir, "..", "results", "baseline", "detailed"
-        )
+        detailed_dir = os.path.join(current_dir, "..", "results", "baseline", "detailed")
         normalized_model_id = re.sub(r"[^a-z0-9]", "-", model_name.lower())
         normalized_dataset_name = re.sub(r"[^a-z0-9]", "-", dataset_name.lower())
 
@@ -478,7 +456,7 @@ class CommonEvaluator:
         # Read all JSONL results
         individual_results = []
         if os.path.exists(jsonl_file):
-            with open(jsonl_file, "r") as f:
+            with open(jsonl_file) as f:
                 for line in f:
                     if line.strip():
                         individual_results.append(json.loads(line.strip()))
@@ -498,9 +476,7 @@ class CommonEvaluator:
                 "dataset_name": dataset_name,
                 "total_samples": total_samples,
                 "successful_inferences": successful_inferences,
-                "success_rate": (
-                    successful_inferences / total_samples if total_samples > 0 else 0.0
-                ),
+                "success_rate": (successful_inferences / total_samples if total_samples > 0 else 0.0),
                 "metrics": aggregate_metrics,
                 "detailed_results": individual_results,
             }
@@ -519,9 +495,7 @@ class CommonEvaluator:
         import os
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        detailed_dir = os.path.join(
-            current_dir, "..", "results", "baseline", "detailed"
-        )
+        detailed_dir = os.path.join(current_dir, "..", "results", "baseline", "detailed")
         normalized_model_id = re.sub(r"[^a-z0-9]", "-", model_name.lower())
         normalized_dataset_name = re.sub(r"[^a-z0-9]", "-", dataset_name.lower())
         jsonl_file = os.path.join(
@@ -531,7 +505,7 @@ class CommonEvaluator:
 
         if os.path.exists(jsonl_file):
             count = 0
-            with open(jsonl_file, "r") as f:
+            with open(jsonl_file) as f:
                 for line in f:
                     if line.strip():
                         count += 1
@@ -543,9 +517,7 @@ class CommonEvaluator:
         import os
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        detailed_dir = os.path.join(
-            current_dir, "..", "results", "baseline", "detailed"
-        )
+        detailed_dir = os.path.join(current_dir, "..", "results", "baseline", "detailed")
         normalized_model_id = re.sub(r"[^a-z0-9]", "-", model_name.lower())
         normalized_dataset_name = re.sub(r"[^a-z0-9]", "-", dataset_name.lower())
         return os.path.join(
@@ -555,10 +527,10 @@ class CommonEvaluator:
 
     def evaluate_multiple_models(
         self,
-        model_names: List[str],
-        dataset_classes: List[Type[Dataset]],
-        evaluation_functions: Dict[str, Callable[[str, str], Dict[str, Any]]],
-        max_samples: Optional[int] = None,
+        model_names: list[str],
+        dataset_classes: list[type[Dataset]],
+        evaluation_functions: dict[str, Callable[[str, str], dict[str, Any]]],
+        max_samples: int | None = None,
         **pipeline_kwargs,
     ) -> pd.DataFrame:
         """
@@ -605,13 +577,10 @@ class CommonEvaluator:
                 # Check if this model-dataset combination already exists in results
                 if existing_df is not None:
                     existing_result = existing_df[
-                        (existing_df["model"] == model_name)
-                        & (existing_df["dataset"] == dataset_name)
+                        (existing_df["model"] == model_name) & (existing_df["dataset"] == dataset_name)
                     ]
                     if not existing_result.empty:
-                        print(
-                            f"⏭️  Skipping {model_name} on {dataset_name} (already evaluated)"
-                        )
+                        print(f"⏭️  Skipping {model_name} on {dataset_name} (already evaluated)")
                         continue
 
                 evaluation_function = evaluation_functions[dataset_name]
@@ -653,9 +622,7 @@ class CommonEvaluator:
                     current_df = pd.DataFrame(all_results)
                     if existing_df is not None:
                         # Append new results
-                        final_df = pd.concat(
-                            [existing_df, current_df], ignore_index=True
-                        )
+                        final_df = pd.concat([existing_df, current_df], ignore_index=True)
                     else:
                         final_df = current_df
 
@@ -675,9 +642,7 @@ class CommonEvaluator:
                     # Save DataFrame even after errors
                     current_df = pd.DataFrame(all_results)
                     if existing_df is not None:
-                        final_df = pd.concat(
-                            [existing_df, current_df], ignore_index=True
-                        )
+                        final_df = pd.concat([existing_df, current_df], ignore_index=True)
                     else:
                         final_df = current_df
                     final_df.to_csv(df_filename, index=False)
@@ -707,9 +672,7 @@ class CommonEvaluator:
 
         # Create the plot
         num_series = len(time_series_data)
-        fig, axes = plt.subplots(
-            num_series, 1, figsize=(10, 4 * num_series), sharex=True
-        )
+        fig, axes = plt.subplots(num_series, 1, figsize=(10, 4 * num_series), sharex=True)
         # If there's only one series, axes won't be an array
         if num_series == 1:
             axes = [axes]

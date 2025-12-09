@@ -73,3 +73,30 @@ Repository = "https://github.com/StanfordBDHG/EmbedHealth"
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+
+[tool.ruff.lint]
+# Enable lint rules, including import sorting (isort) and unused-import detection.
+select = [
+    "E",    # pycodestyle errors
+    #"F",    # Pyflakes (includes unused imports: F401)
+    "I",    # isort (import sorting)
+    "UP",   # pyupgrade (modernize code/imports)
+]
+
+ignore = [
+    "E741", # Ambiguous variable name
+    "E501", # Line too long
+    "E402", # Module level import not at top of file. TODO: remove with proper package structure
+]
+
+fixable = ["ALL"]
+
+
+[tool.ruff.lint.isort]
+# Treat this package as first-party to group imports correctly.
+known-first-party = ["opentslm"]
+# Prefer combining "as" imports and keep sections tightly sorted.
+combine-as-imports = true
+force-sort-within-sections = true
+# Place two blank lines after the import block (typical project style).
+lines-after-imports = 2

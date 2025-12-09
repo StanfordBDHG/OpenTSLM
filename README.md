@@ -11,7 +11,7 @@ SPDX-License-Identifier: MIT
 [![Static Analysis](https://github.com/StanfordBDHG/OpenTSLM/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/StanfordBDHG/OpenTSLM/actions/workflows/static-analysis.yml)
 
 
-Large Language Models (LLMs) have emerged as powerful tools for interpreting multimodal data (e.g., images, audio, text), often surpassing specialized models. In medicine, they hold particular promise for synthesizing large volumes of clinical information into actionable insights and patient-facing digital health applications.  Yet, a major limitation remains their inability to handle time series data. To overcome this gap, we present OpenTSLM, a family of Time Series Language Models (TSLMs) created by integrating time series as a native modality to pretrained Large Language Models, enabling natural-language prompting and reasoning over multiple time series of any length [...] **[🔗 Read the full paper](https://doi.org/10.13140/RG.2.2.14827.60963)**  
+Large Language Models (LLMs) have emerged as powerful tools for interpreting multimodal data (e.g., images, audio, text), often surpassing specialized models. In medicine, they hold particular promise for synthesizing large volumes of clinical information into actionable insights and patient-facing digital health applications.  Yet, a major limitation remains their inability to handle time series data. To overcome this gap, we present OpenTSLM, a family of Time Series Language Models (TSLMs) created by integrating time series as a native modality to pretrained Large Language Models, enabling natural-language prompting and reasoning over multiple time series of any length [...] **[🔗 Read the full paper](https://doi.org/10.13140/RG.2.2.14827.60963)**
 
 <p align="center">
   <img src="assets/schematic_overview_3.png" alt="Schematic Overview" width="100%">
@@ -45,18 +45,33 @@ OpenTSLM models can reason over multiple time series of any length at once, gene
    # sync dependencies
    uv sync
    ```
-   
+
    OpenTSLM uses [uv](https://docs.astral.sh/uv/) for package management.This will install all dependencies with Python 3.12 as specified in `.python-version`. Follow the [official installation guide](https://docs.astral.sh/uv/getting-started/installation/) for other installation methods.
 
+
+## Developer Setup
+
+Use pre-commit hooks to enforce formatting, import sorting, and basic hygiene checks locally before committing.
+
+```zsh
+# Install git hooks for this repository
+uv run pre-commit install
+
+# Run hooks against all files (first-time sweep)
+uv run pre-commit run --all-files
+
+# Run hooks only for staged changes (default on commit)
+uv run pre-commit run
+```
 
 ## LLM Setup
 
 OpenTSLM is designed to work with Llama and Gemma models, with Llama 3.2 1B as the default. These models are stored in Hugging Face repositories which may require access permissions. Follow these steps to gain access and download:
 
-1. **Request Access (for Llama models)**  
+1. **Request Access (for Llama models)**
    Visit the Llama model repository (e.g., https://huggingface.co/meta-llama/Llama-3.2-1B) or Gemma models repository (https://huggingface.co/google/gemma-3-270m) and request access from Meta.
 
-2. **Authenticate with Hugging Face**  
+2. **Authenticate with Hugging Face**
    Log in to your Hugging Face account and configure the CLI:
 
    ```bash
@@ -133,7 +148,7 @@ for i, batch in enumerate(test_loader):
 We provide ready-to-use demo scripts in the `demo/huggingface/` directory that demonstrate how to load pretrained models from HuggingFace Hub and run inference on the evaluation sets for each task:
 
 - **`01_test_hf_tsqa.py`** - Test TSQA (Time Series Question Answering) models
-- **`02_test_hf_m4.py`** - Test M4 (Time Series Captioning) models  
+- **`02_test_hf_m4.py`** - Test M4 (Time Series Captioning) models
 - **`03_test_hf_har_cot.py`** - Test HAR CoT (Human Activity Recognition Chain-of-Thought) models
 - **`04_test_hf_sleep_cot.py`** - Test Sleep CoT (Sleep Stage Classification) models
 - **`05_test_hf_ecg_qa_cot.py`** - Test ECG QA CoT (ECG Question Answering) models
@@ -144,7 +159,7 @@ Each script:
 3. Runs inference on the evaluation set
 4. Prints model outputs with sample information
 
-**Note:** The scripts above use the OpenTSLM-SP models except for ECG-QA, as they require less VRAM and should run on most hardware. Change the model checkpoints as needed in each file. 
+**Note:** The scripts above use the OpenTSLM-SP models except for ECG-QA, as they require less VRAM and should run on most hardware. Change the model checkpoints as needed in each file.
 
 **Usage:**
 

@@ -11,3 +11,4 @@ raw_data
 *.ts
 *.zip
 upload_to_huggingface.py
+*.egg-info

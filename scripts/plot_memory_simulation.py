@@ -16,11 +16,12 @@ Plot memory usage on simulation datasets from memory_simulation.csv.
 - Always shows panels in order: gemma-270m, gemma-1b, llama-1b, llama-3b.
 """
 
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import matplotlib
 import re
+
+import matplotlib
+import matplotlib.pyplot as plt
+import pandas as pd
+
 
 OOM_THRESHOLD = 180  # GB
 
@@ -65,18 +66,20 @@ def parse_simulation_dataset(name):
 def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
     # --- Paper-style settings ---
     plt.style.use("seaborn-v0_8-white")
-    matplotlib.rcParams.update({
-        "font.family": "serif",
-        "font.serif": ["Palatino", "Times New Roman", "DejaVu Serif"],
-        "font.size": 16,
-        "axes.labelsize": 18,
-        "axes.titlesize": 18,
-        "legend.fontsize": 15,
-        "xtick.labelsize": 15,
-        "ytick.labelsize": 15,
-        "axes.linewidth": 0.6,
-        "axes.edgecolor": "0.15",
-    })
+    matplotlib.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": ["Palatino", "Times New Roman", "DejaVu Serif"],
+            "font.size": 16,
+            "axes.labelsize": 18,
+            "axes.titlesize": 18,
+            "legend.fontsize": 15,
+            "xtick.labelsize": 15,
+            "ytick.labelsize": 15,
+            "axes.linewidth": 0.6,
+            "axes.edgecolor": "0.15",
+        }
+    )
 
     df = pd.read_csv(csv_file)
 
@@ -90,9 +93,7 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
     df[["base_model", "config"]] = df.apply(
         lambda row: pd.Series(parse_model_name(row["llm_id"], row["model"])), axis=1
     )
-    df[["L", "N"]] = df["dataset"].apply(
-        lambda s: pd.Series(parse_simulation_dataset(s))
-    )
+    df[["L", "N"]] = df["dataset"].apply(lambda s: pd.Series(parse_simulation_dataset(s)))
     df = df.dropna(subset=["L", "N"])
     df["L"] = df["L"].astype(int)
     df["N"] = df["N"].astype(int)
@@ -123,11 +124,7 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
         if subdf.empty:
             ax.set_title(base_model, fontsize=13, fontweight="bold")
             ax.set_facecolor("#F8F9FA")
-            ax.text(
-                0.5, 0.5, "No data",
-                ha="center", va="center",
-                fontsize=10, color="gray"
-            )
+            ax.text(0.5, 0.5, "No data", ha="center", va="center", fontsize=10, color="gray")
             ax.set_xticks([])
             ax.set_yticks([])
             continue
@@ -142,7 +139,8 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
             # Successful runs (≤ threshold)
             ok_df = cfg_df[cfg_df["peak_cuda_reserved_gb"] <= OOM_THRESHOLD]
             ax.plot(
-                ok_df["total_length"], ok_df["peak_cuda_reserved_gb"],
+                ok_df["total_length"],
+                ok_df["peak_cuda_reserved_gb"],
                 label=cfg,
                 color=color,
                 linewidth=3.0,
@@ -167,7 +165,8 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
 
                 # red X marker
                 ax.scatter(
-                    first_oom["total_length"], OOM_THRESHOLD * 1.05,
+                    first_oom["total_length"],
+                    OOM_THRESHOLD * 1.05,
                     color="red",
                     marker="x",
                     s=70,
@@ -175,14 +174,19 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
                     zorder=5,
                 )
                 ax.text(
-                    first_oom["total_length"], OOM_THRESHOLD * 1.05,
-                    "OOM", color="red", fontsize=9,
-                    fontweight="bold", ha="center", va="bottom"
+                    first_oom["total_length"],
+                    OOM_THRESHOLD * 1.05,
+                    "OOM",
+                    color="red",
+                    fontsize=9,
+                    fontweight="bold",
+                    ha="center",
+                    va="bottom",
                 )
 
         # Titles & labels
         ax.set_title(base_model, fontsize=17, fontweight="bold")
-        
+
         # Only show axis labels on specific subplots
         if ax == axes[0]:  # Leftmost subplot
             ax.set_ylabel("Peak CUDA Reserved (GB)", fontsize=16, fontweight="bold")
@@ -198,8 +202,7 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
 
         # Legend only in first subplot
         if ax == axes[0]:
-            leg = ax.legend(title=None, fontsize=15, loc="best", frameon=True,
-                            framealpha=0.95, edgecolor="0.3")
+            leg = ax.legend(title=None, fontsize=15, loc="best", frameon=True, framealpha=0.95, edgecolor="0.3")
             for text in leg.get_texts():
                 text.set_fontweight("bold")
 

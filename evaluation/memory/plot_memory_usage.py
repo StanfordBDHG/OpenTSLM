@@ -14,10 +14,10 @@ Within each subplot: bars for SoftPrompt vs Flamingo across datasets.
 Styled to match the paper-style plots.
 """
 
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import matplotlib
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
 
 
 def parse_model_name(llm_id, model_type):
@@ -78,9 +78,7 @@ def plot_memory_usage(csv_file="merged_success.csv"):
 
     # Order datasets
     dataset_order = ["TSQA", "HAR-CoT", "SleepEDF-CoT", "ECG-QA-CoT"]
-    df["dataset"] = pd.Categorical(
-        df["dataset"], categories=dataset_order, ordered=True
-    )
+    df["dataset"] = pd.Categorical(df["dataset"], categories=dataset_order, ordered=True)
 
     # Order configs
     config_order = ["SoftPrompt", "Flamingo"]

@@ -10,11 +10,11 @@
 """Parser for converting RTF-formatted JSONL files to clean format."""
 
 import json
-import re
-import sys
 import os
 from pathlib import Path
-from collections import Counter
+import re
+import sys
+
 
 # Add the src directory to the path to import from the dataset class
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -22,6 +22,7 @@ sys.path.append(os.path.join(project_root, "src"))
 
 # Import the dataset class to get labels
 from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
+
 
 # Get the supported labels from the dataset class
 SUPPORTED_LABELS = HARCoTQADataset.get_labels()
@@ -95,11 +96,7 @@ def calculate_f1_stats(data_points, allowed_labels=None):
 
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        f1 = (
-            2 * (precision * recall) / (precision + recall)
-            if (precision + recall) > 0
-            else 0
-        )
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
 
         class_f1_scores[class_name] = {
             "f1": f1,
@@ -145,9 +142,7 @@ def parse_rtf_jsonl(input_file, output_file=None):
     """Parse RTF-formatted JSONL file and extract JSON objects."""
     if output_file is None:
         input_path = Path(input_file)
-        output_file = str(
-            input_path.parent / f"{input_path.stem.split('.')[0]}.clean.jsonl"
-        )
+        output_file = str(input_path.parent / f"{input_path.stem.split('.')[0]}.clean.jsonl")
 
     print(f"Parsing {input_file}")
     print(f"Output will be saved to {output_file}")
@@ -171,13 +166,11 @@ def parse_rtf_jsonl(input_file, output_file=None):
     if extracted_data:
         print(f"Extracted {len(extracted_data)} data points")
         if excluded_count > 0:
-            print(
-                f"Excluded {excluded_count} predictions not in the label set from metrics"
-            )
+            print(f"Excluded {excluded_count} predictions not in the label set from metrics")
 
         # Calculate and display accuracy statistics (include all samples)
         accuracy_stats = calculate_accuracy_stats(extracted_data)
-        print(f"\nAccuracy Statistics:")
+        print("\nAccuracy Statistics:")
         print(f"Total samples: {accuracy_stats['total_samples']}")
         print(f"Correct predictions: {accuracy_stats['correct_predictions']}")
         print(f"Incorrect predictions: {accuracy_stats['incorrect_predictions']}")
@@ -185,18 +178,16 @@ def parse_rtf_jsonl(input_file, output_file=None):
 
         # Calculate and display F1 statistics (prevent OOV predictions from creating new classes)
         f1_stats = calculate_f1_stats(extracted_data, allowed_labels=allowed_labels)
-        print(f"\nF1 Score Statistics:")
+        print("\nF1 Score Statistics:")
         print(f"Average F1 Score: {f1_stats['average_f1']:.4f}")
         print(f"Macro-F1 Score: {f1_stats['macro_f1']:.4f}")
         print(f"Total Classes: {f1_stats['total_classes']}")
 
         # Display per-class F1 scores
         if f1_stats["class_f1_scores"]:
-            print(f"\nPer-Class F1 Scores:")
+            print("\nPer-Class F1 Scores:")
             for class_name, scores in f1_stats["class_f1_scores"].items():
-                print(
-                    f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}"
-                )
+                print(f"  {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
 
         with open(output_file, "w", encoding="utf-8") as f:
             for item in extracted_data:

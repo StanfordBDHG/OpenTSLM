@@ -7,13 +7,14 @@
 #
 
 import os
+from typing import Literal
 import zipfile
-import requests
-from typing import Literal, Optional
 
 import pandas as pd
+import requests
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader, Dataset
+
 
 # from constants import RAW_DATA_PATH
 
@@ -23,9 +24,9 @@ RAW_DATA_PATH = "./data"
 # Constants
 # ---------------------------
 
-UCR_URL    = "https://www.cs.ucr.edu/~eamonn/time_series_data_2018/UCRArchive_2018.zip"
-UCR_ZIP    = os.path.join(RAW_DATA_PATH, "UCRArchive_2018.zip")
-UCR_DIR    = os.path.join(RAW_DATA_PATH, "UCRArchive_2018")
+UCR_URL = "https://www.cs.ucr.edu/~eamonn/time_series_data_2018/UCRArchive_2018.zip"
+UCR_ZIP = os.path.join(RAW_DATA_PATH, "UCRArchive_2018.zip")
+UCR_DIR = os.path.join(RAW_DATA_PATH, "UCRArchive_2018")
 # Each subfolder under UCR_DIR corresponds to one dataset, e.g. "ECG5000".
 # Inside each, files are named "<DatasetName>_TRAIN.tsv" and "<DatasetName>_TEST.tsv".
 
@@ -33,11 +34,8 @@ UCR_DIR    = os.path.join(RAW_DATA_PATH, "UCRArchive_2018")
 # Helper to ensure data
 # ---------------------------
 
-def ensure_ucr_data(
-    zip_path: str = UCR_ZIP,
-    extract_to: str = RAW_DATA_PATH,
-    url: str      = UCR_URL
-):
+
+def ensure_ucr_data(zip_path: str = UCR_ZIP, extract_to: str = RAW_DATA_PATH, url: str = UCR_URL):
     """
     1) Download the UCRArchive_2018.zip if missing.
     2) Extract it to `extract_to/UCRArchive_2018`.
@@ -61,17 +59,16 @@ def ensure_ucr_data(
     # 2) Extract outer ZIP
     print(f"Extracting {zip_path} …")
     with zipfile.ZipFile(zip_path, "r") as z:
-        z.setpassword(b'someone')
+        z.setpassword(b"someone")
         z.extractall(extract_to)
+
 
 # ---------------------------
 # Core loader
 # ---------------------------
 
-def load_ucr_dataset(
-    dataset_name: str,
-    raw_data_path: str = RAW_DATA_PATH
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+
+def load_ucr_dataset(dataset_name: str, raw_data_path: str = RAW_DATA_PATH) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Load the TRAIN and TEST TSVs for a given UCR dataset.
 
@@ -86,51 +83,50 @@ def load_ucr_dataset(
 
     base = os.path.join(raw_data_path, "UCRArchive_2018", dataset_name)
     train_path = os.path.join(base, f"{dataset_name}_TRAIN.tsv")
-    test_path  = os.path.join(base, f"{dataset_name}_TEST.tsv")
+    test_path = os.path.join(base, f"{dataset_name}_TEST.tsv")
 
     # Load using pandas; first column is label, rest are the series values
     train_df = pd.read_csv(train_path, sep="\t", header=None)
-    test_df  = pd.read_csv(test_path,  sep="\t", header=None)
+    test_df = pd.read_csv(test_path, sep="\t", header=None)
 
     # Rename columns: 0 → "label", 1...N → "t1","t2",…
     n_cols = train_df.shape[1] - 1
     col_names = ["label"] + [f"t{i}" for i in range(1, n_cols + 1)]
     train_df.columns = col_names
-    test_df.columns  = col_names
+    test_df.columns = col_names
 
     return train_df, test_df
+
 
 # ---------------------------
 # PyTorch Dataset + Collate
 # ---------------------------
+
 
 class UCRDataset(Dataset):
     """
     PyTorch Dataset for one UCR time series dataset.
     Returns (normalized series tensor, label).
     """
-    def __init__(
-        self,
-        df: pd.DataFrame,
-        feature_cols: Optional[list[str]] = None,
-        label_col: str = "label"
-    ):
+
+    def __init__(self, df: pd.DataFrame, feature_cols: list[str] | None = None, label_col: str = "label"):
         super().__init__()
         self.df = df.reset_index(drop=True)
         self.feature_cols = feature_cols or [c for c in df.columns if c != label_col]
-        self.label_col    = label_col
+        self.label_col = label_col
 
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, idx):
-        row    = self.df.iloc[idx]
-        feats  = row[self.feature_cols].astype(float).values
+        row = self.df.iloc[idx]
+        feats = row[self.feature_cols].astype(float).values
         tensor = torch.tensor(feats, dtype=torch.float32)
         # per-sample z-normalization
         tensor = (tensor - tensor.mean()) / (tensor.std() + 1e-8)
-        label  = int(row[self.label_col])
+        label = int(row[self.label_col])
         return tensor, label
+
 
 def collate_fn(batch):
     """
@@ -141,16 +137,18 @@ def collate_fn(batch):
     feats, labs = zip(*batch)
     return torch.stack(feats), torch.tensor(labs, dtype=torch.long)
 
+
 # ---------------------------
 # DataLoader helper
 # ---------------------------
+
 
 def get_ucr_loader(
     dataset_name: str,
     split: Literal["train", "test", "all"] = "train",
     batch_size: int = 32,
-    shuffle: Optional[bool] = None,
-    raw_data_path: str = RAW_DATA_PATH
+    shuffle: bool | None = None,
+    raw_data_path: str = RAW_DATA_PATH,
 ) -> DataLoader:
     """
     Returns a DataLoader for a UCR dataset.
@@ -180,12 +178,8 @@ def get_ucr_loader(
         shuffle = split in ("train", "all")
 
     dataset = UCRDataset(df_sub)
-    return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        collate_fn=collate_fn
-    )
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn)
+
 
 # ---------------------------
 # Example usage

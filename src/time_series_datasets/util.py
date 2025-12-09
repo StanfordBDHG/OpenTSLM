@@ -6,13 +6,11 @@
 # SPDX-License-Identifier: MIT
 #
 
-import math
-from typing import List
-from model_config import PATCH_SIZE
-
+import torch
 import torch.nn.functional as F
 
-import torch
+from model_config import PATCH_SIZE
+
 
 MAX_VALUE = 50_000
 MIN_VALUE = -MAX_VALUE

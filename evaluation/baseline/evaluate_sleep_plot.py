@@ -6,16 +6,15 @@
 # SPDX-License-Identifier: MIT
 #
 
+import base64
+import io
 import re
 import sys
-import io
-import base64
-from typing import Dict, Any
-
-import matplotlib.pyplot as plt
-import numpy as np
+from typing import Any
 
 from common_evaluator_plot import CommonEvaluatorPlot
+import matplotlib.pyplot as plt
+
 from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 
 
@@ -40,9 +39,7 @@ def extract_label_from_text(text: str) -> str:
     return label.lower()
 
 
-def evaluate_sleep_stage(
-    ground_truth_text: str, prediction_text: str
-) -> Dict[str, Any]:
+def evaluate_sleep_stage(ground_truth_text: str, prediction_text: str) -> dict[str, Any]:
     """
     Evaluate SleepEDFCoTQADataset predictions against ground truth.
     For SleepEDF, the dataset's "answer" is a rationale ending with 'Answer: <label>'.

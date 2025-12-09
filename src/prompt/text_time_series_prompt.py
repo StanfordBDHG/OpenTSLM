@@ -6,9 +6,11 @@
 # SPDX-License-Identifier: MIT
 #
 
-from .prompt import Prompt
-import numpy as np
 from collections.abc import Sequence
+
+import numpy as np
+
+from .prompt import Prompt
 
 
 class TextTimeSeriesPrompt(Prompt):
@@ -22,17 +24,15 @@ class TextTimeSeriesPrompt(Prompt):
 
     def __init__(self, text: str, time_series: Sequence):
         assert isinstance(text, str), "Text must be a string!"
-        assert isinstance(time_series, (np.ndarray, Sequence)), (
-            "Time series must be a list or numpy array!"
-        )
+        assert isinstance(time_series, (np.ndarray, Sequence)), "Time series must be a list or numpy array!"
 
         ts_array = np.array(time_series)
 
-        assert ts_array.ndim == 1, "Time series must be one-dimensional! You can input multiple time series, but each time series must be a one-dimensional array."
-        assert ts_array.size > 0, "Time series must not be empty!"
-        assert np.issubdtype(ts_array.dtype, np.number), (
-            "Time series must contain only numeric values!"
+        assert ts_array.ndim == 1, (
+            "Time series must be one-dimensional! You can input multiple time series, but each time series must be a one-dimensional array."
         )
+        assert ts_array.size > 0, "Time series must not be empty!"
+        assert np.issubdtype(ts_array.dtype, np.number), "Time series must contain only numeric values!"
 
         super().__init__()
 

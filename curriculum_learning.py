@@ -6,59 +6,48 @@
 # SPDX-License-Identifier: MIT
 #
 
-import sys
 import os
+import sys
+
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 
-import json
-import os as _os
 import argparse
-from typing import List, Optional, Dict, Any, Callable
-from time_series_datasets.TSQADataset import TSQADataset
-from time_series_datasets.m4.M4QADataset import M4QADataset
-from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
-from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
-from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
-from time_series_datasets.util import (
-    extend_time_series_to_match_patch_size_and_aggregate,
-)
+from collections.abc import Callable
+import datetime
+import json
+from typing import Any
+
 import torch
 import torch.distributed as dist
-from torch.optim import AdamW
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.nn.utils import clip_grad_norm_
+from torch.optim import AdamW
 from torch.utils.data import ConcatDataset, DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp import (
-    CPUOffload,
-    MixedPrecision,
-    ShardingStrategy,
-    BackwardPrefetch,
-    FullStateDictConfig,
-    StateDictType,
-)
 from tqdm.auto import tqdm
 from transformers import get_linear_schedule_with_warmup
 
-from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
+from logger import get_logger, set_global_verbose
 from model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
 from model.llm.OpenTSLMSP import OpenTSLMSP
-from model.projector.MLPProjector import MLPProjector
-import datetime
-from logger import get_logger, set_global_verbose
-
 from model_config import (
     BATCH_SIZE,
     EARLY_STOP_PAT,
     GRAD_CLIP_NORM,
     LR_ENCODER,
     LR_PROJECTOR,
-    NUM_EPOCHS,
     PATCH_SIZE,
     WARMUP_FRAC,
     WEIGHT_DECAY,
+)
+from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
+from time_series_datasets.m4.M4QADataset import M4QADataset
+from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+from time_series_datasets.TSQADataset import TSQADataset
+from time_series_datasets.util import (
+    extend_time_series_to_match_patch_size_and_aggregate,
 )
 
 
@@ -131,9 +120,7 @@ class CurriculumTrainer:
         self.model_type = model_type
         self.device = device or self._get_device()
         if self.device == "mps":
-            print(
-                "🚨 Warning: Using MPS, might not be fully compatible with the model. Use CUDA for best results."
-            )
+            print("🚨 Warning: Using MPS, might not be fully compatible with the model. Use CUDA for best results.")
         self.llm_id = llm_id
         self.llm_id_safe = self._sanitize_llm_id(llm_id)
 
@@ -256,9 +243,7 @@ class CurriculumTrainer:
                         print(f"📊 Learning rates for {self.model_type} (with LoRA):")
                         print(f"   Encoder LR: {encoder_lr:.2e}")
                         print(f"   Projector LR: {projector_lr:.2e}")
-                        print(
-                            f"   LoRA LR: {projector_lr:.2e} ({len(lora_params)} parameters)"
-                        )
+                        print(f"   LoRA LR: {projector_lr:.2e} ({len(lora_params)} parameters)")
                 else:
                     raise RuntimeError(
                         "LoRA is enabled but no trainable LoRA parameters found. This indicates a LoRA configuration issue."
@@ -275,8 +260,7 @@ class CurriculumTrainer:
             params_to_optimize = model.named_parameters()
             params_to_optimize = list(
                 filter(
-                    lambda x: x[1].requires_grad
-                    and not getattr(x[1], "exclude_from_optimizer", False),
+                    lambda x: x[1].requires_grad and not getattr(x[1], "exclude_from_optimizer", False),
                     params_to_optimize,
                 )
             )
@@ -306,7 +290,7 @@ class CurriculumTrainer:
 
     def _merge_data_loaders(
         self,
-        datasets: List[Dataset],
+        datasets: list[Dataset],
         shuffle: bool,
         batch_size: int,
         patch_size: int,
@@ -317,9 +301,7 @@ class CurriculumTrainer:
 
         # Use distributed sampler if distributed training is enabled
         if distribute_data and dist.is_initialized():
-            sampler = DistributedSampler(
-                merged_ds, num_replicas=self.world_size, rank=self.rank, shuffle=shuffle
-            )
+            sampler = DistributedSampler(merged_ds, num_replicas=self.world_size, rank=self.rank, shuffle=shuffle)
             return DataLoader(
                 merged_ds,
                 sampler=sampler,
@@ -338,9 +320,7 @@ class CurriculumTrainer:
                 ),
             )
 
-    def _save_checkpoint(
-        self, stage: str, epoch: int, val_loss: float, optimizer, scheduler
-    ):
+    def _save_checkpoint(self, stage: str, epoch: int, val_loss: float, optimizer, scheduler):
         """Save model checkpoint for a specific stage."""
         checkpoint_dir = os.path.join(self.results_dir, stage, "checkpoints")
 
@@ -368,9 +348,7 @@ class CurriculumTrainer:
             model_state = model.state_dict()
             if hasattr(self.model, "module"):
                 # Remove 'module.' prefix for DDP
-                model_state = {
-                    k.replace("module.", ""): v for k, v in model_state.items()
-                }
+                model_state = {k.replace("module.", ""): v for k, v in model_state.items()}
             checkpoint = {
                 "model_state": model_state,
                 "optimizer_state": optimizer.state_dict(),
@@ -390,15 +368,9 @@ class CurriculumTrainer:
             print(f"💾 Disk space: {free_gb:.2f} GB free in {checkpoint_dir}")
 
             # Estimate checkpoint size (rough estimate)
-            estimated_size_gb = sum(
-                p.numel() * p.element_size() for p in self._get_model().parameters()
-            ) / (1024**3)
-            if (
-                free_gb < estimated_size_gb * 2
-            ):  # Need at least 2x the size for safe writing
-                print(
-                    f"⚠️  Warning: Low disk space. Need ~{estimated_size_gb:.2f} GB, have {free_gb:.2f} GB free"
-                )
+            estimated_size_gb = sum(p.numel() * p.element_size() for p in self._get_model().parameters()) / (1024**3)
+            if free_gb < estimated_size_gb * 2:  # Need at least 2x the size for safe writing
+                print(f"⚠️  Warning: Low disk space. Need ~{estimated_size_gb:.2f} GB, have {free_gb:.2f} GB free")
 
         # Try to save with error handling
         try:
@@ -413,9 +385,7 @@ class CurriculumTrainer:
 
                 raise RuntimeError(f"Failed to save checkpoint: {e}")
 
-    def _save_loss_history(
-        self, stage: str, epoch: int, train_loss: float, val_loss: float
-    ):
+    def _save_loss_history(self, stage: str, epoch: int, train_loss: float, val_loss: float):
         """Save loss history to a file for tracking training progress."""
         if dist.is_initialized() and self.rank != 0:
             return  # Only save on rank 0 for distributed training
@@ -446,7 +416,7 @@ class CurriculumTrainer:
 
         if os.path.exists(loss_history_file):
             try:
-                with open(loss_history_file, "r") as f:
+                with open(loss_history_file) as f:
                     lines = f.readlines()
 
                 if len(lines) > 2:  # More than just header
@@ -469,19 +439,13 @@ class CurriculumTrainer:
             except Exception as e:
                 print(f"⚠️  Could not read loss history: {e}")
 
-    def _load_checkpoint(
-        self, stage: str, optimizer, scheduler, eval_only: bool = False
-    ):
+    def _load_checkpoint(self, stage: str, optimizer, scheduler, eval_only: bool = False):
         """Load model checkpoint for a specific stage."""
-        checkpoint_path = os.path.join(
-            self.results_dir, stage, "checkpoints", "best_model.pt"
-        )
+        checkpoint_path = os.path.join(self.results_dir, stage, "checkpoints", "best_model.pt")
 
         if os.path.exists(checkpoint_path):
             # Always load checkpoint to CPU first to avoid GPU OOM spikes
-            checkpoint = torch.load(
-                checkpoint_path, map_location="cpu", weights_only=False
-            )
+            checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
 
             # Get the underlying model (handles DDP wrapping)
             model = self._get_model()
@@ -492,20 +456,14 @@ class CurriculumTrainer:
 
                 # Load LoRA state using the OpenTSLMSP method (allow missing for backward compatibility)
                 try:
-                    model.load_lora_state_from_checkpoint(
-                        checkpoint, allow_missing=True
-                    )
+                    model.load_lora_state_from_checkpoint(checkpoint, allow_missing=True)
                 except RuntimeError as e:
                     if self.rank == 0:
                         print(f"❌ Failed to load LoRA state from checkpoint: {e}")
                     raise
 
                 # Only load optimizer state when training
-                if (
-                    not eval_only
-                    and optimizer is not None
-                    and "optimizer_state" in checkpoint
-                ):
+                if not eval_only and optimizer is not None and "optimizer_state" in checkpoint:
                     optimizer.load_state_dict(checkpoint["optimizer_state"])
             else:
                 # Handle DDP or single GPU case for OpenTSLMFlamingo
@@ -516,56 +474,34 @@ class CurriculumTrainer:
 
                 # Load state dict with strict=False to handle missing keys
                 try:
-                    missing_keys, unexpected_keys = self.model.load_state_dict(
-                        model_state, strict=False
-                    )
+                    missing_keys, unexpected_keys = self.model.load_state_dict(model_state, strict=False)
                     if missing_keys and self.rank == 0:
-                        print(
-                            f"⚠️  Warning: Missing keys when loading checkpoint for {stage}:"
-                        )
+                        print(f"⚠️  Warning: Missing keys when loading checkpoint for {stage}:")
                         for key in missing_keys[:10]:  # Show first 10 missing keys
                             print(f"   - {key}")
                         if len(missing_keys) > 10:
                             print(f"   ... and {len(missing_keys) - 10} more keys")
                     if unexpected_keys and self.rank == 0:
-                        print(
-                            f"⚠️  Warning: Unexpected keys when loading checkpoint for {stage}:"
-                        )
-                        for key in unexpected_keys[
-                            :10
-                        ]:  # Show first 10 unexpected keys
+                        print(f"⚠️  Warning: Unexpected keys when loading checkpoint for {stage}:")
+                        for key in unexpected_keys[:10]:  # Show first 10 unexpected keys
                             print(f"   - {key}")
                         if len(unexpected_keys) > 10:
                             print(f"   ... and {len(unexpected_keys) - 10} more keys")
                 except Exception as e:
-                    raise RuntimeError(
-                        f"Failed to load model state from checkpoint for {stage}: {e}"
-                    )
+                    raise RuntimeError(f"Failed to load model state from checkpoint for {stage}: {e}")
 
                 # Only load optimizer state when training
-                if (
-                    not eval_only
-                    and optimizer is not None
-                    and "optimizer_state" in checkpoint
-                ):
+                if not eval_only and optimizer is not None and "optimizer_state" in checkpoint:
                     optimizer.load_state_dict(checkpoint["optimizer_state"])
 
             # Only load scheduler state when training
-            if (
-                not eval_only
-                and scheduler is not None
-                and "scheduler_state" in checkpoint
-            ):
+            if not eval_only and scheduler is not None and "scheduler_state" in checkpoint:
                 scheduler.load_state_dict(checkpoint["scheduler_state"])
 
-            return checkpoint.get("epoch", "?"), checkpoint.get(
-                "val_loss", float("inf")
-            )
+            return checkpoint.get("epoch", "?"), checkpoint.get("val_loss", float("inf"))
         return None, float("inf")
 
-    def _load_previous_stage_model(
-        self, current_stage: str
-    ) -> Optional[Dict[str, Any]]:
+    def _load_previous_stage_model(self, current_stage: str) -> dict[str, Any] | None:
         """Load the best model from the previous stage and return its metrics."""
         try:
             current_idx = CURRICULUM_STAGES.index(current_stage)
@@ -573,9 +509,7 @@ class CurriculumTrainer:
                 # First stage, no previous model to load
                 return None
             previous_stage = CURRICULUM_STAGES[current_idx - 1]
-            metrics_file = os.path.join(
-                self.results_dir, previous_stage, "results", "metrics.json"
-            )
+            metrics_file = os.path.join(self.results_dir, previous_stage, "results", "metrics.json")
             if not os.path.exists(metrics_file):
                 # PATCH: If running stage2_captioning and previous stage metrics are missing, skip loading
                 if current_stage == "stage2_captioning":
@@ -584,24 +518,18 @@ class CurriculumTrainer:
                             f"⚠️  Skipping previous stage {previous_stage} because metrics file not found: {metrics_file}"
                         )
                     return None
-                raise RuntimeError(
-                    f"Previous stage {previous_stage} metrics file not found: {metrics_file}"
-                )
+                raise RuntimeError(f"Previous stage {previous_stage} metrics file not found: {metrics_file}")
             # Be robust to malformed JSON (e.g., concurrent writes or concatenated JSON)
             try:
-                with open(metrics_file, "r") as f:
+                with open(metrics_file) as f:
                     metrics = json.load(f)
             except Exception as e:
                 if self.rank == 0:
-                    print(
-                        f"⚠️  Warning: Could not parse metrics file for {previous_stage} ({metrics_file}): {e}"
-                    )
+                    print(f"⚠️  Warning: Could not parse metrics file for {previous_stage} ({metrics_file}): {e}")
                     print("   Proceeding without previous metrics.")
                 metrics = {}
             # Load the model weights from previous stage
-            checkpoint_path = os.path.join(
-                self.results_dir, previous_stage, "checkpoints", "best_model.pt"
-            )
+            checkpoint_path = os.path.join(self.results_dir, previous_stage, "checkpoints", "best_model.pt")
             if not os.path.exists(checkpoint_path):
                 # PATCH: If running stage2_captioning and previous stage checkpoint is missing, skip loading
                 if current_stage == "stage2_captioning":
@@ -610,9 +538,7 @@ class CurriculumTrainer:
                             f"⚠️  Skipping previous stage {previous_stage} because checkpoint not found: {checkpoint_path}"
                         )
                     return None
-                raise RuntimeError(
-                    f"Previous stage {previous_stage} checkpoint not found: {checkpoint_path}"
-                )
+                raise RuntimeError(f"Previous stage {previous_stage} checkpoint not found: {checkpoint_path}")
             print(
                 "Loading checkpoint from previous stage: ",
                 checkpoint_path,
@@ -622,9 +548,7 @@ class CurriculumTrainer:
                 self.llm_id,
             )
             print("This might take a while")
-            checkpoint = torch.load(
-                checkpoint_path, map_location="cpu", weights_only=False
-            )
+            checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
             # Get the underlying model (handles DDP wrapping)
             model = self._get_model()
             if self.model_type == "OpenTSLMSP":
@@ -633,13 +557,9 @@ class CurriculumTrainer:
 
                 # Load LoRA state from previous stage (allow missing for stage transitions)
                 try:
-                    loaded_count = model.load_lora_state_from_checkpoint(
-                        checkpoint, allow_missing=True
-                    )
+                    loaded_count = model.load_lora_state_from_checkpoint(checkpoint, allow_missing=True)
                     if loaded_count > 0 and self.rank == 0:
-                        print(
-                            f"📥 Loaded LoRA adapters from previous stage: {loaded_count} parameters"
-                        )
+                        print(f"📥 Loaded LoRA adapters from previous stage: {loaded_count} parameters")
                 except RuntimeError as e:
                     if self.rank == 0:
                         print(f"❌ Failed to load LoRA state from previous stage: {e}")
@@ -653,32 +573,24 @@ class CurriculumTrainer:
                     model_state = {f"module.{k}": v for k, v in model_state.items()}
                 # Load state dict with strict=False to handle missing keys
                 try:
-                    missing_keys, unexpected_keys = self.model.load_state_dict(
-                        model_state, strict=False
-                    )
+                    missing_keys, unexpected_keys = self.model.load_state_dict(model_state, strict=False)
                     if missing_keys and self.rank == 0:
-                        print(
-                            f"⚠️  Warning: Missing keys when loading previous stage {previous_stage}:"
-                        )
+                        print(f"⚠️  Warning: Missing keys when loading previous stage {previous_stage}:")
                         for key in missing_keys[:5]:  # Show first 5 missing keys
                             print(f"   - {key}")
                         if len(missing_keys) > 5:
                             print(f"   ... and {len(missing_keys) - 5} more keys")
                         print(
-                            f"   This is normal when transitioning between stages with different model configurations."
+                            "   This is normal when transitioning between stages with different model configurations."
                         )
                     if unexpected_keys and self.rank == 0:
-                        print(
-                            f"⚠️  Warning: Unexpected keys when loading previous stage {previous_stage}:"
-                        )
+                        print(f"⚠️  Warning: Unexpected keys when loading previous stage {previous_stage}:")
                         for key in unexpected_keys[:5]:  # Show first 5 unexpected keys
                             print(f"   - {key}")
                         if len(unexpected_keys) > 5:
                             print(f"   ... and {len(unexpected_keys) - 5} more keys")
                 except Exception as e:
-                    raise RuntimeError(
-                        f"Failed to load model state from previous stage {previous_stage}: {e}"
-                    )
+                    raise RuntimeError(f"Failed to load model state from previous stage {previous_stage}: {e}")
             return {
                 "stage": previous_stage,
                 "metrics": metrics,
@@ -688,9 +600,7 @@ class CurriculumTrainer:
         except Exception as e:
             raise RuntimeError(f"Failed to load previous stage model: {e}")
 
-    def _calculate_accuracy(
-        self, predictions: List[str], gold_answers: List[str]
-    ) -> float:
+    def _calculate_accuracy(self, predictions: list[str], gold_answers: list[str]) -> float:
         """Calculate accuracy for MCQ tasks."""
         correct = 0
         total = len(predictions)
@@ -713,7 +623,7 @@ class CurriculumTrainer:
         stage_name: str,
         metric_func: Callable = None,
         epoch: int = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Evaluate model on test set for a specific stage."""
         # Enable eval mode for all ranks
         self.model.eval()
@@ -730,9 +640,7 @@ class CurriculumTrainer:
             "results",
             f"test_predictions_rank_{self.rank if dist.is_initialized() else 0}.jsonl",
         )
-        final_results_file = os.path.join(
-            self.results_dir, stage_name, "results", "test_predictions.jsonl"
-        )
+        final_results_file = os.path.join(self.results_dir, stage_name, "results", "test_predictions.jsonl")
         results_fp = None
         # Ensure directory exists (defensive)
         os.makedirs(os.path.dirname(results_file_rank), exist_ok=True)
@@ -740,24 +648,16 @@ class CurriculumTrainer:
             print(f"[Eval] rank={self.rank}, world_size={self.world_size}")
             print(f"Saving per-rank test predictions to: {results_file_rank}")
             if dist.is_initialized():
-                print(
-                    f"Final merged predictions will be saved to: {final_results_file}"
-                )
+                print(f"Final merged predictions will be saved to: {final_results_file}")
         # Open per-rank file in write mode to start fresh, then append per-sample
         results_fp = open(results_file_rank, "w", encoding="utf-8")
         if not results_fp:
-            raise RuntimeError(
-                f"Failed to open per-rank results file: {results_file_rank}"
-            )
+            raise RuntimeError(f"Failed to open per-rank results file: {results_file_rank}")
         try:
             with torch.no_grad():
-                for batch in tqdm(
-                    test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0
-                ):
+                for batch in tqdm(test_loader, desc=f"Evaluating {stage_name}", disable=self.rank != 0):
                     # Generate predictions with higher max_tokens (skip separate loss computation)
-                    predictions = self._get_model().generate(
-                        batch, max_new_tokens=max_new_tokens
-                    )
+                    predictions = self._get_model().generate(batch, max_new_tokens=max_new_tokens)
 
                     # Collect results
                     for sample, pred in zip(batch, predictions):
@@ -814,7 +714,7 @@ class CurriculumTrainer:
                             f"test_predictions_rank_{r}.jsonl",
                         )
                         if os.path.exists(part_file):
-                            with open(part_file, "r", encoding="utf-8") as pf:
+                            with open(part_file, encoding="utf-8") as pf:
                                 for line in pf:
                                     merged_fp.write(line)
                 if self.rank == 0:
@@ -833,7 +733,7 @@ class CurriculumTrainer:
                 gold_answers = []
                 # Read from final merged file
                 merged_path = final_results_file
-                with open(merged_path, "r", encoding="utf-8") as f:
+                with open(merged_path, encoding="utf-8") as f:
                     for line in f:
                         try:
                             obj = json.loads(line)
@@ -846,9 +746,7 @@ class CurriculumTrainer:
         # Save results only on rank 0 (or when not distributed)
         if (not dist.is_initialized()) or (self.rank == 0):
             # Save metrics
-            metrics_file = os.path.join(
-                self.results_dir, stage_name, "results", "metrics.json"
-            )
+            metrics_file = os.path.join(self.results_dir, stage_name, "results", "metrics.json")
             with open(metrics_file, "w") as f:
                 json.dump(metrics, f, indent=2)
 
@@ -870,23 +768,19 @@ class CurriculumTrainer:
 
     def _is_evaluation_completed(self, stage: str) -> bool:
         """Check if evaluation was completed for a stage by looking for test predictions file."""
-        test_predictions_file = os.path.join(
-            self.results_dir, stage, "results", "test_predictions.jsonl"
-        )
+        test_predictions_file = os.path.join(self.results_dir, stage, "results", "test_predictions.jsonl")
         metrics_file = os.path.join(self.results_dir, stage, "results", "metrics.json")
 
         # Check if both files exist
-        if not os.path.exists(test_predictions_file) or not os.path.exists(
-            metrics_file
-        ):
+        if not os.path.exists(test_predictions_file) or not os.path.exists(metrics_file):
             return False
 
         # Also check if metrics file has evaluation results
         try:
-            with open(metrics_file, "r") as f:
+            with open(metrics_file) as f:
                 metrics = json.load(f)
             return "test_loss" in metrics
-        except:
+        except Exception:
             return False
 
     def _train_stage(
@@ -901,7 +795,7 @@ class CurriculumTrainer:
         batch_size: int = None,
         eval_only: bool = False,
         sampler=None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generic training function for any stage."""
         epoch = None
         # Use provided batch_size or default to global BATCH_SIZE
@@ -913,7 +807,7 @@ class CurriculumTrainer:
             if eval_only:
                 print("🔍 EVAL-ONLY MODE: Skipping training, only running evaluation")
             print("=" * 60)
-            print(f"📊 Stage Configuration:")
+            print("📊 Stage Configuration:")
             print(f"   Epochs: {num_epochs}")
             if self.model_type == "OpenTSLMSP":
                 print(f"   Encoder LR: {lr_encoder:.2e}")
@@ -966,16 +860,12 @@ class CurriculumTrainer:
         # Check if evaluation was already completed
         evaluation_completed = self._is_evaluation_completed(stage_name)
         if evaluation_completed and self.rank == 0:
-            print(
-                f"✅ Evaluation already completed for {stage_name}, skipping training and evaluation"
-            )
-            print(f"📂 Loading existing metrics...")
+            print(f"✅ Evaluation already completed for {stage_name}, skipping training and evaluation")
+            print("📂 Loading existing metrics...")
 
             # Load and return existing metrics
-            metrics_file = os.path.join(
-                self.results_dir, stage_name, "results", "metrics.json"
-            )
-            with open(metrics_file, "r") as f:
+            metrics_file = os.path.join(self.results_dir, stage_name, "results", "metrics.json")
+            with open(metrics_file) as f:
                 metrics = json.load(f)
 
             print(f"📊 Existing results for {stage_name}:")
@@ -1000,20 +890,14 @@ class CurriculumTrainer:
                     "BalancedBatchSampler was provided, but distributed training (DDP) is enabled. BalancedBatchSampler will NOT be used. Data will be sharded using DistributedSampler instead. Typically for stage3_cot it is better to use BalancedBatchSampler, if dataset is imbalanced."
                 )
                 train_loader = self._merge_data_loaders(
-                    [
-                        dataset_class(
-                            "train", EOS_TOKEN=self._get_model().get_eos_token()
-                        )
-                    ],
+                    [dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())],
                     shuffle=True,
                     batch_size=batch_size,
                     patch_size=PATCH_SIZE,
                     distribute_data=True,
                 )
             else:
-                train_dataset = dataset_class(
-                    "train", EOS_TOKEN=self._get_model().get_eos_token()
-                )
+                train_dataset = dataset_class("train", EOS_TOKEN=self._get_model().get_eos_token())
                 train_loader = DataLoader(
                     train_dataset,
                     batch_sampler=sampler,
@@ -1060,13 +944,9 @@ class CurriculumTrainer:
             print(f"🔥 Warmup steps: {warmup_steps}")
 
         # Load previous checkpoint if exists (for resuming current stage)
-        best_epoch, best_val_loss = self._load_checkpoint(
-            stage_name, optimizer, scheduler, eval_only=eval_only
-        )
+        best_epoch, best_val_loss = self._load_checkpoint(stage_name, optimizer, scheduler, eval_only=eval_only)
         if best_epoch is not None:
-            print(
-                f"📂 Resuming {stage_name} from epoch {best_epoch} (val_loss: {best_val_loss:.4f})"
-            )
+            print(f"📂 Resuming {stage_name} from epoch {best_epoch} (val_loss: {best_val_loss:.4f})")
             # Display previous loss history if available
             self._display_loss_history(stage_name)
         else:
@@ -1076,8 +956,8 @@ class CurriculumTrainer:
         # Skip training loop if eval_only is True
         if eval_only:
             if self.rank == 0:
-                print(f"⏭️  Skipping training loop (eval_only mode)")
-                print(f"📂 Using existing checkpoint for evaluation")
+                print("⏭️  Skipping training loop (eval_only mode)")
+                print("📂 Using existing checkpoint for evaluation")
             epoch = best_epoch
             epochs_no_improve = 0
         else:
@@ -1106,16 +986,10 @@ class CurriculumTrainer:
                                 if hasattr(v, "shape"):
                                     print(f"[DEBUG] Sample key '{k}' shape: {v.shape}")
                                 elif isinstance(v, list):
-                                    print(
-                                        f"[DEBUG] Sample key '{k}' list length: {len(v)}"
-                                    )
+                                    print(f"[DEBUG] Sample key '{k}' list length: {len(v)}")
                         import torch
 
-                        print(
-                            torch.cuda.memory_summary()
-                            if torch.cuda.is_available()
-                            else "No CUDA"
-                        )
+                        print(torch.cuda.memory_summary() if torch.cuda.is_available() else "No CUDA")
                     optimizer.zero_grad()
                     loss = self._get_model().compute_loss(batch)
                     loss.backward()
@@ -1166,35 +1040,25 @@ class CurriculumTrainer:
                 # Early stopping - all ranks need to make the same decision
                 should_save = avg_val_loss + 1e-4 < best_val_loss
                 if dist.is_initialized():
-                    save_tensor = torch.tensor(
-                        1 if should_save else 0, device=self.device
-                    )
+                    save_tensor = torch.tensor(1 if should_save else 0, device=self.device)
                     dist.all_reduce(save_tensor, op=dist.ReduceOp.SUM)
-                    should_save = (
-                        save_tensor.item() > 0
-                    )  # If any rank thinks we should save, we save
+                    should_save = save_tensor.item() > 0  # If any rank thinks we should save, we save
 
                 if should_save:
                     best_val_loss = avg_val_loss
                     epochs_no_improve = 0
-                    self._save_checkpoint(
-                        stage_name, epoch, avg_val_loss, optimizer, scheduler
-                    )
+                    self._save_checkpoint(stage_name, epoch, avg_val_loss, optimizer, scheduler)
                     if self.rank == 0:
                         tqdm.write("✔️  New best model saved.\n")
                 else:
                     epochs_no_improve += 1
                     if self.rank == 0:
-                        tqdm.write(
-                            f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs.\n"
-                        )
+                        tqdm.write(f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs.\n")
 
                     # Synchronize early stopping decision across all ranks
                     if epochs_no_improve >= EARLY_STOP_PAT:
                         if self.rank == 0:
-                            tqdm.write(
-                                f"\nEarly stopping triggered after {epoch} epochs."
-                            )
+                            tqdm.write(f"\nEarly stopping triggered after {epoch} epochs.")
                             tqdm.write(
                                 f"Final stats: best_val_loss={best_val_loss:.4f}, epochs_no_improve={epochs_no_improve}"
                             )
@@ -1213,9 +1077,7 @@ class CurriculumTrainer:
         best_epoch, _ = self._load_checkpoint(stage_name, optimizer, scheduler)
         if best_epoch is not None:
             if self.rank == 0:
-                print(
-                    f"📂 Loaded best checkpoint from epoch {best_epoch} for evaluation."
-                )
+                print(f"📂 Loaded best checkpoint from epoch {best_epoch} for evaluation.")
 
         if self.rank == 0:
             if epoch is None:
@@ -1228,15 +1090,11 @@ class CurriculumTrainer:
                 print(f"   Best validation loss: {best_val_loss:.4f}")
                 print(f"   Epochs without improvement: {epochs_no_improve}")
 
-        metrics = self._evaluate_stage(
-            stage_name, test_loader, stage_name, metric_func, best_epoch
-        )
+        metrics = self._evaluate_stage(stage_name, test_loader, stage_name, metric_func, best_epoch)
 
         return metrics
 
-    def stage1_mcq(
-        self, batch_size: int = None, eval_only: bool = False
-    ) -> Dict[str, Any]:
+    def stage1_mcq(self, batch_size: int = None, eval_only: bool = False) -> dict[str, Any]:
         """Stage 1: Multiple Choice Question Answering (TSQA).
 
         Configuration:
@@ -1252,16 +1110,12 @@ class CurriculumTrainer:
             lr_encoder=2e-4,
             lr_projector=1e-4,
             lr_base=2e-4,
-            metric_func=lambda preds, golds: {
-                "accuracy": self._calculate_accuracy(preds, golds)
-            },
+            metric_func=lambda preds, golds: {"accuracy": self._calculate_accuracy(preds, golds)},
             batch_size=batch_size,
             eval_only=eval_only,
         )
 
-    def stage2_captioning(
-        self, batch_size: int = None, eval_only: bool = False
-    ) -> Dict[str, Any]:
+    def stage2_captioning(self, batch_size: int = None, eval_only: bool = False) -> dict[str, Any]:
         """Stage 2: Caption Generation (M4).
 
         Configuration:
@@ -1282,9 +1136,7 @@ class CurriculumTrainer:
             eval_only=eval_only,
         )
 
-    def stage3_cot(
-        self, batch_size: int = None, eval_only: bool = False
-    ) -> Dict[str, Any]:
+    def stage3_cot(self, batch_size: int = None, eval_only: bool = False) -> dict[str, Any]:
         """Stage CoT: Chain-of-Thought Reasoning (HAR).
 
         Configuration:
@@ -1308,9 +1160,7 @@ class CurriculumTrainer:
             sampler=sampler,
         )
 
-    def stage4_sleep_cot(
-        self, batch_size: int = None, eval_only: bool = False
-    ) -> Dict[str, Any]:
+    def stage4_sleep_cot(self, batch_size: int = None, eval_only: bool = False) -> dict[str, Any]:
         """Stage 4: Chain-of-Thought Reasoning (SleepEDF).
 
         Configuration:
@@ -1334,9 +1184,7 @@ class CurriculumTrainer:
             sampler=sampler,
         )
 
-    def stage5_ecg_cot(
-        self, batch_size: int = None, eval_only: bool = False
-    ) -> Dict[str, Any]:
+    def stage5_ecg_cot(self, batch_size: int = None, eval_only: bool = False) -> dict[str, Any]:
         """Stage 5: Chain-of-Thought Reasoning (ECG QA CoT).
 
         Configuration:
@@ -1360,9 +1208,7 @@ class CurriculumTrainer:
             sampler=sampler,
         )
 
-    def run_curriculum(
-        self, stages: List[str] = None, batch_size: int = None, eval_only: bool = False
-    ):
+    def run_curriculum(self, stages: list[str] = None, batch_size: int = None, eval_only: bool = False):
         """Run the complete curriculum learning pipeline."""
         if stages is None:
             stages = CURRICULUM_STAGES
@@ -1398,45 +1244,31 @@ class CurriculumTrainer:
                 dist.barrier()
 
             if stage == "stage1_mcq":
-                stage_results = self.stage1_mcq(
-                    batch_size=batch_size, eval_only=eval_only
-                )
+                stage_results = self.stage1_mcq(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage2_captioning":
-                stage_results = self.stage2_captioning(
-                    batch_size=batch_size, eval_only=eval_only
-                )
+                stage_results = self.stage2_captioning(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage3_cot":
-                stage_results = self.stage3_cot(
-                    batch_size=batch_size, eval_only=eval_only
-                )
+                stage_results = self.stage3_cot(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage4_sleep_cot":
-                stage_results = self.stage4_sleep_cot(
-                    batch_size=batch_size, eval_only=eval_only
-                )
+                stage_results = self.stage4_sleep_cot(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage5_ecg_cot":
-                stage_results = self.stage5_ecg_cot(
-                    batch_size=batch_size, eval_only=eval_only
-                )
+                stage_results = self.stage5_ecg_cot(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage4_sleep_cot":
-                stage_results = self.stage4_sleep_cot(
-                    batch_size=batch_size, eval_only=eval_only
-                )
+                stage_results = self.stage4_sleep_cot(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
             elif stage == "stage5_ecg_cot":
-                stage_results = self.stage5_ecg_cot(
-                    batch_size=batch_size, eval_only=eval_only
-                )
+                stage_results = self.stage5_ecg_cot(batch_size=batch_size, eval_only=eval_only)
                 results[stage] = stage_results
                 self._mark_stage_completed(stage, stage_results)
             else:
@@ -1449,13 +1281,11 @@ class CurriculumTrainer:
 
         # Save overall results only on rank 0
         if self.rank == 0:
-            overall_results_file = os.path.join(
-                self.results_dir, "curriculum_results.json"
-            )
+            overall_results_file = os.path.join(self.results_dir, "curriculum_results.json")
             with open(overall_results_file, "w") as f:
                 json.dump(results, f, indent=2)
 
-            print(f"\n🎉 Curriculum Learning Complete!")
+            print("\n🎉 Curriculum Learning Complete!")
             print(f"📁 All results saved to: {self.results_dir}/")
             print(f"📊 Overall results: {overall_results_file}")
 
@@ -1501,7 +1331,7 @@ class CurriculumTrainer:
             return False
 
         try:
-            with open(metrics_file, "r") as f:
+            with open(metrics_file) as f:
                 metrics = json.load(f)
 
             # Check if the completion flag exists
@@ -1513,18 +1343,16 @@ class CurriculumTrainer:
                 return False
 
             # Check if test predictions file exists
-            test_predictions_file = os.path.join(
-                self.results_dir, stage, "results", "test_predictions.jsonl"
-            )
+            test_predictions_file = os.path.join(self.results_dir, stage, "results", "test_predictions.jsonl")
             if not os.path.exists(test_predictions_file):
                 return False
 
             return True
 
-        except:
+        except Exception:
             return False
 
-    def _mark_stage_completed(self, stage: str, metrics: Dict[str, Any]):
+    def _mark_stage_completed(self, stage: str, metrics: dict[str, Any]):
         """Mark a stage as completed by adding completion flag to metrics."""
         metrics["completed"] = True
         metrics["completion_epoch"] = metrics.get("epoch", "?")
@@ -1544,9 +1372,7 @@ class CurriculumTrainer:
 
     def _checkpoint_exists(self, stage: str) -> bool:
         """Check if a checkpoint exists for a specific stage."""
-        checkpoint_path = os.path.join(
-            self.results_dir, stage, "checkpoints", "best_model.pt"
-        )
+        checkpoint_path = os.path.join(self.results_dir, stage, "checkpoints", "best_model.pt")
         return os.path.exists(checkpoint_path)
 
     def _enable_lora_if_needed(self, stage_name: str):
@@ -1578,9 +1404,7 @@ class CurriculumTrainer:
         else:
             if self.rank == 0:
                 if stage_name in ["stage1_mcq", "stage2_captioning"]:
-                    print(
-                        f"ℹ️  LoRA disabled for {stage_name} (only enabled for stages 3+)"
-                    )
+                    print(f"ℹ️  LoRA disabled for {stage_name} (only enabled for stages 3+)")
                 else:
                     print(f"ℹ️  LoRA not configured for {stage_name}")
 
@@ -1613,17 +1437,13 @@ class CurriculumTrainer:
         else:
             if self.rank == 0:
                 if stage_name in ["stage1_mcq", "stage2_captioning"]:
-                    print(
-                        f"ℹ️  LoRA disabled for {stage_name} (only enabled for stages 3+)"
-                    )
+                    print(f"ℹ️  LoRA disabled for {stage_name} (only enabled for stages 3+)")
                 else:
                     print(f"ℹ️  LoRA not configured for {stage_name}")
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Curriculum Learning for OpenTSLM Models"
-    )
+    parser = argparse.ArgumentParser(description="Curriculum Learning for OpenTSLM Models")
     parser.add_argument(
         "--model",
         type=str,
@@ -1638,9 +1458,7 @@ def main():
         default=CURRICULUM_STAGES,
         help="Stages to run (default: all stages)",
     )
-    parser.add_argument(
-        "--device", type=str, default=None, help="Device to use (cuda, mps, cpu)"
-    )
+    parser.add_argument("--device", type=str, default=None, help="Device to use (cuda, mps, cpu)")
     parser.add_argument(
         "--batch_size",
         type=int,
@@ -1677,9 +1495,7 @@ def main():
         type=str,
         help="URL used to set up distributed training",
     )
-    parser.add_argument(
-        "--dist_backend", default="nccl", type=str, help="Distributed backend"
-    )
+    parser.add_argument("--dist_backend", default="nccl", type=str, help="Distributed backend")
     parser.add_argument(
         "--local_rank",
         type=int,
@@ -1688,9 +1504,7 @@ def main():
     )
 
     # Logging arguments
-    parser.add_argument(
-        "--verbose", default=False, action="store_true", help="Enable verbose logging"
-    )
+    parser.add_argument("--verbose", default=False, action="store_true", help="Enable verbose logging")
 
     args = parser.parse_args()
 

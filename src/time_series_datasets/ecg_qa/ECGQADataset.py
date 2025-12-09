@@ -6,27 +6,26 @@
 # SPDX-License-Identifier: MIT
 #
 
-from datasets import Dataset
-from typing import List, Tuple, Literal
-import numpy as np
 import os
+from typing import Literal
+
+from datasets import Dataset
+import numpy as np
+
 
 # Try to import wfdb, raise error if not available
 try:
     import wfdb
 except ImportError:
-    raise ImportError(
-        "wfdb library is required for ECG data loading. "
-        "Please install it with: pip install wfdb"
-    )
+    raise ImportError("wfdb library is required for ECG data loading. Please install it with: pip install wfdb")
+
 
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
-from time_series_datasets.QADataset import QADataset
 from time_series_datasets.ecg_qa.ecgqa_loader import (
-    load_ecg_qa_ptbxl_splits,
     load_ecg_qa_answers,
+    load_ecg_qa_ptbxl_splits,
 )
-import pandas as pd
+from time_series_datasets.QADataset import QADataset
 
 
 class ECGQADataset(QADataset):
@@ -66,11 +65,9 @@ class ECGQADataset(QADataset):
 
         self.max_samples = max_samples
         self.exclude_comparison = exclude_comparison
-        super().__init__(
-            split, EOS_TOKEN, format_sample_str, time_series_format_function
-        )
+        super().__init__(split, EOS_TOKEN, format_sample_str, time_series_format_function)
 
-    def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
+    def _load_splits(self) -> tuple[Dataset, Dataset, Dataset]:
         """Load the ECG-QA PTB-XL dataset splits."""
         print("Loading ECG-QA dataset splits...")
         train, val, test = load_ecg_qa_ptbxl_splits()
@@ -95,16 +92,10 @@ class ECGQADataset(QADataset):
             val = filter_comparison(val)
             test = filter_comparison(test)
 
-            print(f"Filtered out comparison questions:")
-            print(
-                f"  Train: {original_train_len} -> {len(train)} ({original_train_len - len(train)} removed)"
-            )
-            print(
-                f"  Val: {original_val_len} -> {len(val)} ({original_val_len - len(val)} removed)"
-            )
-            print(
-                f"  Test: {original_test_len} -> {len(test)} ({original_test_len - len(test)} removed)"
-            )
+            print("Filtered out comparison questions:")
+            print(f"  Train: {original_train_len} -> {len(train)} ({original_train_len - len(train)} removed)")
+            print(f"  Val: {original_val_len} -> {len(val)} ({original_val_len - len(val)} removed)")
+            print(f"  Test: {original_test_len} -> {len(test)} ({original_test_len - len(test)} removed)")
 
         # Limit samples for faster testing if requested
         if self.max_samples:
@@ -131,17 +122,15 @@ class ECGQADataset(QADataset):
 
         # Get clinical context if available
         clinical_contexts = row.get("clinical_contexts", [])
-        clinical_context = (
-            clinical_contexts[0] if clinical_contexts else "12-lead ECG recording."
-        )
+        clinical_context = clinical_contexts[0] if clinical_contexts else "12-lead ECG recording."
 
-        base_prompt = f"""You are an expert cardiologist analyzing an ECG (electrocardiogram). 
+        base_prompt = f"""You are an expert cardiologist analyzing an ECG (electrocardiogram).
 
 Clinical Context: {clinical_context}
 
 Your task is to examine the ECG signal and answer a specific medical question about it.
 
-The ECG data shows electrical activity of the heart recorded over time. Look for patterns, 
+The ECG data shows electrical activity of the heart recorded over time. Look for patterns,
 abnormalities, and specific features that relate to the question being asked."""
 
         if question_type == "single-verify":
@@ -194,17 +183,17 @@ Answer: <your_answer>
 
         return prompt.strip()
 
-    def get_possible_answers_for_template(self, template_id: int) -> List[str]:
+    def get_possible_answers_for_template(self, template_id: int) -> list[str]:
         """Get possible answers for a specific template ID."""
         try:
-            import pandas as pd
             import ast
+
+            import pandas as pd
+
             from time_series_datasets.ecg_qa.ecgqa_loader import ECG_QA_DIR
 
             # Load template answers directly
-            template_answers_path = os.path.join(
-                ECG_QA_DIR, "ecgqa", "ptbxl", "answers_for_each_template.csv"
-            )
+            template_answers_path = os.path.join(ECG_QA_DIR, "ecgqa", "ptbxl", "answers_for_each_template.csv")
             template_df = pd.read_csv(template_answers_path)
 
             # Find the row for this template_id
@@ -214,16 +203,14 @@ Answer: <your_answer>
                 answers_str = template_row.iloc[0]["classes"]
                 return ast.literal_eval(answers_str)
             else:
-                print(
-                    f"Warning: Template ID {template_id} not found in answers mapping"
-                )
+                print(f"Warning: Template ID {template_id} not found in answers mapping")
                 return []
 
         except Exception as e:
             print(f"Error loading template answers: {e}")
             return []
 
-    def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
+    def _get_text_time_series_prompt_list(self, row) -> list[TextTimeSeriesPrompt]:
         """Load ECG data and convert to TextTimeSeriesPrompt format."""
 
         ecg_prompts = []
@@ -255,9 +242,7 @@ Answer: <your_answer>
                 # Read the ECG record
                 record = wfdb.rdrecord(base_path)
             except Exception as e:
-                raise RuntimeError(
-                    f"Failed to read ECG record from {base_path}: {str(e)}"
-                )
+                raise RuntimeError(f"Failed to read ECG record from {base_path}: {str(e)}")
 
             # Get the signal data - shape is (samples, leads)
             ecg_signal = record.p_signal  # Physical signal
@@ -266,9 +251,7 @@ Answer: <your_answer>
                 raise ValueError(f"ECG signal is None for file {base_path}")
 
             if ecg_signal.shape[0] == 0:
-                raise ValueError(
-                    f"ECG signal is empty (0 samples) for file {base_path}"
-                )
+                raise ValueError(f"ECG signal is empty (0 samples) for file {base_path}")
 
             # PTB-XL typically has 12 leads, sample at 500Hz for 10 seconds = 5000 samples
             # For computational efficiency, we might want to downsample
@@ -280,13 +263,9 @@ Answer: <your_answer>
             elif len(ecg_signal.shape) == 2:
                 n_leads = min(6, ecg_signal.shape[1])
                 if ecg_signal.shape[1] < 6:
-                    print(
-                        f"Warning: ECG file {base_path} has only {ecg_signal.shape[1]} leads, expected at least 6"
-                    )
+                    print(f"Warning: ECG file {base_path} has only {ecg_signal.shape[1]} leads, expected at least 6")
             else:
-                raise ValueError(
-                    f"Unexpected ECG signal shape {ecg_signal.shape} for file {base_path}"
-                )
+                raise ValueError(f"Unexpected ECG signal shape {ecg_signal.shape} for file {base_path}")
 
             for lead_idx in range(n_leads):
                 if len(ecg_signal.shape) > 1:
@@ -301,9 +280,7 @@ Answer: <your_answer>
                 downsampled_signal = lead_signal[::5]
 
                 if len(downsampled_signal) == 0:
-                    raise ValueError(
-                        f"Downsampled signal is empty for lead {lead_idx} in file {base_path}"
-                    )
+                    raise ValueError(f"Downsampled signal is empty for lead {lead_idx} in file {base_path}")
 
                 # Normalize the signal
                 mean_val = float(np.mean(downsampled_signal))
@@ -323,9 +300,7 @@ Answer: <your_answer>
                     normalized_signal = downsampled_signal - mean_val
 
                 # Verify normalized signal is valid
-                if np.any(np.isnan(normalized_signal)) or np.any(
-                    np.isinf(normalized_signal)
-                ):
+                if np.any(np.isnan(normalized_signal)) or np.any(np.isinf(normalized_signal)):
                     raise ValueError(
                         f"Invalid values (NaN/Inf) in normalized signal for lead {lead_idx} in file {base_path}"
                     )
@@ -345,11 +320,7 @@ Answer: <your_answer>
                     "V5",
                     "V6",
                 ]
-                lead_name = (
-                    lead_names[lead_idx]
-                    if lead_idx < len(lead_names)
-                    else f"Lead_{lead_idx}"
-                )
+                lead_name = lead_names[lead_idx] if lead_idx < len(lead_names) else f"Lead_{lead_idx}"
 
                 ecg_label = f"ECG Lead {lead_name}"
                 if len(ecg_paths) > 1:
@@ -358,23 +329,19 @@ Answer: <your_answer>
                 ecg_label += f" - sampled at ~100Hz, normalized (mean={mean_val:.3f}, std={std_val:.3f})"
 
                 try:
-                    ecg_prompts.append(
-                        TextTimeSeriesPrompt(ecg_label, normalized_signal.tolist())
-                    )
+                    ecg_prompts.append(TextTimeSeriesPrompt(ecg_label, normalized_signal.tolist()))
                 except Exception as e:
                     raise RuntimeError(
                         f"Failed to create TextTimeSeriesPrompt for lead {lead_name} in file {base_path}: {str(e)}"
                     )
 
         if not ecg_prompts:
-            raise RuntimeError(
-                f"No ECG prompts were created for sample. ECG paths attempted: {ecg_paths}"
-            )
+            raise RuntimeError(f"No ECG prompts were created for sample. ECG paths attempted: {ecg_paths}")
 
         return ecg_prompts
 
     @staticmethod
-    def get_labels() -> List[str]:
+    def get_labels() -> list[str]:
         """Get all possible answer labels for ECG-QA dataset."""
         # These are common answers in ECG-QA - could be loaded from answers.csv
         return [
@@ -416,9 +383,7 @@ if __name__ == "__main__":
         dataset_val = ECGQADataset(split="validation", EOS_TOKEN="", max_samples=10)
         dataset_test = ECGQADataset(split="test", EOS_TOKEN="", max_samples=10)
 
-        print(
-            f"Dataset sizes: Train: {len(dataset)}, Validation: {len(dataset_val)}, Test: {len(dataset_test)}"
-        )
+        print(f"Dataset sizes: Train: {len(dataset)}, Validation: {len(dataset_val)}, Test: {len(dataset_test)}")
 
         if len(dataset) > 0:
             sample = dataset[0]
@@ -438,9 +403,7 @@ if __name__ == "__main__":
                         print("Time series format:", type(first_ts))
             print(
                 "Pre prompt:",
-                sample["pre_prompt"][:100] + "..."
-                if len(sample["pre_prompt"]) > 100
-                else sample["pre_prompt"],
+                sample["pre_prompt"][:100] + "..." if len(sample["pre_prompt"]) > 100 else sample["pre_prompt"],
             )
     except Exception as e:
         print(f"Error testing dataset: {e}")

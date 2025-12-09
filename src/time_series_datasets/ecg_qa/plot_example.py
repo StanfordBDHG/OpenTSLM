@@ -12,17 +12,20 @@ ECG-QA Example Plot Generator
 Creates a proper ECG visualization on millimeter paper grid and shows the corresponding prompt.
 """
 
+import json
 import os
 import sys
-import json
+
 import matplotlib.pyplot as plt
 import numpy as np
 import wfdb
+
 
 # Add the src directory to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from time_series_datasets.ecg_qa.ECGQADataset import ECGQADataset
+
 
 # ECG plotting configuration
 lead_names = ["I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
@@ -107,9 +110,7 @@ def draw_ecg(ecg, lead=1, ax=None):
 
 def draw_ecgs_multi_lead(ecgs, leads_to_show=[0, 1, 2], title="ECG Recording"):
     """Draw multiple ECG leads in a multi-panel plot."""
-    fig, axes = plt.subplots(
-        len(leads_to_show), 1, figsize=(15, 2.5 * len(leads_to_show))
-    )
+    fig, axes = plt.subplots(len(leads_to_show), 1, figsize=(15, 2.5 * len(leads_to_show)))
     if len(leads_to_show) == 1:
         axes = [axes]
 
@@ -206,11 +207,7 @@ def create_example_prompt_text(sample):
             example_sample = raw_data[0]
 
         question = example_sample["question"]
-        answer = (
-            example_sample["answer"][0]
-            if isinstance(example_sample["answer"], list)
-            else example_sample["answer"]
-        )
+        answer = example_sample["answer"][0] if isinstance(example_sample["answer"], list) else example_sample["answer"]
 
     except Exception as e:
         print(f"Error loading question: {e}")

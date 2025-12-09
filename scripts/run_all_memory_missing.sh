@@ -63,7 +63,7 @@ SP_MODEL="OpenTSLMSP"
 
 SPECIFIC_DATASETS=(
   "TSQADataset"
-  "HARCoTQADataset" 
+  "HARCoTQADataset"
   "SleepEDFCoTQADataset"
   "ECGQACoTQADataset"
 )
@@ -111,4 +111,3 @@ done
 
 
 echo "All runs completed."
-

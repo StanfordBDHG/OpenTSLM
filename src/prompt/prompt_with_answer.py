@@ -6,7 +6,7 @@
 # SPDX-License-Identifier: MIT
 #
 
-from typing import List
+
 from prompt.text_prompt import TextPrompt
 from prompt.text_time_series_prompt import TextTimeSeriesPrompt
 
@@ -20,7 +20,7 @@ class PromptWithAnswer:
     def __init__(
         self,
         pre_prompt: TextPrompt,
-        text_time_series_prompt_list: List[TextTimeSeriesPrompt],
+        text_time_series_prompt_list: list[TextTimeSeriesPrompt],
         post_prompt: TextPrompt,
         answer: str,
     ):
@@ -29,9 +29,7 @@ class PromptWithAnswer:
         assert isinstance(answer, str), "Answer must be a string."
 
         self.pre_prompt = pre_prompt
-        self.text_time_series_prompt_texts = list(
-            map(lambda x: x.get_text(), text_time_series_prompt_list)
-        )
+        self.text_time_series_prompt_texts = list(map(lambda x: x.get_text(), text_time_series_prompt_list))
         self.text_time_series_prompt_time_series = list(
             map(lambda x: x.get_time_series(), text_time_series_prompt_list)
         )

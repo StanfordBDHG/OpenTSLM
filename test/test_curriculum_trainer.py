@@ -13,16 +13,18 @@ Test script for the curriculum learning implementation.
 This script tests the basic functionality without running full training.
 """
 
+import json
 import os
 import sys
+
 import torch
-import json
-from unittest.mock import Mock, patch
+
 
 # Add the parent directory to the path to import curriculum_learning
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from curriculum_learning import CurriculumTrainer
+
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -91,12 +93,8 @@ def test_results_directory_creation():
             # Check subdirectories
             checkpoints_dir = os.path.join(stage_dir, "checkpoints")
             results_dir = os.path.join(stage_dir, "results")
-            assert os.path.exists(checkpoints_dir), (
-                f"Checkpoints directory for {stage} not created"
-            )
-            assert os.path.exists(results_dir), (
-                f"Results directory for {stage} not created"
-            )
+            assert os.path.exists(checkpoints_dir), f"Checkpoints directory for {stage} not created"
+            assert os.path.exists(results_dir), f"Results directory for {stage} not created"
 
         print("✅ Results directory structure created correctly")
 
@@ -212,9 +210,7 @@ def test_checkpoint_operations():
         assert os.path.exists(checkpoint_path), "Checkpoint file not saved"
 
         # Test loading checkpoint
-        epoch, val_loss = trainer._load_checkpoint(
-            "stage1_mcq", mock_optimizer, mock_scheduler
-        )
+        epoch, val_loss = trainer._load_checkpoint("stage1_mcq", mock_optimizer, mock_scheduler)
         assert epoch == 5, f"Expected epoch 5, got {epoch}"
         assert val_loss == 0.123, f"Expected val_loss 0.123, got {val_loss}"
 
@@ -235,9 +231,7 @@ def test_previous_stage_loading():
         trainer = CurriculumTrainer("OpenTSLMFlamingo", llm_id=LLM_ID, device=device)
 
         # Create mock metrics file for stage1_mcq
-        metrics_dir = os.path.join(
-            "results", LLM_ID_SAFE, "OpenTSLMFlamingo", "stage1_mcq", "results"
-        )
+        metrics_dir = os.path.join("results", LLM_ID_SAFE, "OpenTSLMFlamingo", "stage1_mcq", "results")
         os.makedirs(metrics_dir, exist_ok=True)
 
         mock_metrics = {"accuracy": 0.85, "test_loss": 0.234}
@@ -246,9 +240,7 @@ def test_previous_stage_loading():
             json.dump(mock_metrics, f)
 
         # Create mock checkpoint for stage1_mcq
-        checkpoint_dir = os.path.join(
-            "results", LLM_ID_SAFE, "OpenTSLMFlamingo", "stage1_mcq", "checkpoints"
-        )
+        checkpoint_dir = os.path.join("results", LLM_ID_SAFE, "OpenTSLMFlamingo", "stage1_mcq", "checkpoints")
         os.makedirs(checkpoint_dir, exist_ok=True)
 
         mock_checkpoint = {
@@ -292,9 +284,7 @@ def test_stage_methods_exist():
 
         # Check that stage methods exist
         assert hasattr(trainer, "stage1_mcq"), "stage1_mcq method not found"
-        assert hasattr(trainer, "stage2_captioning"), (
-            "stage2_captioning method not found"
-        )
+        assert hasattr(trainer, "stage2_captioning"), "stage2_captioning method not found"
         assert callable(trainer.stage1_mcq), "stage1_mcq is not callable"
         assert callable(trainer.stage2_captioning), "stage2_captioning is not callable"
 
@@ -317,7 +307,7 @@ def test_invalid_model_type():
         print("❌ Should have raised ValueError for invalid model type")
         return False
 
-    except ValueError as e:
+    except ValueError:
         print("✅ Invalid model type correctly rejected")
         return True
     except Exception as e:

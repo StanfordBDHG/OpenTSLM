@@ -15,7 +15,7 @@ models=(
     "google/gemma-3-1b-pt"
     "meta-llama/Llama-3.2-1B"
     "meta-llama/Llama-3.2-3B"
-    
+
 )
 
 #echo "Starting evaluation of ${#models[@]} models on TSQA dataset..."
