@@ -6,7 +6,6 @@
 # SPDX-License-Identifier: MIT
 #
 
-import sys
 import numpy as np
 from functools import partial
 from dataclasses import dataclass

@@ -15,7 +15,7 @@ from typing import Dict, Any
 import matplotlib.pyplot as plt
 
 from common_evaluator_plot import CommonEvaluatorPlot
-from time_series_datasets.TSQADataset import TSQADataset
+from opentslm.time_series_datasets.TSQADataset import TSQADataset
 
 
 def evaluate_tsqa(ground_truth: str, prediction: str) -> Dict[str, Any]:

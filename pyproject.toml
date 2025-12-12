@@ -6,13 +6,32 @@
 
 [project]
 name = "opentslm"
-version = "0.1.0"
+version = "0.1.0.dev0"
 description = "OpenTSLM: Open Time Series Language Model - Curriculum Learning for Multimodal Time Series Understanding with Large Language Models"
 readme = "README.md"
 requires-python = ">=3.12"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
-    {name = "Stanford Biodesign Digital Health Group"}
+    {name = "Patrick Langer"},
+    {name = "Thomas Kaar"},
+    {name = "Max Rosenblattl"},
+    {name = "Maxwell A. Xu"},
+    {name = "Winnie Chow"},
+    {name = "Martin Maritsch"},
+    {name = "Robert Jakob"},
+    {name = "Aradhana Verma"},
+    {name = "Brian Han"},
+    {name = "Daniel Seung Kim"},
+    {name = "Henry Chubb"},
+    {name = "Scott Ceresnak"},
+    {name = "Aydin Zahedivash"},
+    {name = "Alexander Tarlochan Singh Sandhu"},
+    {name = "Fatima Rodriguez"},
+    {name = "Daniel McDuff"},
+    {name = "Elgar Fleisch"},
+    {name = "Oliver Aalami"},
+    {name = "Filipe Barata"},
+    {name = "Paul Schmiedmayer"}
 ]
 keywords = [
     "time-series",
@@ -20,16 +39,6 @@ keywords = [
     "curriculum-learning",
     "multimodal",
     "healthcare"
-]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 
 dependencies = [
@@ -49,8 +58,10 @@ dependencies = [
     "open-flamingo>=0.0.2",
 ]
 
-[tool.uv]
-default-groups = ["dev"]
+[project.urls]
+Homepage = "https://opentslm.com"
+Repository = "https://github.com/StanfordBDHG/OpenTSLM"
+"Bug Tracker" = "https://github.com/StanfordBDHG/OpenTSLM/issues"
 
 [dependency-groups]
 dev = [
@@ -64,11 +75,27 @@ eval = [
 notebook = [
     "jupyter>=1.0",
     "ipython>=8.0",
+    "seaborn>=0.13.2",
 ]
 
-[project.urls]
-Repository = "https://github.com/StanfordBDHG/EmbedHealth"
-"Bug Tracker" = "https://github.com/StanfordBDHG/EmbedHealth/issues"
+[build-system]
+requires = ["uv_build>=0.9.0,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+required-version = ">=0.9"
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
+
+[tool.uv.workspace]
+members = [
+    "test-install",
+]
+
 
 [tool.ruff]
 line-length = 120

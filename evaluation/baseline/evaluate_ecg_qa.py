@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Tuple
 
 
 from common_evaluator import CommonEvaluator
-from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+from opentslm.time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
 
 
 def extract_answer(text: str) -> str:

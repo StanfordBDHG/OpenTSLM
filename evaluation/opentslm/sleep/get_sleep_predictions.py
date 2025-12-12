@@ -23,26 +23,18 @@ Output:
     - CSV file with time series data, ground truth labels, and rationale
 """
 
-import sys
-import os
 import torch
 import pandas as pd
-import numpy as np
 import random
 from typing import List, Dict, Any
 import json
 
-# Add src to path
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
-)
-
-from model.llm.OpenTSLMSP import OpenTSLMSP
-from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
-from prompt.full_prompt import FullPrompt
-from prompt.text_prompt import TextPrompt
-from prompt.text_time_series_prompt import TextTimeSeriesPrompt
-from time_series_datasets.util import (
+from opentslm.model.llm.OpenTSLMSP import OpenTSLMSP
+from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+from opentslm.prompt.full_prompt import FullPrompt
+from opentslm.prompt.text_prompt import TextPrompt
+from opentslm.prompt.text_time_series_prompt import TextTimeSeriesPrompt
+from opentslm.time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
 

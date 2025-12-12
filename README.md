@@ -1,12 +1,12 @@
 <!--
-This source file is part of the OpenTSLM open-source project
-
+SPDX-FileCopyrightText: 2025 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
 SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
 
 SPDX-License-Identifier: MIT
 -->
 
 # OpenTSLM: Time-Series Language Models for Reasoning over Multivariate Medical Text- and Time-Series Data
+[![PyPI - Version](https://img.shields.io/pypi/v/opentslm)](https://pypi.org/project/opentslm)
 [![DOI](https://img.shields.io/badge/DOI-10.13140/RG.2.2.14827.60963-blue.svg)](https://doi.org/10.13140/RG.2.2.14827.60963)
 [![Static Analysis](https://github.com/StanfordBDHG/OpenTSLM/actions/workflows/static-analysis.yml/badge.svg)](https://github.com/StanfordBDHG/OpenTSLM/actions/workflows/static-analysis.yml)
 
@@ -14,7 +14,7 @@ SPDX-License-Identifier: MIT
 Large Language Models (LLMs) have emerged as powerful tools for interpreting multimodal data (e.g., images, audio, text), often surpassing specialized models. In medicine, they hold particular promise for synthesizing large volumes of clinical information into actionable insights and patient-facing digital health applications.  Yet, a major limitation remains their inability to handle time series data. To overcome this gap, we present OpenTSLM, a family of Time Series Language Models (TSLMs) created by integrating time series as a native modality to pretrained Large Language Models, enabling natural-language prompting and reasoning over multiple time series of any length [...] **[🔗 Read the full paper](https://doi.org/10.13140/RG.2.2.14827.60963)**  
 
 <p align="center">
-  <img src="assets/schematic_overview_3.png" alt="Schematic Overview" width="100%">
+   <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/schematic_overview_3.png" alt="Schematic Overview" width="100%">
 </p>
 
 
@@ -23,30 +23,17 @@ Large Language Models (LLMs) have emerged as powerful tools for interpreting mul
 OpenTSLM models can reason over multiple time series of any length at once, generating findings, captions, and rationales in natural language. We tested these models across a wide range of tasks spanning Human Activity Recognition (HAR) from 3-axis acceleration data, sleep staging from EEG readings, 12-lead ECG question answering, and time series captioning. Some examples are shown below, more are available in the paper.
 
 <p align="center">
-  <img src="assets/ecg_rationale.png" alt="ECG Rationale" width="32%">
-  <img src="assets/har_rationale.png" alt="HAR Rationale" width="32%">
-    <img src="assets/m4_caption.png" alt="M4 Caption" width="34%">
+   <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/ecg_rationale.png" alt="ECG Rationale" width="32%">
+   <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/har_rationale.png" alt="HAR Rationale" width="32%">
+      <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/m4_caption.png" alt="M4 Caption" width="34%">
 
 </p>
 
 ## Installation
 
-1. **Clone the Repository**
-
-   ```bash
-   git clone https://github.com/StanfordBDHG/OpenTSLM.git
-   ```
-
-2. **Install Dependencies**
-   ```bash
-   # install uv if not exists
-   which uv > /dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
-
-   # sync dependencies
-   uv sync
-   ```
-   
-   OpenTSLM uses [uv](https://docs.astral.sh/uv/) for package management.This will install all dependencies with Python 3.12 as specified in `.python-version`. Follow the [official installation guide](https://docs.astral.sh/uv/getting-started/installation/) for other installation methods.
+```bash
+pip install opentslm
+```
 
 
 ## LLM Setup
@@ -54,19 +41,19 @@ OpenTSLM models can reason over multiple time series of any length at once, gene
 OpenTSLM is designed to work with Llama and Gemma models, with Llama 3.2 1B as the default. These models are stored in Hugging Face repositories which may require access permissions. Follow these steps to gain access and download:
 
 1. **Request Access (for Llama models)**  
-   Visit the Llama model repository (e.g., https://huggingface.co/meta-llama/Llama-3.2-1B) or Gemma models repository (https://huggingface.co/google/gemma-3-270m) and request access from Meta.
+    Visit the Llama model repository (e.g., https://huggingface.co/meta-llama/Llama-3.2-1B) or Gemma models repository (https://huggingface.co/google/gemma-3-270m) and request access from Meta.
 
 2. **Authenticate with Hugging Face**  
-   Log in to your Hugging Face account and configure the CLI:
+    Log in to your Hugging Face account and configure the CLI:
 
-   ```bash
-   huggingface-cli login
-   ```
+    ```bash
+    huggingface-cli login
+    ```
 
 3. **Create an API Token**
-   - Go to your Hugging Face settings: https://huggingface.co/settings/tokens
-   - Generate a new token with `read` scope.
-   - Copy the token for CLI login.
+    - Go to your Hugging Face settings: https://huggingface.co/settings/tokens
+    - Generate a new token with `read` scope.
+    - Copy the token for CLI login.
 
 ### Supported Models
 
@@ -93,15 +80,11 @@ A factory class called `OpenTSLM` for easily loading pre-trained models from Hug
 There are [demo scripts](demo/huggingface/) available which use the following minimal code. If you want to create your own applications, create a new file in **this repo folder** and use the following code as start:
 
 ```python
-import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
-
-from model.llm.OpenTSLM import OpenTSLM
-from time_series_datasets.TSQADataset import TSQADataset
-from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
+from opentslm import OpenTSLM
+from opentslm.time_series_datasets.TSQADataset import TSQADataset
+from opentslm.time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
 from torch.utils.data import DataLoader
-from model_config import PATCH_SIZE
+from opentslm.model_config import PATCH_SIZE
 
 REPO_ID = "OpenTSLM/llama-3.2-1b-tsqa-sp"
 
@@ -110,22 +93,41 @@ model = OpenTSLM.load_pretrained(REPO_ID, device="cuda" if torch.cuda.is_availab
 test_dataset = TSQADataset("test", EOS_TOKEN=model.get_eos_token())
 
 test_loader = DataLoader(
-   test_dataset,
-   shuffle=False,
-   batch_size=1,
-   collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
-      batch, patch_size=PATCH_SIZE
-   ),
+    test_dataset,
+    shuffle=False,
+    batch_size=1,
+    collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
+         batch, patch_size=PATCH_SIZE
+    ),
 )
 
 for i, batch in enumerate(test_loader):
-   predictions = model.generate(batch, max_new_tokens=200)
-   for sample, pred in zip(batch, predictions):
-      print("Question:", sample.get("pre_prompt", "N/A"))
-      print("Answer:", sample.get("answer", "N/A"))
-      print("Output:", pred)
-   if i >= 4:
-      break
+    predictions = model.generate(batch, max_new_tokens=200)
+    for sample, pred in zip(batch, predictions):
+         print("Question:", sample.get("pre_prompt", "N/A"))
+         print("Answer:", sample.get("answer", "N/A"))
+         print("Output:", pred)
+    if i >= 4:
+         break
+```
+
+## Building and finetuning your own models
+
+To run the demos and use finetuning scripts **clone the repository** and set up all dependencies. We recommend using [uv](https://docs.astral.sh/uv/) to set up the environment, but you can also use pip:
+
+```bash
+git clone https://github.com/StanfordBDHG/OpenTSLM.git
+
+
+# uv environment management (recommended). Installs uv if it does not exist and creates the virtual environment
+command uv > /dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh
+uv sync --all-groups
+source .venv/bin/activate
+
+
+# or alternatively install via pip:
+pip install -r requirements.txt
+
 ```
 
 ### HuggingFace Demo Scripts
@@ -150,11 +152,11 @@ Each script:
 
 ```bash
 # Run any of the demo scripts
-uv run demo/huggingface/01_test_hf_tsqa.py
-uv run demo/huggingface/02_test_hf_m4.py
-uv run demo/huggingface/03_test_hf_har_cot.py
-uv run demo/huggingface/04_test_hf_sleep_cot.py
-uv run demo/huggingface/05_test_hf_ecg_qa_cot.py
+python demo/huggingface/01_test_hf_tsqa.py
+python demo/huggingface/02_test_hf_m4.py
+python demo/huggingface/03_test_hf_har_cot.py
+python demo/huggingface/04_test_hf_sleep_cot.py
+python demo/huggingface/05_test_hf_ecg_qa_cot.py
 ```
 
 **Customizing the model:**
@@ -172,9 +174,9 @@ REPO_ID = "OpenTSLM/llama-3.2-1b-tsqa-flamingo"  # Flamingo model
 
 All pretrained models are available under the `OpenTSLM` organization on HuggingFace Hub. Model names follow the pattern:
 - `OpenTSLM/{base_model}-{dataset}-{model_type}`
-  - `base_model`: `llama-3.2-1b`, `llama-3.2-3b`, `gemma-3-1b-pt`, `gemma-3-270m`
-  - `dataset`: `tsqa`, `m4`, `har`, `sleep`, `ecg`
-  - `model_type`: `sp` (Soft Prompt) or `flamingo` (Flamingo)
+   - `base_model`: `llama-3.2-1b`, `llama-3.2-3b`, `gemma-3-1b-pt`, `gemma-3-270m`
+   - `dataset`: `tsqa`, `m4`, `har`, `sleep`, `ecg`
+   - `model_type`: `sp` (Soft Prompt) or `flamingo` (Flamingo)
 
 Example: `OpenTSLM/llama-3.2-1b-ecg-flamingo`
 
@@ -198,30 +200,30 @@ OpenTSLM uses curriculum learning with progressive training stages:
 
 ```bash
 # Run full curriculum with OpenTSLMFlamingo
-uv run curriculum_learning.py --model OpenTSLMSP
+python curriculum_learning.py --model OpenTSLMSP
 
 # Run full curriculum with OpenTSLMSP
-uv run curriculum_learning.py --model OpenTSLMFlamingo
+python curriculum_learning.py --model OpenTSLMFlamingo
 
 # Run specific stages
-uv run curriculum_learning.py --model OpenTSLMFlamingo --stages stage1_mcq
-uv run curriculum_learning.py --model OpenTSLMFlamingo --stages stage2_captioning
-uv run curriculum_learning.py --model OpenTSLMFlamingo --stages stage3_cot
-uv run curriculum_learning.py --model OpenTSLMFlamingo --stages stage4_sleep_cot
-uv run curriculum_learning.py --model OpenTSLMFlamingo --stages stage5_ecg_cot
+python curriculum_learning.py --model OpenTSLMFlamingo --stages stage1_mcq
+python curriculum_learning.py --model OpenTSLMFlamingo --stages stage2_captioning
+python curriculum_learning.py --model OpenTSLMFlamingo --stages stage3_cot
+python curriculum_learning.py --model OpenTSLMFlamingo --stages stage4_sleep_cot
+python curriculum_learning.py --model OpenTSLMFlamingo --stages stage5_ecg_cot
 
 # Run multiple stages
-uv run curriculum_learning.py --model OpenTSLMFlamingo --stages stage1_mcq stage2_captioning stage3_cot
+python curriculum_learning.py --model OpenTSLMFlamingo --stages stage1_mcq stage2_captioning stage3_cot
 
 # Specify device
-uv run curriculum_learning.py --model OpenTSLMFlamingo --device cuda
+python curriculum_learning.py --model OpenTSLMFlamingo --device cuda
 
 # Use different models
-uv run curriculum_learning.py --model OpenTSLMFlamingo --llm_id meta-llama/Llama-3.2-1B
-uv run curriculum_learning.py --model OpenTSLMFlamingo --llm_id google/gemma-3-270m
+python curriculum_learning.py --model OpenTSLMFlamingo --llm_id meta-llama/Llama-3.2-1B
+python curriculum_learning.py --model OpenTSLMFlamingo --llm_id google/gemma-3-270m
 
 # Run only evaluation
-uv run curriculum_learning.py --model OpenTSLMFlamingo --eval_only
+python curriculum_learning.py --model OpenTSLMFlamingo --eval_only
 ```
 
 ### Command Line Arguments
@@ -360,8 +362,8 @@ For researchers and project partners interested in collaboration opportunities, 
 This project is licensed under the MIT License.
 
 <div align="left">
-  <img src="assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="90">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="assets/CDHI_white.svg" alt="ETH Centre for Digital Health Interventions" height="90">
-    <img src="assets/ASLwhite.svg" alt="ETH Agentic Systems Lab" height="90">
+   <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="90">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+   <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/CDHI_white.svg" alt="ETH Centre for Digital Health Interventions" height="90">
+      <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/ASLwhite.svg" alt="ETH Agentic Systems Lab" height="90">
 
 </div>

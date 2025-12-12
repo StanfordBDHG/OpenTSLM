@@ -12,11 +12,7 @@ Test script for the SleepEDF CoT loader.
 """
 
 import unittest
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', "src"))
-
-from time_series_datasets.sleep.sleepedf_cot_loader import load_sleepedf_cot_splits, get_label_distribution
+from opentslm.time_series_datasets.sleep.sleepedf_cot_loader import load_sleepedf_cot_splits, get_label_distribution
 
 def pretty_print_label_distribution(dataset, name):
     label_dist = get_label_distribution(dataset)

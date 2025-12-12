@@ -15,17 +15,11 @@ This script:
 4. Prints model outputs
 """
 
-import sys
-import os
-
-# Add src to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src")))
-
-from model.llm.OpenTSLM import OpenTSLM
-from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
-from time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
+from opentslm.model.llm.OpenTSLM import OpenTSLM
+from opentslm.time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
+from opentslm.time_series_datasets.util import extend_time_series_to_match_patch_size_and_aggregate
 from torch.utils.data import DataLoader
-from model_config import PATCH_SIZE
+from opentslm.model_config import PATCH_SIZE
 import torch
 
 # Model repository ID - change this to test different models

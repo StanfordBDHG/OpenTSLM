@@ -17,9 +17,8 @@ from pathlib import Path
 from collections import Counter
 from tqdm import tqdm
 
-# Add the src directory to the path to import from the dataset class
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
-from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+# Import dataset via package namespace
+from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 
 # We'll determine supported labels dynamically from the actual ground truth data
 # Start with the dataset class labels as a fallback

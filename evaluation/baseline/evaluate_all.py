@@ -8,9 +8,9 @@
 
 from typing import Dict, Any, Callable
 from common_evaluator import CommonEvaluator
-from time_series_datasets.TSQADataset import TSQADataset
-from time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
-from time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
+from opentslm.time_series_datasets.TSQADataset import TSQADataset
+from opentslm.time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
+from opentslm.time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
 
 # Import evaluation functions
 from evaluate_tsqa import evaluate_tsqa

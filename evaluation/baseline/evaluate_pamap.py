@@ -11,7 +11,7 @@ import sys
 from typing import Dict, Any
 
 from common_evaluator import CommonEvaluator
-from time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
+from opentslm.time_series_datasets.pamap2.PAMAP2AccQADataset import PAMAP2AccQADataset
 
 
 def extract_label_from_prediction(prediction: str) -> str:

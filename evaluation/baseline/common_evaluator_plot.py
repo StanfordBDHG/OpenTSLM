@@ -8,7 +8,6 @@
 
 import os
 import io
-import sys
 import base64
 from typing import Type, Callable, Dict, List, Any, Optional
 
@@ -22,9 +21,7 @@ from PIL import Image
 import pandas as pd
 
 # Add src to path
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
-)
+from opentslm.logger import get_logger
 
 # Import OpenAIPipeline
 from openai_pipeline import OpenAIPipeline
@@ -32,12 +29,7 @@ from common_evaluator import CommonEvaluator
 
 
 class CommonEvaluatorPlot(CommonEvaluator):
-    """
-    A common evaluation framework for testing LLMs on time series datasets with plot generation.
-    """
-
-    def load_model(self, model_name: str, **pipeline_kwargs) -> pipeline:
-        """
+from opentslm.logger import get_logger
         Load a model using transformers pipeline or OpenAI API.
         """
         self.current_model_name = (

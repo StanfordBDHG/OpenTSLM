@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from common_evaluator_plot import CommonEvaluatorPlot
-from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 
 
 def extract_label_from_text(text: str) -> str:

@@ -10,20 +10,10 @@ import torch
 import numpy as np
 import pandas as pd
 
-import sys
-import os
-
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
-)
-
-from model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
-from prompt.text_prompt import TextPrompt
-from prompt.text_time_series_prompt import TextTimeSeriesPrompt
-from prompt.full_prompt import FullPrompt
-from time_series_datasets.util import (
-    extend_time_series_to_match_patch_size_and_aggregate,
-)
+from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
+from opentslm.prompt.text_prompt import TextPrompt
+from opentslm.prompt.text_time_series_prompt import TextTimeSeriesPrompt
+from opentslm.prompt.full_prompt import FullPrompt
 
 # 1. Load the model
 device = (

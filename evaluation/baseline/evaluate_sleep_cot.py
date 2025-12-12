@@ -11,7 +11,7 @@ import sys
 from typing import Dict, Any
 
 from common_evaluator import CommonEvaluator
-from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 
 
 def extract_sleep_stage_from_prediction(prediction: str) -> str:

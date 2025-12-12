@@ -5,7 +5,8 @@
 #
 # SPDX-License-Identifier: MIT
 #
-from src import OpenTSLM, TextPrompt, TextTimeSeriesPrompt, FullPrompt
+from opentslm import OpenTSLM
+from opentslm.prompt import TextPrompt, TextTimeSeriesPrompt, FullPrompt
 
 # Load model
 model = OpenTSLM.load_pretrained("OpenTSLM/gemma-3-270m-pt-har-flamingo")

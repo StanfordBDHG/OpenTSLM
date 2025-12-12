@@ -17,10 +17,8 @@ import os
 import sys
 import torch
 import json
-from unittest.mock import Mock, patch
 
 # Add the parent directory to the path to import curriculum_learning
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from curriculum_learning import CurriculumTrainer
 
