@@ -335,6 +335,19 @@ For researchers and project partners interested in collaboration opportunities, 
 
 This project is licensed under the MIT License.
 
+We use the [REUSE specification](https://reuse.software/spec/) to ensure consistent and machine-readable licensing across the repository.
+
+To add or update license headers, run:
+
+```bash
+reuse annotate --recursive \
+  --template opentslm \
+  --copyright "Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)" \
+  --license MIT \
+  --skip-unrecognised \
+  .
+```
+
 <div align="left">
   <img src="assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="90">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
   <img src="assets/CDHI_white.svg" alt="ETH Centre for Digital Health Interventions" height="90">

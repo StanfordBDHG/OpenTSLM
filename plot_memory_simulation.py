@@ -1,10 +1,8 @@
-#
 # This source file is part of the OpenTSLM open-source project
 #
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
 #
 # SPDX-License-Identifier: MIT
-#
 """
 Plot memory usage on simulation datasets from memory_simulation.csv.
 

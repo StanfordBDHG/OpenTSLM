@@ -1,0 +1,9 @@
+This source file is part of the OpenTSLM open-source project
+
+{% for line in copyright_lines %}
+{{ line }}
+{% endfor %}
+
+{% for expr in spdx_expressions %}
+SPDX-License-Identifier: {{ expr }}
+{% endfor %}
