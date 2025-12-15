@@ -1,8 +1,7 @@
-#
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-#
 
 [project]
 name = "opentslm"
@@ -65,6 +64,7 @@ Repository = "https://github.com/StanfordBDHG/OpenTSLM"
 
 [dependency-groups]
 dev = [
+    "reuse>=6.2.0",
     "ruff>=0.14.0",
 ]
 

@@ -1,6 +1,6 @@
 <!--
-SPDX-FileCopyrightText: 2025 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
 SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 
 SPDX-License-Identifier: MIT
 -->
@@ -360,6 +360,21 @@ For researchers and project partners interested in collaboration opportunities, 
 ## License
 
 This project is licensed under the MIT License.
+
+OpenTSLM uses [REUSE specification](https://reuse.software/spec/) to ensure consistent and machine-readable licensing across the repository.
+
+To add or update license headers, run:
+
+```bash
+reuse annotate --recursive \
+  --copyright "Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)" \
+  --copyright "This source file is part of the OpenTSLM open-source project." \
+  --license MIT \
+  --skip-unrecognized \
+  .
+```
+
+
 
 <div align="left">
    <img src="https://raw.githubusercontent.com/StanfordBDHG/OpenTSLM/main/assets/stanford_biodesign_logo.png" alt="Stanford Biodesign" height="90">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
