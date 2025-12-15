@@ -16,6 +16,7 @@ nohup.out
 
 # Log files
 *.log
+*_log.txt
 training_log.txt
 interleaved_training.log
 
@@ -27,8 +28,7 @@ interleaved_training.log
 *.safetensors
 checkpoints/
 results/
-results_interleaved/*
-!results_interleaved/interleaved_session_20251120_220200/
+results_interleaved/
 
 *.ts
 *.zip
