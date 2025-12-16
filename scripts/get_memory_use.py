@@ -6,33 +6,29 @@
 import argparse
 import csv
 import os
-import time
-from datetime import datetime
-from typing import Dict, List, Tuple
-
-import torch
-from tqdm.auto import tqdm
-from torch.utils.data import DataLoader
 import os as _os
+from datetime import datetime
 
-import pynvml  # type: ignore
-
-_NVML_AVAILABLE = True
-
+import pynvml
+import torch
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 
 # Models
 from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
 from opentslm.model.llm.OpenTSLMSP import OpenTSLMSP
+from opentslm.time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+from opentslm.time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
+from opentslm.time_series_datasets.simulation.SimulationQADataset import SimulationQADataset
+from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 
 # Datasets
 from opentslm.time_series_datasets.TSQADataset import TSQADataset
-from opentslm.time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
-from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
-from opentslm.time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
-from opentslm.time_series_datasets.simulation.SimulationQADataset import SimulationQADataset
 from opentslm.time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
+
+_NVML_AVAILABLE = True
 
 
 def get_device(device_arg: str | None) -> str:
@@ -77,11 +73,7 @@ def nvml_current_process_bytes() -> int:
             except Exception:
                 procs_gfx = []
             for p in list(procs) + list(procs_gfx):
-                if (
-                    int(p.pid) == pid
-                    and p.usedGpuMemory is not None
-                    and p.usedGpuMemory >= 0
-                ):
+                if int(p.pid) == pid and p.usedGpuMemory is not None and p.usedGpuMemory >= 0:
                     total_bytes += int(p.usedGpuMemory)
                     found = True
         return total_bytes if found else -1
@@ -89,9 +81,9 @@ def nvml_current_process_bytes() -> int:
         return -1
 
 
-def get_first_batch(dataset, batch_size: int = 1) -> List[Dict[str, any]]:
+def get_first_batch(dataset, batch_size: int = 1) -> list[dict[str, any]]:
     # QADataset returns dict samples compatible with model.compute_loss
-    batch: List[Dict[str, any]] = []
+    batch: list[dict[str, any]] = []
     for i in range(min(batch_size, len(dataset))):
         batch.append(dataset[i])
     # Ensure time series tensors are padded and converted
@@ -101,28 +93,19 @@ def get_first_batch(dataset, batch_size: int = 1) -> List[Dict[str, any]]:
 
 def build_optimizer(model, model_type: str, base_lr: float = 2e-4):
     if model_type == "OpenTSLMSP":
-        enc_params = [
-            p for p in getattr(model, "encoder").parameters() if p.requires_grad
-        ]
-        proj_params = [
-            p for p in getattr(model, "projector").parameters() if p.requires_grad
-        ]
+        enc_params = [p for p in model.encoder.parameters() if p.requires_grad]
+        proj_params = [p for p in model.projector.parameters() if p.requires_grad]
         param_groups = []
         if len(enc_params) > 0:
             param_groups.append({"params": enc_params, "weight_decay": 0.1})
         if len(proj_params) > 0:
             param_groups.append({"params": proj_params, "weight_decay": 0.1})
-        return (
-            torch.optim.AdamW(param_groups, lr=base_lr)
-            if len(param_groups) > 0
-            else None
-        )
+        return torch.optim.AdamW(param_groups, lr=base_lr) if len(param_groups) > 0 else None
     # Flamingo-like
     named_params = list(model.named_parameters())
     trainable = list(
         filter(
-            lambda np: np[1].requires_grad
-            and not getattr(np[1], "exclude_from_optimizer", False),
+            lambda np: np[1].requires_grad and not getattr(np[1], "exclude_from_optimizer", False),
             named_params,
         )
     )
@@ -143,9 +126,7 @@ def build_optimizer(model, model_type: str, base_lr: float = 2e-4):
     )
 
 
-def train_for_steps(
-    model, model_type: str, dataset, steps: int
-) -> Tuple[float, int, int, int]:
+def train_for_steps(model, model_type: str, dataset, steps: int) -> tuple[float, int, int, int]:
     model.train()
     optimizer = build_optimizer(model, model_type)
     if torch.cuda.is_available():
@@ -199,11 +180,7 @@ def train_for_steps(
 
             # Update progress bar postfix in GB
             def _to_gb(val: int) -> float:
-                return (
-                    float(val) / (1024.0**3)
-                    if isinstance(val, (int, float)) and val >= 0
-                    else 0.0
-                )
+                return float(val) / (1024.0**3) if isinstance(val, (int, float)) and val >= 0 else 0.0
 
             pbar.set_postfix(
                 {
@@ -212,7 +189,7 @@ def train_for_steps(
                     "nvml_gb": f"{_to_gb(max_nvml_bytes):.2f}",
                 }
             )
-        step += 1
+        step += 1  # noqa: SIM113
         pbar.update(1)
         if step >= steps:
             break
@@ -228,7 +205,7 @@ def train_for_steps(
     return last_loss, peak_bytes, peak_reserved_bytes, nvml_peak_bytes
 
 
-def ensure_csv(path: str, header: List[str]):
+def ensure_csv(path: str, header: list[str]):
     exists = os.path.exists(path)
     if not exists:
         with open(path, "w", newline="") as f:
@@ -236,16 +213,14 @@ def ensure_csv(path: str, header: List[str]):
             writer.writerow(header)
 
 
-def append_row(path: str, row: List[any]):
+def append_row(path: str, row: list[any]):
     with open(path, "a", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(row)
 
 
-def run_for_dataset(
-    model_name: str, model, dataset_name: str, dataset_obj
-) -> Dict[str, any]:
-    result: Dict[str, any] = {
+def run_for_dataset(model_name: str, model, dataset_name: str, dataset_obj) -> dict[str, any]:
+    result: dict[str, any] = {
         "model": model_name,
         "dataset": dataset_name,
         "loss": None,
@@ -256,9 +231,7 @@ def run_for_dataset(
     try:
         # Train for half an epoch, capped at 10000 steps
         steps = max(1, min(len(dataset_obj), 10000))
-        loss, peak, peak_reserved, nvml_peak = train_for_steps(
-            model, model_name, dataset_obj, steps
-        )
+        loss, peak, peak_reserved, nvml_peak = train_for_steps(model, model_name, dataset_obj, steps)
         result["loss"] = loss
         result["peak_cuda_bytes"] = peak
         result["peak_cuda_reserved_bytes"] = peak_reserved
@@ -273,9 +246,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Measure memory use for a single training iteration for a chosen model and dataset."
     )
-    parser.add_argument(
-        "-llm_id", required=True, help="HuggingFace model id for the language model"
-    )
+    parser.add_argument("-llm_id", required=True, help="HuggingFace model id for the language model")
     parser.add_argument(
         "--model",
         required=True,
@@ -294,9 +265,7 @@ def main():
         ],
         help="Dataset to use",
     )
-    parser.add_argument(
-        "--device", default="cuda", help="Device to run on (e.g., cuda, cuda:0, cpu)"
-    )
+    parser.add_argument("--device", default="cuda", help="Device to run on (e.g., cuda, cuda:0, cpu)")
     parser.add_argument(
         "--length",
         type=int,
@@ -311,7 +280,7 @@ def main():
     )
     parser.add_argument(
         "--results_csv",
-        default=os.path.join(REPO_DIR, "memory_use.csv"),
+        default=os.path.join(".", "memory_use.csv"),
         help="Path to CSV file to append results",
     )
     args = parser.parse_args()
@@ -366,14 +335,10 @@ def main():
         dataset = SleepEDFCoTQADataset(split="train", EOS_TOKEN=eos)
         dataset_name = "SleepEDF-CoT"
     elif args.dataset == "ECGQACoTQADataset":
-        dataset = ECGQACoTQADataset(
-            split="train", EOS_TOKEN=eos, max_samples=1, preload_processed_data=False
-        )
+        dataset = ECGQACoTQADataset(split="train", EOS_TOKEN=eos, max_samples=1, preload_processed_data=False)
         dataset_name = "ECG-QA-CoT"
     elif args.dataset == "SimulationQADataset":
-        dataset = SimulationQADataset(
-            split="train", EOS_TOKEN=eos, length=args.length, num_series=args.num_series
-        )
+        dataset = SimulationQADataset(split="train", EOS_TOKEN=eos, length=args.length, num_series=args.num_series)
         dataset_name = f"Simulation-L{args.length}-N{args.num_series}"
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
@@ -381,11 +346,7 @@ def main():
     # Run one iteration and append results
     res = run_for_dataset(args.model, model, dataset_name, dataset)
     peak_bytes = res["peak_cuda_bytes"]
-    peak_gb = (
-        (float(peak_bytes) / (1024.0**3))
-        if isinstance(peak_bytes, (int, float)) and peak_bytes >= 0
-        else -1
-    )
+    peak_gb = (float(peak_bytes) / (1024.0**3)) if isinstance(peak_bytes, (int, float)) and peak_bytes >= 0 else -1
     peak_reserved_bytes = res.get("peak_cuda_reserved_bytes", -1)
     peak_reserved_gb = (
         (float(peak_reserved_bytes) / (1024.0**3))
@@ -408,11 +369,7 @@ def main():
             res["dataset"],
             res["loss"],
             res["peak_cuda_bytes"],
-            (
-                f"{peak_gb:.4f}"
-                if isinstance(peak_gb, float) and peak_gb >= 0
-                else peak_gb
-            ),
+            (f"{peak_gb:.4f}" if isinstance(peak_gb, float) and peak_gb >= 0 else peak_gb),
             res.get("peak_cuda_reserved_bytes", -1),
             (
                 f"{peak_reserved_gb:.4f}"
@@ -420,11 +377,7 @@ def main():
                 else peak_reserved_gb
             ),
             res.get("nvml_peak_bytes", -1),
-            (
-                f"{nvml_peak_gb:.4f}"
-                if isinstance(nvml_peak_gb, float) and nvml_peak_gb >= 0
-                else nvml_peak_gb
-            ),
+            (f"{nvml_peak_gb:.4f}" if isinstance(nvml_peak_gb, float) and nvml_peak_gb >= 0 else nvml_peak_gb),
             res["status"],
             res["error"],
         ],

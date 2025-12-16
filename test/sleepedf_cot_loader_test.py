@@ -10,21 +10,25 @@ Test script for the SleepEDF CoT loader.
 """
 
 import unittest
-from opentslm.time_series_datasets.sleep.sleepedf_cot_loader import load_sleepedf_cot_splits, get_label_distribution
+
+from opentslm.time_series_datasets.sleep.sleepedf_cot_loader import get_label_distribution, load_sleepedf_cot_splits
+
 
 def pretty_print_label_distribution(dataset, name):
     label_dist = get_label_distribution(dataset)
     total = len(dataset)
     print(f"\n{name} dataset:")
     print(f"  Total samples: {total}")
-    print(f"  Label distribution:")
+    print("  Label distribution:")
     for label, count in sorted(label_dist.items()):
-        print(f"    {label:10s}: {count:5d} ({count/total*100:5.1f}%)")
+        print(f"    {label:10s}: {count:5d} ({count / total * 100:5.1f}%)")
+
 
 class TestSleepEDFCotLoader(unittest.TestCase):
     """
     Unit tests for the SleepEDF CoT loader functions.
     """
+
     def setUp(self):
         self.train, self.val, self.test = load_sleepedf_cot_splits()
 
@@ -71,15 +75,16 @@ class TestSleepEDFCotLoader(unittest.TestCase):
     def test_example_data(self):
         """Print example data to show what the dataset looks like."""
         sample = self.train[0]
-        print("="*80)
+        print("=" * 80)
         print("EXAMPLE SLEEPEDF COT DATASET SAMPLE")
-        print("="*80)
+        print("=" * 80)
         print(f"Label: '{sample['label']}'")
-        if 'rationale' in sample:
+        if "rationale" in sample:
             print(f"Rationale: '{sample['rationale']}'")
         print(f"time_series: length={len(sample['time_series'])}, first 5: {sample['time_series'][:5]}")
-        print("="*80)
+        print("=" * 80)
+
 
 if __name__ == "__main__":
     print("Running SleepEDF CoT loader tests, this might take a while...")
-    unittest.main() 
+    unittest.main()

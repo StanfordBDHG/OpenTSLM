@@ -3,19 +3,19 @@
 #
 # SPDX-License-Identifier: MIT
 
+import base64
+import io
 import re
 import sys
-import io
-import base64
-from typing import Dict, Any
+from typing import Any
 
 import matplotlib.pyplot as plt
-
 from common_evaluator_plot import CommonEvaluatorPlot
+
 from opentslm.time_series_datasets.TSQADataset import TSQADataset
 
 
-def evaluate_tsqa(ground_truth: str, prediction: str) -> Dict[str, Any]:
+def evaluate_tsqa(ground_truth: str, prediction: str) -> dict[str, Any]:
     """
     Evaluate TSQA predictions against ground truth.
 
@@ -65,7 +65,7 @@ def generate_time_series_plot(time_series) -> str:
         ts_list = [ts_list]
 
     num_series = len(ts_list)
-    fig, axes = plt.subplots(num_series, 1, figsize=(10, 4 * num_series), sharex=True)
+    _fig, axes = plt.subplots(num_series, 1, figsize=(10, 4 * num_series), sharex=True)
     if num_series == 1:
         axes = [axes]
 

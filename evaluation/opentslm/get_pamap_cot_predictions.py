@@ -21,21 +21,18 @@ Output:
     - CSV file with time series data, ground truth labels, and rationale
 """
 
-import torch
-import pandas as pd
-import random
-from typing import List, Dict, Any
 import json
+import random
+from typing import Any
 
+import pandas as pd
+import torch
 
 from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
-from opentslm.time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
 from opentslm.prompt.full_prompt import FullPrompt
 from opentslm.prompt.text_prompt import TextPrompt
 from opentslm.prompt.text_time_series_prompt import TextTimeSeriesPrompt
-from opentslm.time_series_datasets.util import (
-    extend_time_series_to_match_patch_size_and_aggregate,
-)
+from opentslm.time_series_datasets.pamap2.PAMAP2CoTQADataset import PAMAP2CoTQADataset
 
 
 def setup_device():
@@ -82,7 +79,7 @@ def run_inference_and_collect_data(
     num_samples: int = 10,
     max_new_tokens: int = 300,
     random_seed: int = 42,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Run inference on random samples and collect time series data, labels, and rationale."""
     print(f"Collecting data from {num_samples} random samples...")
 
@@ -92,9 +89,7 @@ def run_inference_and_collect_data(
 
     # Select random indices
     dataset_size = len(dataset)
-    selected_indices = random.sample(
-        range(dataset_size), min(num_samples, dataset_size)
-    )
+    selected_indices = random.sample(range(dataset_size), min(num_samples, dataset_size))
 
     results = []
 
@@ -122,9 +117,7 @@ def run_inference_and_collect_data(
 
                 # Create time series prompts using the data from the dataset
                 ts_prompts = []
-                for ts_text, ts_data in zip(
-                    row["time_series_text"], row["time_series"]
-                ):
+                for ts_text, ts_data in zip(row["time_series_text"], row["time_series"]):
                     ts_prompts.append(TextTimeSeriesPrompt(ts_text, ts_data))
 
                 # Create full prompt
@@ -176,7 +169,7 @@ def extract_activity_label(prediction: str) -> str:
             return "unknown"
 
 
-def save_results_to_csv(results: List[Dict[str, Any]], output_path: str):
+def save_results_to_csv(results: list[dict[str, Any]], output_path: str):
     """Save the results to a CSV file."""
     print(f"Saving results to {output_path}...")
 
@@ -204,7 +197,7 @@ def save_results_to_csv(results: List[Dict[str, Any]], output_path: str):
     print(f"✅ Results saved to {output_path}")
 
     # Print summary
-    print(f"\n📊 Summary:")
+    print("\n📊 Summary:")
     print(f"Total samples: {len(results)}")
     correct = sum(1 for r in results if r["ground_truth_label"] == r["predicted_label"])
     accuracy = correct / len(results) if results else 0

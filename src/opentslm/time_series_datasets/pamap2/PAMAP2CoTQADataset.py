@@ -3,23 +3,20 @@
 #
 # SPDX-License-Identifier: MIT
 
-from datasets import Dataset
-from typing import List, Tuple, Literal
-import os
-from opentslm.prompt.text_time_series_prompt import TextTimeSeriesPrompt
-from opentslm.time_series_datasets.QADataset import QADataset
-from opentslm.time_series_datasets.pamap2.pamap2_cot_loader import load_pamap2_cot_splits
+from typing import Literal
+
 import torch
+from datasets import Dataset
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
+
+from opentslm.prompt.text_time_series_prompt import TextTimeSeriesPrompt
+from opentslm.time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSampler
+from opentslm.time_series_datasets.pamap2.pamap2_cot_loader import load_pamap2_cot_splits
+from opentslm.time_series_datasets.QADataset import QADataset
 from opentslm.time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
-from collections import defaultdict
-import numpy as np
-from torch.utils.data import Sampler
-from opentslm.time_series_datasets.pamap2.BalancedBatchSampler import BalancedBatchSampler
-
 
 TIME_SERIES_LABELS = [
     "The following is the accelerometer data on the x-axis",
@@ -32,11 +29,11 @@ class PAMAP2CoTQADataset(QADataset):
     def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, min_series_length: int = 150):
         self.min_series_length = min_series_length
         super().__init__(split, EOS_TOKEN)
-    
-    def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
+
+    def _load_splits(self) -> tuple[Dataset, Dataset, Dataset]:
         """
         Load the PAMAP2 CoT dataset splits using the pamap2_cot_loader.
-        
+
         Returns:
             Tuple of (train, validation, test) datasets
         """
@@ -45,10 +42,10 @@ class PAMAP2CoTQADataset(QADataset):
     def _get_answer(self, row) -> str:
         """
         Get the answer from the row, which is the chain-of-thought reasoning.
-        
+
         Args:
             row: Dataset row
-            
+
         Returns:
             Chain-of-thought reasoning as a string
         """
@@ -57,10 +54,10 @@ class PAMAP2CoTQADataset(QADataset):
     def _get_pre_prompt(self, _row) -> str:
         """
         Get the pre-prompt text.
-        
+
         Args:
             _row: Dataset row (unused)
-            
+
         Returns:
             Pre-prompt text
         """
@@ -85,16 +82,16 @@ class PAMAP2CoTQADataset(QADataset):
     def _get_post_prompt(self, _row) -> str:
         """
         Get the post-prompt text.
-        
+
         Args:
             _row: Dataset row (unused)
-            
+
         Returns:
             Post-prompt text
         """
         return "Rationale:"
 
-    def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
+    def _get_text_time_series_prompt_list(self, row) -> list[TextTimeSeriesPrompt]:
         """
         Convert the time series data into a list of TextTimeSeriesPrompt objects, including mean and std in the text.
         """
@@ -110,7 +107,7 @@ class PAMAP2CoTQADataset(QADataset):
 
         # Check for invalid data
         if torch.isnan(series).any() or torch.isinf(series).any():
-            print(f"❌ Invalid data detected in PAMAP2 sample")
+            print("❌ Invalid data detected in PAMAP2 sample")
             print(f"Row data: {row}")
             print(f"Series shape: {series.shape}")
             print(f"Series values: {series}")
@@ -122,16 +119,16 @@ class PAMAP2CoTQADataset(QADataset):
         # Normalize the data with better numerical stability
         means = series.mean(dim=1, keepdim=True)
         stds = series.std(dim=1, keepdim=True)
-        
+
         # Handle zero or very small standard deviations
         min_std = 1e-6  # Increased from 1e-8 for better stability
         stds = torch.clamp(stds, min=min_std)
-        
+
         series_norm = (series - means) / stds
-        
+
         # Check for NaN/Inf after normalization
         if torch.isnan(series_norm).any() or torch.isinf(series_norm).any():
-            print(f"❌ NaN/Inf detected after normalization")
+            print("❌ NaN/Inf detected after normalization")
             print(f"Original series: {series}")
             print(f"Original series shape: {series.shape}")
             print(f"Row data: {row}")
@@ -143,13 +140,15 @@ class PAMAP2CoTQADataset(QADataset):
             exit(1)
 
         prompts = []
-        for i, (time_series_label, time_series, mean, std) in enumerate(zip(TIME_SERIES_LABELS, series_norm.tolist(), means.squeeze().tolist(), stds.squeeze().tolist())):
+        for time_series_label, time_series, mean, std in zip(
+            TIME_SERIES_LABELS, series_norm.tolist(), means.squeeze().tolist(), stds.squeeze().tolist()
+        ):
             text_prompt = f"{time_series_label}, it has mean {mean:.4f} and std {std:.4f}:"
             prompts.append(TextTimeSeriesPrompt(text_prompt, time_series))
         return prompts
 
     @staticmethod
-    def get_labels() -> List[str]:
+    def get_labels() -> list[str]:
         """
         Return the list of all possible activity labels for the PAMAP2CoTQADataset.
         """
@@ -174,7 +173,6 @@ class PAMAP2CoTQADataset(QADataset):
             "rope jumping",
         ]
 
-
     def _format_sample(self, row):
         sample = super()._format_sample(row)
         sample["label"] = row["label"]
@@ -182,6 +180,7 @@ class PAMAP2CoTQADataset(QADataset):
         sample["y_axis"] = row["y_axis"]
         sample["z_axis"] = row["z_axis"]
         return sample
+
 
 if __name__ == "__main__":
     dataset = PAMAP2CoTQADataset(split="train", EOS_TOKEN="")
@@ -201,9 +200,7 @@ if __name__ == "__main__":
     dataloader = DataLoader(
         dataset,
         batch_sampler=sampler,
-        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
-            batch, patch_size=4
-        ),
+        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(batch, patch_size=4),
     )
 
     for batch in tqdm(dataloader, total=1):

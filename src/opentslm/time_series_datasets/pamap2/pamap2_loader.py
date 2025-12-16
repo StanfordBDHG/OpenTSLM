@@ -5,10 +5,10 @@
 
 import os
 import zipfile
+
 import requests
 
 from opentslm.time_series_datasets.constants import RAW_DATA as RAW_DATA_PATH
-
 
 # ---------------------------
 # Constants

@@ -11,26 +11,25 @@ PyTorch-style QA dataset for M4 time series caption generation.
 This module defines the M4QADataset class, which wraps M4 time series and captions
 for use in question-answering and caption generation tasks.
 """
-import json
-from typing import List, Literal, Tuple
+
 import torch
 from datasets import Dataset
 
 from opentslm.prompt.text_time_series_prompt import TextTimeSeriesPrompt
+from opentslm.time_series_datasets.m4.m4_loader import create_combined_dataset, load_all_m4_data
 from opentslm.time_series_datasets.QADataset import QADataset
-from opentslm.time_series_datasets.m4.m4_loader import load_all_m4_data, create_combined_dataset
 
 
 class M4QADataset(QADataset):
     """
     M4 Question-Answer Dataset for time series caption generation.
-    
+
     This dataset loads M4 time series data with corresponding ChatGPT-created captions and creates
     QA pairs where the question asks for a caption and the answer is the actual caption.
     The model learns to generate detailed captions from time series data.
     """
-    
-    def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
+
+    def _load_splits(self) -> tuple[Dataset, Dataset, Dataset]:
         """
         Load and split the M4 data into train/validation/test sets.
         Returns:
@@ -50,7 +49,7 @@ class M4QADataset(QADataset):
         Returns:
             The caption string
         """
-        return row['caption']
+        return row["caption"]
 
     def _get_pre_prompt(self, row) -> str:
         """
@@ -72,7 +71,7 @@ class M4QADataset(QADataset):
         """
         return "Please generate a detailed caption for this time-series, describing it as accurately as possible."
 
-    def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
+    def _get_text_time_series_prompt_list(self, row) -> list[TextTimeSeriesPrompt]:
         """
         Create text-time series prompts from the data.
         Args:
@@ -80,19 +79,13 @@ class M4QADataset(QADataset):
         Returns:
             List of TextTimeSeriesPrompt objects with the time series
         """
-        series = row['series']
+        series = row["series"]
         # Convert series to tensor and normalize
-        if isinstance(series, list):
-            series_tensor = torch.tensor(series, dtype=torch.float32)
-        else:
-            series_tensor = series
+        series_tensor = torch.tensor(series, dtype=torch.float32) if isinstance(series, list) else series
         # Normalize the series
         mean = series_tensor.mean()
         std = series_tensor.std()
-        if std > 0:
-            normalized_series = (series_tensor - mean) / std
-        else:
-            normalized_series = series_tensor - mean
+        normalized_series = (series_tensor - mean) / std if std > 0 else series_tensor - mean
         # Create the prompt with mean and std information
         text_prompt = f"This is the time series, it has mean {mean:.4f} and std {std:.4f}:"
         return [TextTimeSeriesPrompt(text_prompt, normalized_series.tolist())]
@@ -101,11 +94,11 @@ class M4QADataset(QADataset):
         """Override to preserve the time series ID."""
         # Get the base formatted sample
         base_sample = super()._format_sample(row)
-        
+
         # Add the ID if it exists in the original row
-        if 'id' in row:
-            base_sample['id'] = row['id']
-        
+        if "id" in row:
+            base_sample["id"] = row["id"]
+
         return base_sample
 
 
@@ -123,13 +116,13 @@ if __name__ == "__main__":
     print(f"Test dataset size: {len(test_dataset)}")
     # Example sample
     sample = train_dataset[0]
-    print(f"\nExample sample:")
+    print("\nExample sample:")
     print(f"Pre-prompt: {sample['pre_prompt']}")
     print(f"Post-prompt: {sample['post_prompt']}")
     print(f"Answer (caption): {sample['answer'][:200]}...")
     print(f"Number of time series prompts: {len(sample['time_series'])}")
-    if sample['time_series']:
-        ts = sample['time_series'][0]
-        ts_text = sample['time_series_text'][0]
+    if sample["time_series"]:
+        ts = sample["time_series"][0]
+        ts_text = sample["time_series_text"][0]
         print(f"Time series length: {len(ts)}")
-        print(f"Time series text: {ts_text}") 
+        print(f"Time series text: {ts_text}")

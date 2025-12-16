@@ -3,13 +3,10 @@
 #
 # SPDX-License-Identifier: MIT
 
-import math
-from typing import List
-from opentslm.model_config import PATCH_SIZE
-
+import torch
 import torch.nn.functional as F
 
-import torch
+from opentslm.model_config import PATCH_SIZE
 
 MAX_VALUE = 50_000
 MIN_VALUE = -MAX_VALUE
@@ -24,7 +21,7 @@ def extend_time_series_to_match_patch_size_and_aggregate(
     """
 
     for element in batch:
-        # 1) pull out the list of (1D) time‑series
+        # 1) pull out the list of (1D) time-series
         ts_list = element["time_series"]
 
         # 2) convert each to a torch.Tensor (float)
@@ -53,7 +50,7 @@ def extend_time_series_to_match_patch_size_and_aggregate(
         padded = []
         for ts in ts_tensors:
             L = ts.size(0)
-            if L < padded_len:
+            if padded_len > L:
                 pad_amt = padded_len - L
                 ts = F.pad(ts, (0, pad_amt), mode="constant", value=0.0)
             else:

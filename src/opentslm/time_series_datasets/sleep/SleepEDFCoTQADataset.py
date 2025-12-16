@@ -3,19 +3,27 @@
 #
 # SPDX-License-Identifier: MIT
 
+from typing import Literal
+
+import numpy as np
 from datasets import Dataset
-from typing import List, Tuple, Literal
-import os
+
 from opentslm.prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from opentslm.time_series_datasets.QADataset import QADataset
 from opentslm.time_series_datasets.sleep.sleepedf_cot_loader import load_sleepedf_cot_splits
-import numpy as np
+
 
 class SleepEDFCoTQADataset(QADataset):
-    def __init__(self, split: Literal["train", "test", "validation"], EOS_TOKEN: str, format_sample_str: bool = False, time_series_format_function=None):
+    def __init__(
+        self,
+        split: Literal["train", "test", "validation"],
+        EOS_TOKEN: str,
+        format_sample_str: bool = False,
+        time_series_format_function=None,
+    ):
         super().__init__(split, EOS_TOKEN, format_sample_str, time_series_format_function)
 
-    def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
+    def _load_splits(self) -> tuple[Dataset, Dataset, Dataset]:
         return load_sleepedf_cot_splits()
 
     def _get_answer(self, row) -> str:
@@ -42,7 +50,7 @@ class SleepEDFCoTQADataset(QADataset):
 
         - Please now write your rationale. Make sure that your last word is the answer. You MUST end your response with "Answer: """
 
-    def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
+    def _get_text_time_series_prompt_list(self, row) -> list[TextTimeSeriesPrompt]:
         series = np.array(row["time_series"], dtype=np.float32)
         mean = float(np.mean(series))
         std = float(np.std(series))
@@ -50,11 +58,11 @@ class SleepEDFCoTQADataset(QADataset):
         std = max(std, min_std)
         series_norm = (series - mean) / std
         text_prompt = f"The following is the EEG time series, it has mean {mean:.4f} and std {std:.4f}:"
-        
+
         return [TextTimeSeriesPrompt(text_prompt, series_norm.tolist())]
 
     @staticmethod
-    def get_labels() -> List[str]:
+    def get_labels() -> list[str]:
         # This could be made dynamic, but for now, use the standard sleep stages
         return ["Wake", "Non-REM stage 1", "Non-REM stage 2", "Non-REM stage 3", "REM sleep", "Movement"]
 
@@ -63,6 +71,7 @@ class SleepEDFCoTQADataset(QADataset):
         sample["label"] = row["label"]
         sample["original_data"] = row["time_series"]
         return sample
+
 
 if __name__ == "__main__":
     dataset = SleepEDFCoTQADataset(split="train", EOS_TOKEN="")
@@ -73,6 +82,6 @@ if __name__ == "__main__":
         sample = dataset[0]
         print("Sample keys:", sample.keys())
         print("Sample answer:", sample["answer"])
-        print("Sample time series text:", sample["time_series_text"] if "time_series_text" in sample else "N/A")
+        print("Sample time series text:", sample.get("time_series_text", "N/A"))
         print("Sample pre prompt:", sample["pre_prompt"])
-        print("Sample post prompt:", sample["post_prompt"]) 
+        print("Sample post prompt:", sample["post_prompt"])

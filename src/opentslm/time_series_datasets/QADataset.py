@@ -3,15 +3,18 @@
 #
 # SPDX-License-Identifier: MIT
 
+import sys
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, List, Literal, Tuple
+from typing import Literal
 
 import numpy as np
+from torch.utils.data import Dataset
+
 from opentslm.prompt.prompt_with_answer import PromptWithAnswer
 from opentslm.prompt.text_prompt import TextPrompt
 from opentslm.prompt.text_time_series_prompt import TextTimeSeriesPrompt
-from torch.utils.data import Dataset
 
 
 class QADataset(Dataset, ABC):
@@ -35,21 +38,29 @@ class QADataset(Dataset, ABC):
             - The datasets for each split are loaded and formatted only once per class.
             - The formatted datasets are cached as class attributes for subsequent initializations.
         """
-        
+
         self.EOS_TOKEN = EOS_TOKEN
         if not hasattr(self.__class__, "loaded"):
             train, val, test = self._load_splits()
 
-            format_function = partial(self._format_sample_str, time_series_format_function) if format_sample_str else self._format_sample
-           
+            format_function = (
+                partial(self._format_sample_str, time_series_format_function)
+                if format_sample_str
+                else self._format_sample
+            )
+
             from tqdm import tqdm
-            
+
             print("Formatting training samples...")
-            self.__class__._train_dataset = list(tqdm(map(format_function, train), total=len(train), desc="Training samples"))
-            
+            self.__class__._train_dataset = list(
+                tqdm(map(format_function, train), total=len(train), desc="Training samples")
+            )
+
             print("Formatting validation samples...")
-            self.__class__._validation_dataset = list(tqdm(map(format_function, val), total=len(val), desc="Validation samples"))
-            
+            self.__class__._validation_dataset = list(
+                tqdm(map(format_function, val), total=len(val), desc="Validation samples")
+            )
+
             print("Formatting test samples...")
             self.__class__._test_dataset = list(tqdm(map(format_function, test), total=len(test), desc="Test samples"))
 
@@ -63,12 +74,10 @@ class QADataset(Dataset, ABC):
             case "test":
                 self.dataset = self.__class__._test_dataset
             case _:
-                raise RuntimeError(
-                    "Split must be a literal of 'train', 'training', or 'validation'"
-                )
+                raise RuntimeError("Split must be a literal of 'train', 'training', or 'validation'")
 
     @abstractmethod
-    def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
+    def _load_splits(self) -> tuple[Dataset, Dataset, Dataset]:
         pass
 
     @abstractmethod
@@ -84,7 +93,7 @@ class QADataset(Dataset, ABC):
         pass
 
     @abstractmethod
-    def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
+    def _get_text_time_series_prompt_list(self, row) -> list[TextTimeSeriesPrompt]:
         pass
 
     def _format_sample(self, row):
@@ -99,21 +108,21 @@ class QADataset(Dataset, ABC):
             answer.strip(),
         ).to_dict()
 
-    def _format_sample_str(
-        self, time_series_format_function: Callable[[np.ndarray], str] | None, row
-    ):
+    def _format_sample_str(self, time_series_format_function: Callable[[np.ndarray], str] | None, row):
         def fallback_timeseries_formatter(time_series: np.ndarray) -> str:
             # Fallback formatter for time series data
-        
-            return np.array2string(
-                time_series,
-                separator=" ",
-                formatter={"all": lambda x: f'"{x:.2f}"'.replace(".", "")},
-                threshold=sys.maxsize,
-                max_line_width=sys.maxsize,
-            ).removeprefix("[").removesuffix("]")
 
-               
+            return (
+                np.array2string(
+                    time_series,
+                    separator=" ",
+                    formatter={"all": lambda x: f'"{x:.2f}"'.replace(".", "")},
+                    threshold=sys.maxsize,
+                    max_line_width=sys.maxsize,
+                )
+                .removeprefix("[")
+                .removesuffix("]")
+            )
 
         if not time_series_format_function:
             time_series_format_function = fallback_timeseries_formatter
@@ -123,9 +132,7 @@ class QADataset(Dataset, ABC):
 
         for text_time_series_prompt in self._get_text_time_series_prompt_list(row):
             prompt_chunks.append(text_time_series_prompt.get_text())
-            time_series = time_series_format_function(
-                text_time_series_prompt.get_time_series()
-            )
+            time_series = time_series_format_function(text_time_series_prompt.get_time_series())
             prompt_chunks.append(time_series)
 
         prompt_chunks.append(self._get_post_prompt(row).strip())

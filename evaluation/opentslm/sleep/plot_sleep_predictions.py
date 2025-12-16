@@ -9,11 +9,13 @@
 Plot SleepEDF time series samples from sleep_cot_data.csv.
 Each sample is plotted as a PNG with EEG data and the full_prediction as text.
 """
-import os
+
 import json
-import pandas as pd
-import numpy as np
+import os
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
 
 CSV_PATH = "sleep_cot_data.csv"
@@ -44,7 +46,7 @@ def plot_sample(row, idx):
     gt_label = row["ground_truth_label"]
     pred_label = row["predicted_label"]
     sample_idx = row["sample_index"]
-    series_length = row["series_length"]
+    row["series_length"]
 
     # Map labels to pretty names
     pretty_gt = display_label_map.get(gt_label, gt_label)
@@ -67,7 +69,7 @@ def plot_sample(row, idx):
     std = np.std(eeg_data) if np.std(eeg_data) > 0 else 1.0
     eeg_plot = (eeg_data - mean) / std
 
-    fig, ax1 = plt.subplots(figsize=(12, 7))
+    _fig, ax1 = plt.subplots(figsize=(12, 7))
     t = np.arange(len(eeg_plot))
     # Use the same blue color as PAMAP2 plots (first color from colorblind palette)
     ax1.plot(t, eeg_plot, linewidth=2.5, color="#0173B2", alpha=0.8, label="EEG")
@@ -93,14 +95,12 @@ def plot_sample(row, idx):
         ha="left",
         va="top",
         wrap=True,
-        bbox=dict(
-            boxstyle="round", facecolor="whitesmoke", alpha=0.9, edgecolor="gray"
-        ),
+        bbox={"boxstyle": "round", "facecolor": "whitesmoke", "alpha": 0.9, "edgecolor": "gray"},
     )
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
 
-    fname = f"sample_{idx+1:03d}_gt_{pretty_gt.lower().replace(' ', '_').replace('-', '_')}.png"
+    fname = f"sample_{idx + 1:03d}_gt_{pretty_gt.lower().replace(' ', '_').replace('-', '_')}.png"
     plt.savefig(os.path.join(OUTPUT_DIR, fname), dpi=300, bbox_inches="tight")
     plt.close()
     print(f"Saved {fname}")

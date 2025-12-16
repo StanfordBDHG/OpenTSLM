@@ -10,6 +10,7 @@ Test script to verify MedGemma support in OpenTSLMFlamingo.
 """
 
 import torch
+
 from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
 
 
@@ -45,9 +46,7 @@ def test_medgemma_support():
             test_batch = [
                 {
                     "pre_prompt": "You are an expert in time series analysis.",
-                    "time_series_text": [
-                        "This is a test time series with mean 0.0 and std 1.0:"
-                    ],
+                    "time_series_text": ["This is a test time series with mean 0.0 and std 1.0:"],
                     "post_prompt": "Please analyze this time series.",
                     "answer": "This appears to be a normalized time series.",
                     "time_series": [torch.randn(100)],  # Random test data

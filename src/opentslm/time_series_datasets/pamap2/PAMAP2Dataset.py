@@ -3,10 +3,10 @@
 #
 # SPDX-License-Identifier: MIT
 
-from typing import Tuple
 import pandas as pd
-from opentslm.time_series_datasets.pamap2.pamap2_loader import ensure_pamap2_data
 from torch.utils.data import Dataset
+
+from opentslm.time_series_datasets.pamap2.pamap2_loader import ensure_pamap2_data
 
 ACTIVITIY_ID_DICT = {
     0: "transient",
@@ -54,10 +54,10 @@ class PAMAP2Dataset(Dataset):
         dataCollection = dataCollection.drop(
             dataCollection[dataCollection.activityID == 0].index
         )  # removal of any row of activity 0 as it is transient activity which it is not used
-        dataCollection = dataCollection.apply(
-            pd.to_numeric, errors="coerce"
-        )  # removal of non numeric data in cells
-        dataCollection = dataCollection.interpolate()  # removal of any remaining NaN value cells by constructing new data points in known set of data points
+        dataCollection = dataCollection.apply(pd.to_numeric, errors="coerce")  # removal of non numeric data in cells
+        dataCollection = (
+            dataCollection.interpolate()
+        )  # removal of any remaining NaN value cells by constructing new data points in known set of data points
 
         return dataCollection
 
@@ -137,7 +137,7 @@ class PAMAP2Dataset(Dataset):
         dataCollection.reset_index(drop=True, inplace=True)
         dataCol = self._data_cleaning(dataCollection)
         dataCol.reset_index(drop=True, inplace=True)
-        for i in range(0, 4):
+        for i in range(4):
             dataCol.loc[i, "heartrate"] = 100
         dataCol["activityID"] = dataCol["activityID"].map(ACTIVITIY_ID_DICT)
         return dataCol
@@ -147,9 +147,7 @@ class PAMAP2Dataset(Dataset):
         self.df = self._load_data(list_of_files)
 
         # create 3-second windows and store them as tensors + labels
-        self.time_series, self.labels = self._make_windows(
-            window_size="3s", min_pct=0.5
-        )
+        self.time_series, self.labels = self._make_windows(window_size="3s", min_pct=0.5)
 
     def _make_windows(self, window_size, min_pct=0.5):
         """
@@ -171,10 +169,10 @@ class PAMAP2Dataset(Dataset):
         labels = []
 
         # 3) first split by subject_id so no window can span subjects
-        for subject, df_sub in df.groupby("subject_id"):
+        for _subject, df_sub in df.groupby("subject_id"):
             # align your 2‑minute bins to this subject’s first timestamp
             origin = df_sub.index[0]
-            for window_start, win in df_sub.resample(window_size, origin=origin):
+            for _window_start, win in df_sub.resample(window_size, origin=origin):
                 if win.empty:
                     continue
 

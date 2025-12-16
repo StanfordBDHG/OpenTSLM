@@ -7,9 +7,7 @@ import logging
 import os
 
 import numpy as np
-
 from tqdm.auto import tqdm
-
 
 from opentslm.time_series_datasets.monash.monash_utils import (
     download_and_extract_monash_ucr,
@@ -62,9 +60,7 @@ class MonashDataset:
 
 
 if __name__ == "__main__":
-    loader = MonashDataset(
-        _data_dir="monash_datasets", data_name="IEEEPPG/IEEEPPG_TRAIN"
-    )
+    loader = MonashDataset(_data_dir="monash_datasets", data_name="IEEEPPG/IEEEPPG_TRAIN")
 
     prog = tqdm(loader)
 

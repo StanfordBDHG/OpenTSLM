@@ -3,9 +3,11 @@
 #
 # SPDX-License-Identifier: MIT
 
+from collections import defaultdict
+
 import numpy as np
 from torch.utils.data import Sampler
-from collections import defaultdict
+
 
 class BalancedBatchSampler(Sampler):
     def __init__(self, labels, batch_size):
@@ -37,4 +39,4 @@ class BalancedBatchSampler(Sampler):
 
     def __len__(self):
         min_class_len = min([len(self.label_to_indices[label]) for label in self.labels_set])
-        return (min_class_len // self.samples_per_class) * self.num_classes 
+        return (min_class_len // self.samples_per_class) * self.num_classes

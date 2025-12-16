@@ -3,23 +3,17 @@
 #
 # SPDX-License-Identifier: MIT
 
-import torch
 import numpy as np
 import pandas as pd
+import torch
 
 from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
+from opentslm.prompt.full_prompt import FullPrompt
 from opentslm.prompt.text_prompt import TextPrompt
 from opentslm.prompt.text_time_series_prompt import TextTimeSeriesPrompt
-from opentslm.prompt.full_prompt import FullPrompt
 
 # 1. Load the model
-device = (
-    "cuda"
-    if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
-)
+device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
 print(f"Using device: {device}")
 model = OpenTSLMFlamingo(
@@ -36,11 +30,7 @@ df = pd.read_csv(csv_path)
 row = df[df["id"] == "series-M42150"].iloc[0]
 series_str = row["series"]
 # Remove brackets and split
-series = [
-    float(x)
-    for x in series_str.strip("[]").replace("\n", "").replace(" ", "").split(",")
-    if x
-]
+series = [float(x) for x in series_str.strip("[]").replace("\n", "").replace(" ", "").split(",") if x]
 series = np.array(series, dtype=np.float32)
 mean = series.mean()
 std = series.std()

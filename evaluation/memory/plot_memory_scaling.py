@@ -17,12 +17,12 @@ Paper-style plots: memory usage scaling with N for different lengths (L).
 - OOM cases (status != "ok" or missing memory) shown as red X markers
 """
 
+import re
+
+import matplotlib
+import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
-import matplotlib
-import re
-from matplotlib.lines import Line2D
 
 
 def parse_model_name(llm_id, model_type):
@@ -55,18 +55,20 @@ def parse_simulation_dataset(name):
 def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
     # Publication style
     plt.style.use("seaborn-v0_8-white")
-    matplotlib.rcParams.update({
-        "font.family": "serif",
-        "font.serif": ["Palatino", "Times New Roman", "DejaVu Serif"],
-        "font.size": 12,
-        "axes.labelsize": 14,
-        "axes.titlesize": 14,
-        "legend.fontsize": 10,
-        "xtick.labelsize": 11,
-        "ytick.labelsize": 11,
-        "axes.linewidth": 0.6,
-        "axes.edgecolor": "0.15",
-    })
+    matplotlib.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": ["Palatino", "Times New Roman", "DejaVu Serif"],
+            "font.size": 12,
+            "axes.labelsize": 14,
+            "axes.titlesize": 14,
+            "legend.fontsize": 10,
+            "xtick.labelsize": 11,
+            "ytick.labelsize": 11,
+            "axes.linewidth": 0.6,
+            "axes.edgecolor": "0.15",
+        }
+    )
 
     # Load & preprocess
     df = pd.read_csv(csv_file)
@@ -75,9 +77,7 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
     df[["base_model", "config"]] = df.apply(
         lambda row: pd.Series(parse_model_name(row["llm_id"], row["model"])), axis=1
     )
-    df[["L", "N"]] = df["dataset"].apply(
-        lambda s: pd.Series(parse_simulation_dataset(s))
-    )
+    df[["L", "N"]] = df["dataset"].apply(lambda s: pd.Series(parse_simulation_dataset(s)))
     df = df.dropna(subset=["L", "N"])
     df["L"] = df["L"].astype(int)
     df["N"] = df["N"].astype(int)
@@ -86,18 +86,16 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
 
     # Palette + markers
     base_models = list(df["base_model"].unique())
-    custom_palette = sns.color_palette("tab10", n_colors=len(base_models))
-    markers_dict = dict(zip(
-        base_models,
-        ["o", "s", "^", "D", "p", "X", "*"]
-    ))
+    sns.color_palette("tab10", n_colors=len(base_models))
+    dict(zip(base_models, ["o", "s", "^", "D", "p", "X", "*"]))
 
     # Unique sequence lengths
     unique_L = sorted(df["L"].unique())
 
     # Create subplot grid manually: 2 rows (SoftPrompt, Flamingo)
     fig, axes = plt.subplots(
-        2, len(unique_L),
+        2,
+        len(unique_L),
         figsize=(3.2 * len(unique_L), 6),
         sharex="col",
     )
@@ -107,27 +105,24 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
 
     # Precompute Flamingo y-lims
     flamingo_df = df[df["config"] == "Flamingo"]
-    flamingo_ymin, flamingo_ymax = None, None
+    _flamingo_ymin, _flamingo_ymax = None, None
     if not flamingo_df.empty:
-        flamingo_ymin = flamingo_df["peak_cuda_reserved_gb"].min(skipna=True)
-        flamingo_ymax = flamingo_df["peak_cuda_reserved_gb"].max(skipna=True)
-
-    flamingo_ymin = 0
-    flamingo_ymax = 65
+        flamingo_df["peak_cuda_reserved_gb"].min(skipna=True)
+        flamingo_df["peak_cuda_reserved_gb"].max(skipna=True)
 
     # Iterate configs
     for cfg in ["SoftPrompt", "Flamingo"]:
         cfg_df = df[df["config"] == cfg]
 
         for j, L in enumerate(unique_L):
-            ax = axes[row_map[cfg], j]
+            axes[row_map[cfg], j]
             subdf = cfg_df[cfg_df["L"] == L]
 
             ymax_local = subdf["peak_cuda_reserved_gb"].max(skipna=True)
-            oom_y = (ymax_local if pd.notna(ymax_local) else 0) * 1.05 + 5
+            (ymax_local if pd.notna(ymax_local) else 0) * 1.05 + 5
 
-            for bm, sdf in subdf.groupby("base_model"):
+            for _bm, sdf in subdf.groupby("base_model"):
                 sdf = sdf.sort_values("N")
 
                 # Successful runs
-                ok_df = sdf[(sdf.get("status", "ok") == "ok") & sdf["]()]()_
+                sdf[(sdf.get("status", "ok") == "ok") & sdf["]()]()_"]]

@@ -5,9 +5,10 @@
 
 import re
 import sys
-from typing import Dict, Any
+from typing import Any
 
 from common_evaluator import CommonEvaluator
+
 from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 
 
@@ -20,7 +21,7 @@ def extract_sleep_stage_from_prediction(prediction: str) -> str:
     """
     pred = prediction.strip()
     # Find the last occurrence of 'Answer:' (case-insensitive)
-    match = list(re.finditer(r'answer:\s*', pred, re.IGNORECASE))
+    match = list(re.finditer(r"answer:\s*", pred, re.IGNORECASE))
     if match:
         # Take everything after the last 'Answer:'
         start = match[-1].end()
@@ -28,26 +29,26 @@ def extract_sleep_stage_from_prediction(prediction: str) -> str:
     else:
         # Take the last word/phrase (sleep stages can be multi-word)
         words = pred.split()
-        if len(words) >= 2 and words[-2].lower() in ['non-rem', 'rem']:
+        if len(words) >= 2 and words[-2].lower() in ["non-rem", "rem"]:
             # Handle multi-word sleep stages like "Non-REM stage 1", "REM sleep"
-            label = ' '.join(words[-2:])
+            label = " ".join(words[-2:])
         else:
             # Single word stage
-            label = words[-1] if words else ''
+            label = words[-1] if words else ""
     # Look for "Answer: [answer]" pattern with more precise matching
-    answer_match = re.search(r'Answer:\s*(.+?)(?:\.|$)', pred, re.IGNORECASE)
+    answer_match = re.search(r"Answer:\s*(.+?)(?:\.|$)", pred, re.IGNORECASE)
     if answer_match:
         label = answer_match.group(1).strip()
         # Remove trailing period if present
-        if label.endswith('.'):
+        if label.endswith("."):
             label = label[:-1]
         return label.strip().lower()
     # Remove trailing punctuation (e.g., period, comma)
-    label = re.sub(r'[\.,;:!?]+$', '', label)
+    label = re.sub(r"[\.,;:!?]+$", "", label)
     return label.strip().lower()
 
 
-def evaluate_sleep_cot(ground_truth: str, prediction: str) -> Dict[str, Any]:
+def evaluate_sleep_cot(ground_truth: str, prediction: str) -> dict[str, Any]:
     """
     Evaluate SleepEDFCoTQADataset predictions against ground truth.
     Extracts the sleep stage label from the end of the model's output and compares to ground truth.
@@ -64,14 +65,14 @@ def main():
         print("Usage: python evaluate_sleep_cot.py <model_name>")
         print("Example: python evaluate_sleep_cot.py meta-llama/Llama-3.2-1B")
         sys.exit(1)
-    
+
     model_name = sys.argv[1]
-    
+
     dataset_classes = [SleepEDFCoTQADataset]
     evaluation_functions = {
         "SleepEDFCoTQADataset": evaluate_sleep_cot,
     }
-    
+
     evaluator = CommonEvaluator()
     results_df = evaluator.evaluate_multiple_models(
         model_names=[model_name],
@@ -80,14 +81,14 @@ def main():
         max_samples=None,  # Set to None for full evaluation
         max_new_tokens=1000,  # Sleep stage classification might need more tokens for reasoning
     )
-    
-    print("\n" + "="*80)
+
+    print("\n" + "=" * 80)
     print("FINAL RESULTS SUMMARY")
-    print("="*80)
+    print("=" * 80)
     print(results_df.to_string(index=False))
-    
+
     return results_df
 
 
 if __name__ == "__main__":
-    main() 
+    main()

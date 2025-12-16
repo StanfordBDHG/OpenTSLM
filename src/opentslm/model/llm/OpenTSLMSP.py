@@ -3,14 +3,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+
 import torch
-import torch.nn as nn
-from typing import List, Dict, Tuple, Optional
-from transformers import AutoTokenizer, AutoModelForCausalLM
 from torch.nn.utils.rnn import pad_sequence
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 try:
-    from peft import get_peft_model, LoraConfig, TaskType
+    from peft import LoraConfig, TaskType, get_peft_model
 
     PEFT_AVAILABLE = True
 except ImportError:
@@ -18,13 +17,14 @@ except ImportError:
     print("Warning: peft not available. LoRA fine-tuning will be disabled.")
 
 from opentslm.model_config import ENCODER_OUTPUT_DIM
-from .TimeSeriesLLM import TimeSeriesLLM
-from ..encoder.TransformerCNNEncoder import TransformerCNNEncoder
-from ..projector.MLPProjector import MLPProjector
 from opentslm.prompt.full_prompt import FullPrompt
 from opentslm.time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
+
+from ..encoder.TransformerCNNEncoder import TransformerCNNEncoder
+from ..projector.MLPProjector import MLPProjector
+from .TimeSeriesLLM import TimeSeriesLLM
 
 
 class OpenTSLMSP(TimeSeriesLLM):
@@ -51,17 +51,13 @@ class OpenTSLMSP(TimeSeriesLLM):
 
         # 3) encoder + projector (now internal)
         self.encoder = TransformerCNNEncoder().to(device)
-        self.projector = MLPProjector(
-            ENCODER_OUTPUT_DIM, self.llm.config.hidden_size, device=device
-        ).to(device)
+        self.projector = MLPProjector(ENCODER_OUTPUT_DIM, self.llm.config.hidden_size, device=device).to(device)
 
         self.patch_size = 4
 
         # LoRA-related attributes
         self.lora_enabled = False
-        self.original_llm = (
-            None  # Keep reference to original model for backward compatibility
-        )
+        self.original_llm = None  # Keep reference to original model for backward compatibility
 
         # Freeze the LLM backbone for SP model (internally)
         for p in self.llm.parameters():
@@ -72,7 +68,7 @@ class OpenTSLMSP(TimeSeriesLLM):
         lora_r: int = 16,
         lora_alpha: int = 32,
         lora_dropout: float = 0.0,
-        target_modules: Optional[List[str]] = None,
+        target_modules: list[str] | None = None,
     ):
         """
         Enable LoRA fine-tuning for the LLM component.
@@ -84,14 +80,10 @@ class OpenTSLMSP(TimeSeriesLLM):
             target_modules: List of module names to apply LoRA to. If None, uses defaults.
         """
         if not PEFT_AVAILABLE:
-            raise RuntimeError(
-                "peft package is required for LoRA fine-tuning. Please install with: pip install peft"
-            )
+            raise RuntimeError("peft package is required for LoRA fine-tuning. Please install with: pip install peft")
 
         if self.lora_enabled:
-            raise RuntimeError(
-                "LoRA is already enabled. Call disable_lora() first if you want to reconfigure LoRA."
-            )
+            raise RuntimeError("LoRA is already enabled. Call disable_lora() first if you want to reconfigure LoRA.")
 
         # Store reference to original model before applying LoRA
         self.original_llm = self.llm
@@ -125,15 +117,11 @@ class OpenTSLMSP(TimeSeriesLLM):
 
             # Print LoRA info
             lora_params = sum(
-                p.numel()
-                for name, p in self.llm.named_parameters()
-                if p.requires_grad and "lora_" in name
+                p.numel() for name, p in self.llm.named_parameters() if p.requires_grad and "lora_" in name
             )
-            trainable_params = sum(
-                p.numel() for p in self.llm.parameters() if p.requires_grad
-            )
+            trainable_params = sum(p.numel() for p in self.llm.parameters() if p.requires_grad)
             total_params = sum(p.numel() for p in self.llm.parameters())
-            print(f"✅ LoRA enabled:")
+            print("✅ LoRA enabled:")
             print(f"   LoRA parameters: {lora_params:,}")
             print(f"   Total trainable parameters: {trainable_params:,}")
             print(f"   Total parameters: {total_params:,}")
@@ -142,12 +130,8 @@ class OpenTSLMSP(TimeSeriesLLM):
 
         except Exception as e:
             print(f"❌ Failed to enable LoRA: {e}")
-            print(
-                "   This might be due to incompatible target modules for your model architecture."
-            )
-            print(
-                "   Try specifying different target_modules or check your model's layer names."
-            )
+            print("   This might be due to incompatible target modules for your model architecture.")
+            print("   Try specifying different target_modules or check your model's layer names.")
             raise
 
     def get_lora_parameters(self):
@@ -164,9 +148,7 @@ class OpenTSLMSP(TimeSeriesLLM):
     def disable_lora(self):
         """Disable LoRA and revert to original frozen LLM."""
         if not self.lora_enabled:
-            raise RuntimeError(
-                "LoRA is not enabled. Cannot disable LoRA when it's not active."
-            )
+            raise RuntimeError("LoRA is not enabled. Cannot disable LoRA when it's not active.")
 
         if self.original_llm is not None:
             self.llm = self.original_llm
@@ -177,8 +159,8 @@ class OpenTSLMSP(TimeSeriesLLM):
 
     def pad_and_apply_batch(
         self,
-        batch: List[Dict[str, any]],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        batch: list[dict[str, any]],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         TL;DR:
             This function is probably the most crucial part of OpenTSLM-SP, and also the hardest to understand.
@@ -221,9 +203,9 @@ class OpenTSLMSP(TimeSeriesLLM):
         H = self.llm.config.hidden_size
 
         # 1) Gather all texts
-        all_texts: List[str] = []
-        text_ptrs: List[Tuple[int, int]] = []
-        ts_counts: List[int] = []
+        all_texts: list[str] = []
+        text_ptrs: list[tuple[int, int]] = []
+        ts_counts: list[int] = []
         for sample in batch:
             start = len(all_texts)
             all_texts.append(sample["pre_prompt"])
@@ -234,15 +216,13 @@ class OpenTSLMSP(TimeSeriesLLM):
             ts_counts.append(len(sample["time_series_text"]))
 
         # 2) Tokenize & embed all texts
-        tok = self.tokenizer(
-            all_texts, return_tensors="pt", padding=True, truncation=True
-        )
+        tok = self.tokenizer(all_texts, return_tensors="pt", padding=True, truncation=True)
         input_ids = tok.input_ids.to(device, non_blocking=True)
         attn_mask = tok.attention_mask.to(device, non_blocking=True)
         text_embeds = self.llm.get_input_embeddings()(input_ids)  # [N_all, P_max, H]
 
         # 3) Batch time-series encode & project
-        ts_list: List[torch.Tensor] = []
+        ts_list: list[torch.Tensor] = []
         for sample in batch:
             for ts in sample["time_series"]:
                 # ensure [T] → [T,1]
@@ -251,9 +231,7 @@ class OpenTSLMSP(TimeSeriesLLM):
                 ts_list.append(ts)
 
         if ts_list:
-            ts_padded = pad_sequence(ts_list, batch_first=True).to(
-                device, non_blocking=True
-            )
+            ts_padded = pad_sequence(ts_list, batch_first=True).to(device, non_blocking=True)
             # ── pad time dim to multiple of patch_size ──
             T_max = ts_padded.size(1)
             rem = T_max % self.patch_size
@@ -264,12 +242,8 @@ class OpenTSLMSP(TimeSeriesLLM):
             # ── now ts_padded: [N_ts_total, T_padded, 1]
 
             # ── key fix: squeeze out the feature dim so encoder sees [B, L] ──
-            ts_enc = self.encoder(
-                ts_padded.squeeze(-1)
-            )  # [N_ts_total, N_patches, embed_dim]
-            ts_proj = self.projector(ts_enc).to(
-                text_embeds.dtype
-            )  # [N_ts_total, N_patches, H]
+            ts_enc = self.encoder(ts_padded.squeeze(-1))  # [N_ts_total, N_patches, embed_dim]
+            ts_proj = self.projector(ts_enc).to(text_embeds.dtype)  # [N_ts_total, N_patches, H]
         else:
             ts_proj = torch.empty(0, 0, H, device=device, dtype=text_embeds.dtype)
 
@@ -295,9 +269,7 @@ class OpenTSLMSP(TimeSeriesLLM):
 
                 proj = ts_proj[ts_offset + i]  # [N_patches, H]
                 seq_embeds.append(proj)
-                seq_masks.append(
-                    torch.ones(proj.size(0), device=device, dtype=torch.long)
-                )
+                seq_masks.append(torch.ones(proj.size(0), device=device, dtype=torch.long))
 
             ts_offset += n_ts
 
@@ -315,9 +287,7 @@ class OpenTSLMSP(TimeSeriesLLM):
 
         return inputs_embeds, attention_mask
 
-    def generate(
-        self, batch: List[Dict[str, any]], max_new_tokens: int = 50, **generate_kwargs
-    ) -> List[str]:
+    def generate(self, batch: list[dict[str, any]], max_new_tokens: int = 50, **generate_kwargs) -> list[str]:
         inputs_embeds, attention_mask = self.pad_and_apply_batch(batch)
         gen_ids = self.llm.generate(
             inputs_embeds=inputs_embeds,
@@ -327,7 +297,7 @@ class OpenTSLMSP(TimeSeriesLLM):
         )
         return self.tokenizer.batch_decode(gen_ids, skip_special_tokens=True)
 
-    def compute_loss(self, batch: List[Dict[str, any]]) -> torch.Tensor:
+    def compute_loss(self, batch: list[dict[str, any]]) -> torch.Tensor:
         """
         batch: same format as generate()
         answers: List[str] of length B
@@ -335,12 +305,10 @@ class OpenTSLMSP(TimeSeriesLLM):
         answers = [b["answer"] for b in batch]
 
         inputs_embeds, attention_mask = self.pad_and_apply_batch(batch)
-        B, L, H = inputs_embeds.size()
+        B, L, _H = inputs_embeds.size()
 
         # tokenize answers
-        ans_tok = self.tokenizer(
-            answers, return_tensors="pt", padding=True, truncation=True
-        )
+        ans_tok = self.tokenizer(answers, return_tensors="pt", padding=True, truncation=True)
         ans_ids = ans_tok.input_ids.to(self.device, non_blocking=True)
         ans_mask = ans_tok.attention_mask.to(self.device, non_blocking=True)
         ans_emb = self.llm.get_input_embeddings()(ans_ids)  # [B, A_max, H]
@@ -386,9 +354,7 @@ class OpenTSLMSP(TimeSeriesLLM):
 
         print(f"📥 Loaded model from epoch {ckpt.get('epoch', '?')}")
 
-    def load_lora_state_from_checkpoint(
-        self, checkpoint: dict, allow_missing: bool = False
-    ):
+    def load_lora_state_from_checkpoint(self, checkpoint: dict, allow_missing: bool = False):
         """
         Load LoRA adapters from a checkpoint.
 
@@ -416,11 +382,7 @@ class OpenTSLMSP(TimeSeriesLLM):
                 missing_keys = []
 
                 # Track which LoRA parameters we expect to find
-                expected_lora_params = {
-                    name
-                    for name, param in self.llm.named_parameters()
-                    if param.requires_grad and "lora_" in name
-                }
+                {name for name, param in self.llm.named_parameters() if param.requires_grad and "lora_" in name}
 
                 for name, param in self.llm.named_parameters():
                     if name in lora_state and param.requires_grad and "lora_" in name:
@@ -430,9 +392,7 @@ class OpenTSLMSP(TimeSeriesLLM):
                         missing_keys.append(name)
 
                 if missing_keys and not allow_missing:
-                    raise RuntimeError(
-                        f"Could not find LoRA parameters in checkpoint: {missing_keys[:5]}..."
-                    )
+                    raise RuntimeError(f"Could not find LoRA parameters in checkpoint: {missing_keys[:5]}...")
 
                 print(f"📥 Loaded LoRA adapters: {loaded_count} parameters")
                 return loaded_count
@@ -440,12 +400,10 @@ class OpenTSLMSP(TimeSeriesLLM):
             except Exception as e:
                 if "Could not find LoRA parameters" in str(e):
                     raise  # Re-raise our custom exception
-                raise RuntimeError(f"Failed to load LoRA adapters: {e}")
+                raise RuntimeError(f"Failed to load LoRA adapters: {e}") from e
 
         elif checkpoint_has_lora:
-            raise RuntimeError(
-                "Checkpoint indicates LoRA was enabled but no LoRA state found"
-            )
+            raise RuntimeError("Checkpoint indicates LoRA was enabled but no LoRA state found")
 
         # Handle case where checkpoint has no LoRA but model expects it
         if not checkpoint_has_lora and self.lora_enabled:
@@ -486,21 +444,17 @@ class OpenTSLMSP(TimeSeriesLLM):
                     print(f"💾 Saved LoRA adapters with {len(lora_state)} parameters")
                     return len(lora_state)
             except Exception as e:
-                raise RuntimeError(f"Failed to save LoRA adapters: {e}")
+                raise RuntimeError(f"Failed to save LoRA adapters: {e}") from e
 
         return 0
 
-    def eval_prompt(
-        self, prompt: FullPrompt, max_new_tokens: int = 30000, normalize: bool = False
-    ) -> str:
+    def eval_prompt(self, prompt: FullPrompt, max_new_tokens: int = 30000, normalize: bool = False) -> str:
         """
         Evaluate a prompt and return the generated text.
         """
 
         batch = [prompt.to_dict()]
         self.eval()
-        batch = extend_time_series_to_match_patch_size_and_aggregate(
-            batch, normalize=normalize
-        )
+        batch = extend_time_series_to_match_patch_size_and_aggregate(batch, normalize=normalize)
         output = self.generate(batch, max_new_tokens=max_new_tokens)
         return output[0]

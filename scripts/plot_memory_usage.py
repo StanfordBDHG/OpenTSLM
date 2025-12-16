@@ -12,8 +12,8 @@ Within each subplot: bars for SoftPrompt vs Flamingo across datasets.
 Uses clean, colorblind-friendly colors.
 """
 
-import pandas as pd
 import matplotlib.pyplot as plt
+import pandas as pd
 import seaborn as sns
 
 
@@ -48,9 +48,7 @@ def plot_memory_usage(csv_file="memory_use.csv"):
 
     # Order datasets
     dataset_order = ["TSQA", "HAR-CoT", "SleepEDF-CoT", "ECG-QA-CoT"]
-    df["dataset"] = pd.Categorical(
-        df["dataset"], categories=dataset_order, ordered=True
-    )
+    df["dataset"] = pd.Categorical(df["dataset"], categories=dataset_order, ordered=True)
 
     # Order configs
     config_order = ["SoftPrompt", "Flamingo"]
@@ -105,9 +103,7 @@ def plot_memory_usage(csv_file="memory_use.csv"):
     fig.suptitle("Peak CUDA Reserved Memory by Model, Dataset, and Config", fontsize=16)
 
     plt.tight_layout(rect=[0, 0, 1, 0.92])
-    plt.savefig(
-        "memory_usage_facet.png", dpi=300, bbox_inches="tight", facecolor="white"
-    )
+    plt.savefig("memory_usage_facet.png", dpi=300, bbox_inches="tight", facecolor="white")
     plt.show()
 
 

@@ -58,11 +58,7 @@ def calculate_f1_stats(data_points, allowed_labels=None):
         tp, fp, fn = c["tp"], c["fp"], c["fn"]
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        f1 = (
-            2 * (precision * recall) / (precision + recall)
-            if (precision + recall) > 0
-            else 0
-        )
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
         class_f1_scores[cls] = {
             "f1": f1,
             "precision": precision,
@@ -87,7 +83,7 @@ def parse_baseline_json(input_path: str):
     if not os.path.exists(input_path):
         print(f"File not found: {input_path}")
         return
-    with open(input_path, "r", encoding="utf-8") as f:
+    with open(input_path, encoding="utf-8") as f:
         data = json.load(f)
 
     detailed = data.get("detailed_results", [])
@@ -98,7 +94,7 @@ def parse_baseline_json(input_path: str):
     labels = ["(a)", "(b)", "(c)"]
     label_to_idx = {l: i for i, l in enumerate(labels)}
     confusion = [[0, 0, 0] for _ in range(3)]
-    support = {l: 0 for l in labels}
+    support = dict.fromkeys(labels, 0)
 
     for i, item in enumerate(detailed):
         gold_raw = item.get("target_answer", "")
@@ -141,17 +137,15 @@ def parse_baseline_json(input_path: str):
 
     allowed_labels = {p.get("ground_truth_normalized", "") for p in data_points}
     f1_stats = calculate_f1_stats(data_points, allowed_labels=allowed_labels)
-    print(f"\nF1 Score Statistics:")
+    print("\nF1 Score Statistics:")
     print(f"Average F1 Score: {f1_stats['average_f1']:.4f}")
     print(f"Macro-F1 Score: {f1_stats['macro_f1']:.4f}")
     print(f"Total Classes: {f1_stats['total_classes']}")
 
     if f1_stats["class_f1_scores"]:
-        print(f"\nPer-Class F1 Scores:")
+        print("\nPer-Class F1 Scores:")
         for cls, scores in f1_stats["class_f1_scores"].items():
-            print(
-                f"  {cls}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}"
-            )
+            print(f"  {cls}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}")
 
     print("\nClass support (gold counts):")
     for l in labels:

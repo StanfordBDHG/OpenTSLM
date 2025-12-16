@@ -5,15 +5,10 @@
 
 import json
 import os
-from typing import List
-from opentslm.time_series_datasets.TSQADataset import TSQADataset
-from opentslm.time_series_datasets.monash.MonashSPO2QADataset import MonashSPO2QADataset
-from opentslm.time_series_datasets.util import (
-    extend_time_series_to_match_patch_size_and_aggregate,
-)
+
 import torch
-from torch.optim import AdamW
 from torch.nn.utils import clip_grad_norm_
+from torch.optim import AdamW
 from torch.utils.data import ConcatDataset, DataLoader, Dataset
 from tqdm.auto import tqdm
 from transformers import get_linear_schedule_with_warmup
@@ -33,7 +28,10 @@ from opentslm.model_config import (
     WARMUP_FRAC,
     WEIGHT_DECAY,
 )
-
+from opentslm.time_series_datasets.TSQADataset import TSQADataset
+from opentslm.time_series_datasets.util import (
+    extend_time_series_to_match_patch_size_and_aggregate,
+)
 
 # ---------------------------
 # Device setup
@@ -49,9 +47,7 @@ else:
 # Model
 # ---------------------------
 encoder = TransformerCNNEncoder().to(device)
-model = OpenTSLMSP(encoder=encoder, projector_class=MLPProjector, device=device).to(
-    device
-)
+model = OpenTSLMSP(encoder=encoder, projector_class=MLPProjector, device=device).to(device)
 
 
 # — Freeze the LLM backbone so we only update encoder + projector
@@ -69,17 +65,13 @@ optimizer = AdamW(
 )
 
 
-def merge_data_loaders(
-    datasets: List[Dataset], shuffle: bool, batch_size: int, patch_size: int
-) -> DataLoader:
+def merge_data_loaders(datasets: list[Dataset], shuffle: bool, batch_size: int, patch_size: int) -> DataLoader:
     merged_ds = ConcatDataset(datasets)
     return DataLoader(
         merged_ds,
         shuffle=shuffle,
         batch_size=batch_size,
-        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
-            batch, patch_size=patch_size
-        ),
+        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(batch, patch_size=patch_size),
     )
 
 
@@ -172,7 +164,7 @@ def _evaluate_test():
             # batch is a List[Dict], same as in compute_loss/generate
             gens = model.generate(batch)  # returns List[str] of length len(batch)
 
-            # collect each sample’s I/O
+            # collect each sample's I/O
             for sample, gen in zip(batch, gens):
                 results.append(
                     {
@@ -216,9 +208,7 @@ def train():
             scheduler.step()
 
             running_loss += loss.item()
-            prog.set_postfix(
-                loss=f"{loss.item():.4f}", lr=f"{scheduler.get_last_lr()[0]:.2e}"
-            )
+            prog.set_postfix(loss=f"{loss.item():.4f}", lr=f"{scheduler.get_last_lr()[0]:.2e}")
 
         avg_train_loss = running_loss / len(train_loader)
         tqdm.write(f"Epoch {epoch} — train loss: {avg_train_loss:.4f}")
@@ -241,9 +231,7 @@ def train():
 
         else:
             epochs_no_improve += 1
-            tqdm.write(
-                f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs."
-            )
+            tqdm.write(f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs.")
             if epochs_no_improve >= EARLY_STOP_PAT:
                 tqdm.write("\nEarly stopping triggered.")
                 break

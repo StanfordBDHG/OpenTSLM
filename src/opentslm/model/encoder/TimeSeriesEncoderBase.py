@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: MIT
 
 from abc import abstractmethod
+
 import torch
 import torch.nn as nn
 

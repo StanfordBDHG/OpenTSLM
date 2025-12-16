@@ -6,9 +6,8 @@
 import torch
 import torch.nn as nn
 
-
-from opentslm.model_config import TRANSFORMER_INPUT_DIM, ENCODER_OUTPUT_DIM, PATCH_SIZE
 from opentslm.model.encoder.TimeSeriesEncoderBase import TimeSeriesEncoderBase
+from opentslm.model_config import ENCODER_OUTPUT_DIM, PATCH_SIZE, TRANSFORMER_INPUT_DIM
 
 
 class TransformerMLPEncoder(TimeSeriesEncoderBase):
@@ -37,9 +36,7 @@ class TransformerMLPEncoder(TimeSeriesEncoderBase):
         self.patch_size = patch_size
 
         if input_dim % patch_size != 0:
-            raise RuntimeError(
-                "transformer encoder input dim must be divisible by patch size"
-            )
+            raise RuntimeError("transformer encoder input dim must be divisible by patch size")
         transformer_input_size = self.input_dim // patch_size
         self.patch_embed = nn.Linear(self.input_dim, transformer_input_size)
 
@@ -67,11 +64,9 @@ class TransformerMLPEncoder(TimeSeriesEncoderBase):
         Returns:
             FloatTensor of shape [B, N, embed_dim], where N = L // patch_size.
         """
-        B, L = x.shape
+        _B, L = x.shape
         if L % self.patch_size != 0:
-            raise ValueError(
-                f"Sequence length {L} not divisible by patch_size {self.patch_size}"
-            )
+            raise ValueError(f"Sequence length {L} not divisible by patch_size {self.patch_size}")
 
         # reshape to (B, 1, L)
         x = x.unsqueeze(1)
@@ -84,9 +79,9 @@ class TransformerMLPEncoder(TimeSeriesEncoderBase):
 
         # add positional embeddings (truncate or expand as needed)
         N = x.size(1)
-        if N > self.pos_embed.size(1):
+        if self.pos_embed.size(1) < N:
             raise ValueError(
-                f"Time series of length {N*4} is too long; max supported is {self.pos_embed.size(1)*4}. Change max_patches parameter in {__file__}"
+                f"Time series of length {N * 4} is too long; max supported is {self.pos_embed.size(1) * 4}. Change max_patches parameter in {__file__}"
             )
         pos = self.pos_embed[:, :N, :]
         x = x + pos

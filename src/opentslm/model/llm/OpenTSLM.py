@@ -2,13 +2,13 @@
 # SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
-import torch
-from typing import Optional, Union
 from enum import Enum
+
+import torch
 from huggingface_hub import hf_hub_download
 
-from .OpenTSLMSP import OpenTSLMSP
 from .OpenTSLMFlamingo import OpenTSLMFlamingo
+from .OpenTSLMSP import OpenTSLMSP
 
 
 class ModelType(Enum):
@@ -47,10 +47,10 @@ class OpenTSLM:
     def load_pretrained(
         cls,
         repo_id: str,
-        device: Optional[str] = None,
-        cache_dir: Optional[str] = None,
-        enable_lora: Optional[bool] = False,
-    ) -> Union[OpenTSLMSP, OpenTSLMFlamingo]:
+        device: str | None = None,
+        cache_dir: str | None = None,
+        enable_lora: bool | None = False,
+    ) -> OpenTSLMSP | OpenTSLMFlamingo:
         """
         Load a pretrained model from Hugging Face Hub.
 
@@ -103,7 +103,7 @@ class OpenTSLM:
         return model
 
     @staticmethod
-    def _get_device(device: Optional[str]) -> str:
+    def _get_device(device: str | None) -> str:
         """Auto-detect device if not specified."""
         if device is not None:
             return device
@@ -124,12 +124,11 @@ class OpenTSLM:
             return ModelType.FLAMINGO
         else:
             raise ValueError(
-                f"Repository ID '{repo_id}' must end with either '-sp' or '-flamingo' "
-                f"to indicate the model type."
+                f"Repository ID '{repo_id}' must end with either '-sp' or '-flamingo' to indicate the model type."
             )
 
     @staticmethod
-    def _download_model_files(repo_id: str, cache_dir: Optional[str] = None) -> str:
+    def _download_model_files(repo_id: str, cache_dir: str | None = None) -> str:
         """Download model checkpoint from Hugging Face Hub."""
         try:
             # Download the main model checkpoint file
@@ -144,10 +143,8 @@ class OpenTSLM:
 
         except Exception as e:
             raise RuntimeError(
-                f"Failed to download model from {repo_id}. "
-                f"Tried 'model_checkpoint.pt'. "
-                f"Original error: {e}"
-            )
+                f"Failed to download model from {repo_id}. Tried 'model_checkpoint.pt'. Original error: {e}"
+            ) from e
 
     @staticmethod
     def _get_base_llm_id(repo_id: str) -> str:

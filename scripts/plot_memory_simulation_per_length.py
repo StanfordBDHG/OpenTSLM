@@ -15,11 +15,11 @@ Paper-style plots: memory usage scaling with N for different lengths (L).
   line upward and marking with a red X + "OOM".
 """
 
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-import matplotlib
 import re
+
+import matplotlib
+import matplotlib.pyplot as plt
+import pandas as pd
 from matplotlib.lines import Line2D
 
 OOM_THRESHOLD = 180  # GB
@@ -65,18 +65,20 @@ def parse_simulation_dataset(name):
 def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
     # Publication style
     plt.style.use("seaborn-v0_8-white")
-    matplotlib.rcParams.update({
-        "font.family": "serif",
-        "font.serif": ["Palatino", "Times New Roman", "DejaVu Serif"],
-        "font.size": 18,
-        "axes.labelsize": 20,
-        "axes.titlesize": 20,
-        "legend.fontsize": 17,
-        "xtick.labelsize": 17,
-        "ytick.labelsize": 17,
-        "axes.linewidth": 0.6,
-        "axes.edgecolor": "0.15",
-    })
+    matplotlib.rcParams.update(
+        {
+            "font.family": "serif",
+            "font.serif": ["Palatino", "Times New Roman", "DejaVu Serif"],
+            "font.size": 18,
+            "axes.labelsize": 20,
+            "axes.titlesize": 20,
+            "legend.fontsize": 17,
+            "xtick.labelsize": 17,
+            "ytick.labelsize": 17,
+            "axes.linewidth": 0.6,
+            "axes.edgecolor": "0.15",
+        }
+    )
 
     # Load & preprocess
     df = pd.read_csv(csv_file)
@@ -85,9 +87,7 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
     df[["base_model", "config"]] = df.apply(
         lambda row: pd.Series(parse_model_name(row["llm_id"], row["model"])), axis=1
     )
-    df[["L", "N"]] = df["dataset"].apply(
-        lambda s: pd.Series(parse_simulation_dataset(s))
-    )
+    df[["L", "N"]] = df["dataset"].apply(lambda s: pd.Series(parse_simulation_dataset(s)))
     df = df.dropna(subset=["L", "N"])
     df["L"] = df["L"].astype(int)
     df["N"] = df["N"].astype(int)
@@ -99,25 +99,23 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
     model_order = ["Gemma-3-270M", "Gemma-3-1B-pt", "Llama-3.2-1B", "Llama-3.2-3B"]
     color_map = {
         "Gemma-3-270M": "#4477AA",
-        "Gemma-3-1B-pt": "#66CCEE", 
+        "Gemma-3-1B-pt": "#66CCEE",
         "Llama-3.2-1B": "#228833",
-        "Llama-3.2-3B": "#CC6677"
+        "Llama-3.2-3B": "#CC6677",
     }
-    
+
     # Get base models in the specified order
     base_models = [bm for bm in model_order if bm in df["base_model"].unique()]
     custom_palette = [color_map.get(bm, "#888888") for bm in base_models]
-    markers_dict = dict(zip(
-        base_models,
-        ["o", "s", "^", "D", "p", "X", "*"]
-    ))
+    markers_dict = dict(zip(base_models, ["o", "s", "^", "D", "p", "X", "*"]))
 
     # Unique sequence lengths
     unique_L = sorted(df["L"].unique())
 
     # Create subplot grid manually: 2 rows (SoftPrompt, Flamingo)
     fig, axes = plt.subplots(
-        2, len(unique_L),
+        2,
+        len(unique_L),
         figsize=(3.2 * len(unique_L), 6),
         sharex="col",
     )
@@ -127,12 +125,11 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
 
     # Precompute Flamingo y-lims
     flamingo_df = df[df["config"] == "Flamingo"]
-    flamingo_ymin, flamingo_ymax = None, None
+    _flamingo_ymin, flamingo_ymax = None, None
     if not flamingo_df.empty:
-        flamingo_ymin = flamingo_df["peak_cuda_reserved_gb"].min(skipna=True)
+        flamingo_df["peak_cuda_reserved_gb"].min(skipna=True)
         flamingo_ymax = flamingo_df["peak_cuda_reserved_gb"].max(skipna=True)
 
-    flamingo_ymin = 0
     flamingo_ymax = max(flamingo_ymax if flamingo_ymax else 0, OOM_THRESHOLD * 1.1)
 
     # Iterate configs
@@ -153,7 +150,8 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
                 # Normal line
                 if not ok_df.empty:
                     ax.plot(
-                        ok_df["N"], ok_df["peak_cuda_reserved_gb"],
+                        ok_df["N"],
+                        ok_df["peak_cuda_reserved_gb"],
                         label=bm,
                         color=custom_palette[base_models.index(bm)],
                         marker=markers_dict[bm],
@@ -179,7 +177,8 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
 
                     # red X marker at OOM
                     ax.scatter(
-                        first_oom["N"], OOM_THRESHOLD * 1.05,
+                        first_oom["N"],
+                        OOM_THRESHOLD * 1.05,
                         color="red",
                         marker="x",
                         s=70,
@@ -187,9 +186,14 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
                         zorder=5,
                     )
                     ax.text(
-                        first_oom["N"], OOM_THRESHOLD * 1.05,
-                        "OOM", color="red", fontsize=9,
-                        fontweight="bold", ha="center", va="bottom"
+                        first_oom["N"],
+                        OOM_THRESHOLD * 1.05,
+                        "OOM",
+                        color="red",
+                        fontsize=9,
+                        fontweight="bold",
+                        ha="center",
+                        va="bottom",
                     )
 
             # Titles
@@ -198,11 +202,7 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
 
             # Y labels only leftmost col
             if j == 0:
-                ax.set_ylabel(
-                    f"{cfg}",
-                    fontsize=18,
-                    fontweight="bold"
-                )
+                ax.set_ylabel(f"{cfg}", fontsize=18, fontweight="bold")
             else:
                 ax.set_ylabel("")
 
@@ -229,7 +229,7 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
     for handle, label in zip(*axes[0, 0].get_legend_handles_labels()):
         handles_dict[label] = handle
         labels_dict[label] = label
-    
+
     # Create ordered handles and labels
     ordered_handles = []
     ordered_labels = []
@@ -237,17 +237,17 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
         if bm in handles_dict:
             ordered_handles.append(handles_dict[bm])
             ordered_labels.append(labels_dict[bm])
-    
+
     # Add OOM handle
-    oom_handle = Line2D([0], [0], color="red", marker="x", linestyle="--",
-                        markersize=8, label="Out of Memory (OOM)")
+    oom_handle = Line2D([0], [0], color="red", marker="x", linestyle="--", markersize=8, label="Out of Memory (OOM)")
     ordered_handles.append(oom_handle)
     ordered_labels.append("Out of Memory (OOM)")
 
     # Legend in top left plot only
     top_left_ax = axes[0, 0]
     top_left_ax.legend(
-        ordered_handles, ordered_labels,
+        ordered_handles,
+        ordered_labels,
         title=None,
         loc="upper right",
         frameon=True,
@@ -258,10 +258,10 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
 
     # Add main vertical title
     fig.text(0.02, 0.5, "Peak Memory (GB)", rotation=90, fontsize=20, fontweight="bold", ha="center", va="center")
-    
+
     # Add global x-axis label spanning the bottom row
     fig.text(0.5, 0.01, "Number of Time Series (N)", fontsize=16, fontweight="bold", ha="center", va="center")
-    
+
     # Layout - no longer need space for bottom legend
     plt.tight_layout(pad=0.5)
     plt.subplots_adjust(left=0.08)

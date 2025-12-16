@@ -3,9 +3,11 @@
 #
 # SPDX-License-Identifier: MIT
 
-import numpy as np
-from functools import partial
 from dataclasses import dataclass
+from functools import partial
+
+import numpy as np
+
 
 # Please check the original code at https://github.com/ngruver/llmtime/blob/main/data/serialize.py
 @dataclass
@@ -13,18 +15,19 @@ class SerializerSettings:
     """
     Settings for time series serialization and deserialization.
     """
-    base: int = 10                  # Numeric base for representation
-    prec: int = 3                  # Number of digits after the 'decimal' point
-    signed: bool = True            # Whether to include a sign for positive values
-    fixed_length: bool = False     # If True, pad to a fixed number of digits
-    max_val: float = 1e7           # Maximum absolute value allowed
-    time_sep: str = ' ,'           # Separator between time steps
-    bit_sep: str = ' '             # Separator between individual digits
-    plus_sign: str = ''            # String to prepend for positive values
-    minus_sign: str = ' -'         # String to prepend for negative values
+
+    base: int = 10  # Numeric base for representation
+    prec: int = 3  # Number of digits after the 'decimal' point
+    signed: bool = True  # Whether to include a sign for positive values
+    fixed_length: bool = False  # If True, pad to a fixed number of digits
+    max_val: float = 1e7  # Maximum absolute value allowed
+    time_sep: str = " ,"  # Separator between time steps
+    bit_sep: str = " "  # Separator between individual digits
+    plus_sign: str = ""  # String to prepend for positive values
+    minus_sign: str = " -"  # String to prepend for negative values
     half_bin_correction: bool = True  # Apply half-bin correction on deserialization
-    decimal_point: str = ''        # Literal to mark decimal point in serialized string
-    missing_str: str = ' Nan'      # Representation for missing (NaN) values
+    decimal_point: str = ""  # Literal to mark decimal point in serialized string
+    missing_str: str = " Nan"  # Representation for missing (NaN) values
 
 
 def vec_num2repr(val: np.ndarray, base: int, prec: int, max_val: float):
@@ -62,7 +65,9 @@ def vec_num2repr(val: np.ndarray, base: int, prec: int, max_val: float):
     return sign, digits
 
 
-def vec_repr2num(sign: np.ndarray, digits: np.ndarray, base: int, prec: int, half_bin_correction: bool = True) -> np.ndarray:
+def vec_repr2num(
+    sign: np.ndarray, digits: np.ndarray, base: int, prec: int, half_bin_correction: bool = True
+) -> np.ndarray:
     """
     Convert sign and digit arrays back into floats.
     """
@@ -71,10 +76,10 @@ def vec_repr2num(sign: np.ndarray, digits: np.ndarray, base: int, prec: int, hal
     flipped = np.flip(digits, axis=-1)
     total_digits = digits.shape[1]
     # Compute positional powers
-    powers = -np.arange(-prec, total_digits-prec)
-    mags = np.sum(flipped / (base ** powers), axis=-1)
+    powers = -np.arange(-prec, total_digits - prec)
+    mags = np.sum(flipped / (base**powers), axis=-1)
     if half_bin_correction:
-        mags = mags + (0.5 / (base ** prec))
+        mags = mags + (0.5 / (base**prec))
     return sign * mags
 
 
@@ -84,8 +89,7 @@ def serialize_arr(arr: np.ndarray, settings: SerializerSettings) -> str:
     """
     # Validate range
     clean = np.where(np.isnan(arr), 0.0, arr)
-    assert np.all(np.abs(clean) <= settings.max_val), \
-        f"Values must be within ±{settings.max_val}"
+    assert np.all(np.abs(clean) <= settings.max_val), f"Values must be within ±{settings.max_val}"
 
     # Convert numbers to sign and digits
     to_repr = partial(vec_num2repr, base=settings.base, prec=settings.prec, max_val=settings.max_val)
@@ -96,10 +100,7 @@ def serialize_arr(arr: np.ndarray, settings: SerializerSettings) -> str:
         # Optionally strip leading zeros
         if not settings.fixed_length:
             nz = np.where(digits != 0)[0]
-            if nz.size > 0:
-                digits = digits[nz[0]:]
-            else:
-                digits = np.array([0], dtype=int)
+            digits = digits[nz[0] :] if nz.size > 0 else np.array([0], dtype=int)
         # Insert decimal point if specified
         if settings.decimal_point and settings.prec > 0:
             point_idx = len(digits) - settings.prec
@@ -120,7 +121,9 @@ def serialize_arr(arr: np.ndarray, settings: SerializerSettings) -> str:
     return result
 
 
-def deserialize_str(bit_str: str, settings: SerializerSettings, ignore_last: bool = False, steps: int = None) -> np.ndarray:
+def deserialize_str(
+    bit_str: str, settings: SerializerSettings, ignore_last: bool = False, steps: int | None = None
+) -> np.ndarray:
     """
     Deserialize a serialized string back into a numpy array of floats.
     """
@@ -140,35 +143,41 @@ def deserialize_str(bit_str: str, settings: SerializerSettings, ignore_last: boo
         # Determine sign
         if settings.signed and tok.startswith(settings.minus_sign):
             sign_list.append(-1)
-            tok = tok[len(settings.minus_sign):]
+            tok = tok[len(settings.minus_sign) :]
         else:
             sign_list.append(1)
             if settings.signed and tok.startswith(settings.plus_sign):
-                tok = tok[len(settings.plus_sign):]
+                tok = tok[len(settings.plus_sign) :]
         # Split digits
         digs = [int(ch) for ch in tok.split(settings.bit_sep) if ch.isdigit()]
         digit_list.append(digs)
 
     # Pad to equal length
     maxlen = max(len(d) for d in digit_list)
-    padded = np.array([([0]*(maxlen - len(d)) + d) for d in digit_list])
+    padded = np.array([([0] * (maxlen - len(d)) + d) for d in digit_list])
 
     nums = vec_repr2num(
-        np.array(sign_list), padded,
-        base=settings.base, prec=settings.prec,
-        half_bin_correction=settings.half_bin_correction
+        np.array(sign_list),
+        padded,
+        base=settings.base,
+        prec=settings.prec,
+        half_bin_correction=settings.half_bin_correction,
     )
     return nums
 
-gpt_settings = SerializerSettings(base=10, prec=3, signed=True, time_sep=', ', bit_sep=' ', minus_sign='-')
+
+gpt_settings = SerializerSettings(base=10, prec=3, signed=True, time_sep=", ", bit_sep=" ", minus_sign="-")
 llama = SerializerSettings(base=10, prec=3, signed=True, half_bin_correction=True)
+
 
 # Then wrap serialize_arr so it only takes the array
 def gpt_formatter(arr: np.ndarray) -> str:
     return serialize_arr(arr, gpt_settings)
 
+
 def llama_formatter(arr: np.ndarray) -> str:
     return serialize_arr(arr, llama)
+
 
 # Backward compatibility: default to llama_formatter
 # (or you can set to gpt_formatter if you prefer)

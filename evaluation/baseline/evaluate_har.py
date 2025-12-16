@@ -5,8 +5,9 @@
 
 import re
 import sys
-from typing import Dict, Any
+from typing import Any
 
+from evaluation.baseline.common_evaluator import CommonEvaluator
 from opentslm.time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
 
 
@@ -32,7 +33,7 @@ def extract_label_from_prediction(prediction: str) -> str:
     return label.lower()
 
 
-def evaluate_har_acc(ground_truth: str, prediction: str) -> Dict[str, Any]:
+def evaluate_har_acc(ground_truth: str, prediction: str) -> dict[str, Any]:
     """
     <<<<<<< HEAD
     <<<<<<< HEAD

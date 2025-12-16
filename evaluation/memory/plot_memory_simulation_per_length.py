@@ -18,11 +18,11 @@ Paper-style plots: memory usage scaling with N for different lengths (L).
   line upward and marking with a red X + "OOM".
 """
 
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-import matplotlib
 import re
+
+import matplotlib
+import matplotlib.pyplot as plt
+import pandas as pd
 from matplotlib.lines import Line2D
 
 OOM_THRESHOLD = 180  # GB
@@ -90,9 +90,7 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
     df[["base_model", "config"]] = df.apply(
         lambda row: pd.Series(parse_model_name(row["llm_id"], row["model"])), axis=1
     )
-    df[["L", "N"]] = df["dataset"].apply(
-        lambda s: pd.Series(parse_simulation_dataset(s))
-    )
+    df[["L", "N"]] = df["dataset"].apply(lambda s: pd.Series(parse_simulation_dataset(s)))
     df = df.dropna(subset=["L", "N"])
     df["L"] = df["L"].astype(int)
     df["N"] = df["N"].astype(int)
@@ -130,12 +128,11 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
 
     # Precompute Flamingo y-lims
     flamingo_df = df[df["config"] == "Flamingo"]
-    flamingo_ymin, flamingo_ymax = None, None
+    _flamingo_ymin, flamingo_ymax = None, None
     if not flamingo_df.empty:
-        flamingo_ymin = flamingo_df["peak_cuda_reserved_gb"].min(skipna=True)
+        flamingo_df["peak_cuda_reserved_gb"].min(skipna=True)
         flamingo_ymax = flamingo_df["peak_cuda_reserved_gb"].max(skipna=True)
 
-    flamingo_ymin = 0
     flamingo_ymax = max(flamingo_ymax if flamingo_ymax else 0, OOM_THRESHOLD * 1.1)
 
     # Iterate configs
@@ -169,11 +166,7 @@ def plot_memory_usage_paper(csv_file="memory_simulation.csv"):
                 # OOM handling
                 if not oom_df.empty:
                     first_oom = oom_df.iloc[0]
-                    last_ok_y = (
-                        ok_df["peak_cuda_reserved_gb"].iloc[-1]
-                        if not ok_df.empty
-                        else OOM_THRESHOLD * 0.9
-                    )
+                    last_ok_y = ok_df["peak_cuda_reserved_gb"].iloc[-1] if not ok_df.empty else OOM_THRESHOLD * 0.9
 
                     # extend line upward
                     ax.plot(

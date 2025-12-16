@@ -16,11 +16,11 @@ Plot memory usage on simulation datasets from memory_simulation.csv.
 - Always shows panels in order: gemma-270m, gemma-1b, llama-1b, llama-3b.
 """
 
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import matplotlib
 import re
+
+import matplotlib
+import matplotlib.pyplot as plt
+import pandas as pd
 
 OOM_THRESHOLD = 180  # GB
 
@@ -92,9 +92,7 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
     df[["base_model", "config"]] = df.apply(
         lambda row: pd.Series(parse_model_name(row["llm_id"], row["model"])), axis=1
     )
-    df[["L", "N"]] = df["dataset"].apply(
-        lambda s: pd.Series(parse_simulation_dataset(s))
-    )
+    df[["L", "N"]] = df["dataset"].apply(lambda s: pd.Series(parse_simulation_dataset(s)))
     df = df.dropna(subset=["L", "N"])
     df["L"] = df["L"].astype(int)
     df["N"] = df["N"].astype(int)
@@ -110,7 +108,7 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
 
     # One subplot per model (always 4)
     n_models = len(base_model_order)
-    fig, axes = plt.subplots(1, n_models, figsize=(3.2 * n_models, 3.2), sharey=True)
+    _fig, axes = plt.subplots(1, n_models, figsize=(3.2 * n_models, 3.2), sharey=True)
 
     if n_models == 1:
         axes = [axes]
@@ -125,9 +123,7 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
         if subdf.empty:
             ax.set_title(base_model, fontsize=13, fontweight="bold")
             ax.set_facecolor("#F8F9FA")
-            ax.text(
-                0.5, 0.5, "No data", ha="center", va="center", fontsize=10, color="gray"
-            )
+            ax.text(0.5, 0.5, "No data", ha="center", va="center", fontsize=10, color="gray")
             ax.set_xticks([])
             ax.set_yticks([])
             continue
@@ -193,9 +189,7 @@ def plot_memory_usage_sim(csv_file="memory_simulation.csv"):
         # Only show axis labels on specific subplots
         if ax == axes[0]:  # Leftmost subplot
             ax.set_ylabel("Peak VRAM Usage (GB)", fontsize=18, fontweight="bold")
-            ax.set_xlabel(
-                "Total Sequence Length (N × L)", fontsize=18, fontweight="bold"
-            )
+            ax.set_xlabel("Total Sequence Length (N × L)", fontsize=18, fontweight="bold")
         else:
             ax.set_ylabel("")
             ax.set_xlabel("")

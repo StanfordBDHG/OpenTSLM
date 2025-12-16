@@ -3,14 +3,13 @@
 #
 # SPDX-License-Identifier: MIT
 
+
 import numpy as np
 import torch
-from typing import List, Tuple
 from datasets import Dataset
 
 from opentslm.prompt.text_time_series_prompt import TextTimeSeriesPrompt
 from opentslm.time_series_datasets.QADataset import QADataset
-
 
 DATASET_SIZE = 200
 
@@ -39,11 +38,9 @@ class SimulationQADataset(QADataset):
         self.length = length
         self.num_series = num_series
 
-        super().__init__(
-            split, EOS_TOKEN, format_sample_str, time_series_format_function
-        )
+        super().__init__(split, EOS_TOKEN, format_sample_str, time_series_format_function)
 
-    def _load_splits(self) -> Tuple[Dataset, Dataset, Dataset]:
+    def _load_splits(self) -> tuple[Dataset, Dataset, Dataset]:
         """
         Creates a dataset with 200 items, each with random time series data.
         Each item will have num_series time series of length elements.
@@ -76,7 +73,7 @@ class SimulationQADataset(QADataset):
 
         # Convert to HuggingFace Dataset format
         dataset_dict = {}
-        for key in all_items[0].keys():
+        for key in all_items[0]:
             dataset_dict[key] = [item[key] for item in all_items]
 
         dataset = Dataset.from_dict(dataset_dict)
@@ -96,7 +93,7 @@ class SimulationQADataset(QADataset):
         """Get the post-prompt from the data row."""
         return "Predict the pattern of the time series. Answer:"
 
-    def _get_text_time_series_prompt_list(self, row) -> List[TextTimeSeriesPrompt]:
+    def _get_text_time_series_prompt_list(self, row) -> list[TextTimeSeriesPrompt]:
         """
         Convert the time series data from the current row to TextTimeSeriesPrompt format.
         Each row now contains its own random time series data.
@@ -153,17 +150,10 @@ if __name__ == "__main__":
     item_0 = dataset_single[0]
     item_100 = dataset_single[100]
     print(f"Item 0 Series length: {len(item_0['time_series_prompts'][0].time_series)}")
-    print(
-        f"Item 100 Series length: {len(item_100['time_series_prompts'][0].time_series)}"
-    )
-    print(
-        f"First 5 values of item 0: {item_0['time_series_prompts'][0].time_series[:5]}"
-    )
-    print(
-        f"First 5 values of item 100: {item_100['time_series_prompts'][0].time_series[:5]}"
-    )
+    print(f"Item 100 Series length: {len(item_100['time_series_prompts'][0].time_series)}")
+    print(f"First 5 values of item 0: {item_0['time_series_prompts'][0].time_series[:5]}")
+    print(f"First 5 values of item 100: {item_100['time_series_prompts'][0].time_series[:5]}")
     print(
         "Values are different:",
-        item_0["time_series_prompts"][0].time_series[:5]
-        != item_100["time_series_prompts"][0].time_series[:5],
+        item_0["time_series_prompts"][0].time_series[:5] != item_100["time_series_prompts"][0].time_series[:5],
     )

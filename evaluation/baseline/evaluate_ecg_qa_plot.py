@@ -3,17 +3,17 @@
 #
 # SPDX-License-Identifier: MIT
 
+import base64
+import io
+import os
 import re
 import sys
-import io
-import base64
-import os
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 import matplotlib.pyplot as plt
-
 from common_evaluator_plot import CommonEvaluatorPlot
+
 from opentslm.time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
 
 
@@ -41,9 +41,7 @@ def normalize_label(label: str) -> str:
     return label.lower().strip().rstrip(".,!?;:")
 
 
-def evaluate_ecg_metrics(
-    ground_truth: str, prediction: str, sample: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
+def evaluate_ecg_metrics(ground_truth: str, prediction: str, sample: dict[str, Any] | None = None) -> dict[str, Any]:
     """
     Evaluate ECG-QA CoT predictions using per-template answers from CSV.
     Normalization matches the parser used in evaluate_ecg_qa.py.
@@ -58,17 +56,13 @@ def evaluate_ecg_metrics(
 
     # Per-template supported answers (strict)
     if not isinstance(sample, dict):
-        raise ValueError(
-            "Sample must be a dict containing 'template_id' for ECG-QA evaluation"
-        )
+        raise ValueError("Sample must be a dict containing 'template_id' for ECG-QA evaluation")
 
     template_id = sample.get("template_id") or sample.get("cot_template_id")
     if template_id is None:
         raise ValueError("Missing 'template_id' in sample for ECG-QA evaluation")
 
-    possible_answers = ECGQACoTQADataset.get_possible_answers_for_template(
-        int(template_id)
-    )
+    possible_answers = ECGQACoTQADataset.get_possible_answers_for_template(int(template_id))
     if not possible_answers:
         raise ValueError(f"No possible answers found for template_id={template_id}")
 
@@ -98,7 +92,7 @@ def evaluate_ecg_metrics(
     }
 
 
-def generate_ecg_plot(time_series: List[List[float]]) -> str:
+def generate_ecg_plot(time_series: list[list[float]]) -> str:
     """
     Create a base64 PNG plot for multi-lead ECG time series.
 
@@ -130,7 +124,7 @@ def generate_ecg_plot(time_series: List[List[float]]) -> str:
 
     # Limit to a reasonable number of subplots; if more, still plot all with generic names
     fig_height = max(3, min(2 + 0.9 * num_series, 20))
-    fig, axes = plt.subplots(num_series, 1, figsize=(12, fig_height), sharex=True)
+    _fig, axes = plt.subplots(num_series, 1, figsize=(12, fig_height), sharex=True)
     if num_series == 1:
         axes = [axes]
 
@@ -161,20 +155,20 @@ def generate_ecg_plot(time_series: List[List[float]]) -> str:
     return image_data
 
 
-def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _calculate_template_f1_stats(data_points: list[dict[str, Any]]) -> dict[str, Any]:
     if not data_points:
         return {}
 
     from collections import defaultdict
 
-    template_groups: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
+    template_groups: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for point in data_points:
         template_id = point.get("template_id")
         if template_id is None:
             raise ValueError(f"Missing template_id in data point: {point}")
         template_groups[int(template_id)].append(point)
 
-    template_stats: Dict[int, Dict[str, Any]] = {}
+    template_stats: dict[int, dict[str, Any]] = {}
     total_samples = 0
     total_correct = 0
     total_f1_sum = 0.0
@@ -188,7 +182,7 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
             raise ValueError(f"No possible answers found for template {template_id}")
 
         # Initialize per-class counts
-        class_predictions: Dict[str, Dict[str, int]] = {}
+        class_predictions: dict[str, dict[str, int]] = {}
         for answer in possible_answers:
             class_predictions[answer.lower()] = {"tp": 0, "fp": 0, "fn": 0}
 
@@ -207,7 +201,7 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
                         class_predictions[pred_class]["fp"] += 1
 
         # Per-class and macro-F1
-        class_f1_scores: Dict[str, Dict[str, float]] = {}
+        class_f1_scores: dict[str, dict[str, float]] = {}
         template_f1_sum = 0.0
         valid_classes = 0
 
@@ -217,11 +211,7 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
             fn = counts["fn"]
             precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
             recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-            f1 = (
-                2 * (precision * recall) / (precision + recall)
-                if (precision + recall) > 0
-                else 0.0
-            )
+            f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
             class_f1_scores[class_name] = {
                 "f1": f1,
@@ -238,9 +228,7 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
 
         template_correct = sum(1 for p in points if p.get("accuracy", False))
         template_accuracy = template_correct / len(points) if points else 0.0
-        template_avg_f1 = (
-            sum(p.get("f1_score", 0.0) for p in points) / len(points) if points else 0.0
-        )
+        template_avg_f1 = sum(p.get("f1_score", 0.0) for p in points) / len(points) if points else 0.0
 
         template_stats[template_id] = {
             "num_samples": len(points),
@@ -257,9 +245,7 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
         total_f1_sum += template_avg_f1 * len(points)
 
     template_macro_f1s = [stats["macro_f1"] for stats in template_stats.values()]
-    overall_macro_f1 = (
-        sum(template_macro_f1s) / len(template_macro_f1s) if template_macro_f1s else 0.0
-    )
+    overall_macro_f1 = sum(template_macro_f1s) / len(template_macro_f1s) if template_macro_f1s else 0.0
     overall_accuracy = total_correct / total_samples if total_samples > 0 else 0.0
     overall_avg_f1 = total_f1_sum / total_samples if total_samples > 0 else 0.0
 
@@ -276,9 +262,9 @@ def _calculate_template_f1_stats(data_points: List[Dict[str, Any]]) -> Dict[str,
 
 
 def _build_data_points_from_results(
-    detailed_results: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    data_points: List[Dict[str, Any]] = []
+    detailed_results: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    data_points: list[dict[str, Any]] = []
     for r in detailed_results:
         m = r.get("metrics", {})
         template_id = m.get("template_id", r.get("template_id"))
@@ -297,9 +283,7 @@ def _build_data_points_from_results(
             "possible_answers": m.get("possible_answers", []),
         }
         if not dp["possible_answers"]:
-            raise ValueError(
-                f"No possible answers in metrics for template {template_id}"
-            )
+            raise ValueError(f"No possible answers in metrics for template {template_id}")
         data_points.append(dp)
     return data_points
 
@@ -340,7 +324,7 @@ def main():
 
     per_template = f1_stats.get("per_template", {})
     if per_template:
-        print(f"\nPer-Template Statistics:")
+        print("\nPer-Template Statistics:")
         for template_id, stats in sorted(per_template.items()):
             print(f"  Template {template_id}:")
             print(f"    Samples: {stats['num_samples']}")

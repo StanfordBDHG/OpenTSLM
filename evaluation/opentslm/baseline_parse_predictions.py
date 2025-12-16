@@ -9,10 +9,9 @@
 
 import json
 import re
-import sys
-import os
-from pathlib import Path
 from collections import Counter
+from pathlib import Path
+
 from tqdm import tqdm
 
 # Import the dataset class to get labels
@@ -54,9 +53,7 @@ def calculate_f1_score(prediction, ground_truth):
 
     precision = num_same / len(pred_tokens) if pred_tokens else 0.0
     recall = num_same / len(truth_tokens) if truth_tokens else 0.0
-    f1 = (
-        2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
-    )
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
 
     return {
         "f1_score": f1,
@@ -103,11 +100,7 @@ def calculate_f1_stats(data_points, allowed_labels=None):
         tp, fp, fn = counts["tp"], counts["fp"], counts["fn"]
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-        f1 = (
-            2 * precision * recall / (precision + recall)
-            if (precision + recall) > 0
-            else 0
-        )
+        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
 
         class_f1_scores[class_name] = {
             "f1": f1,
@@ -163,9 +156,7 @@ def parse_baseline_json(input_file, output_file=None):
 
     allowed_labels = set(SUPPORTED_LABELS)
 
-    answer_count = sum(
-        1 for point in extracted_data if "Answer: " in point.get("generated", "")
-    )
+    answer_count = sum(1 for point in extracted_data if "Answer: " in point.get("generated", ""))
 
     excluded_count = 0
     for point in extracted_data:
@@ -179,24 +170,22 @@ def parse_baseline_json(input_file, output_file=None):
         print(f"Extracted {len(extracted_data)} data points")
         print(f"Predictions containing 'Answer:': {answer_count}/{len(extracted_data)}")
         if excluded_count > 0:
-            print(
-                f"Excluded {excluded_count} predictions not in the label set from metrics"
-            )
+            print(f"Excluded {excluded_count} predictions not in the label set from metrics")
 
         accuracy_stats = calculate_accuracy_stats(extracted_data)
-        print(f"\nAccuracy Statistics:")
+        print("\nAccuracy Statistics:")
         print(f"Total samples: {accuracy_stats['total_samples']}")
         print(f"Correct predictions: {accuracy_stats['correct_predictions']}")
         print(f"Incorrect predictions: {accuracy_stats['incorrect_predictions']}")
         print(f"Accuracy: {accuracy_stats['accuracy_percentage']:.2f}%")
 
         f1_stats = calculate_f1_stats(extracted_data, allowed_labels=allowed_labels)
-        print(f"\nF1 Score Statistics:")
+        print("\nF1 Score Statistics:")
         print(f"Macro-F1 Score: {f1_stats['macro_f1']:.4f}")
         print(f"Total Classes: {f1_stats['total_classes']}")
 
         if f1_stats["class_f1_scores"]:
-            print(f"\nPer-Class F1 Scores:")
+            print("\nPer-Class F1 Scores:")
             for class_name, scores in f1_stats["class_f1_scores"].items():
                 print(
                     f"  {class_name}: "
@@ -221,7 +210,7 @@ def extract_structured_data(input_file):
     """Extract structured data from baseline JSON file"""
     data_points = []
 
-    with open(input_file, "r", encoding="utf-8") as f:
+    with open(input_file, encoding="utf-8") as f:
         data = json.load(f)
         detailed_results = data.get("detailed_results", [])
 
@@ -234,9 +223,7 @@ def extract_structured_data(input_file):
                 model_prediction = extract_answer(generated_answer).replace("<eos>", "")
                 ground_truth = extract_answer(target_answer).replace("<eos>", "")
 
-                accuracy = (
-                    model_prediction.strip().lower() == ground_truth.strip().lower()
-                )
+                accuracy = model_prediction.strip().lower() == ground_truth.strip().lower()
 
                 f1_result = calculate_f1_score(model_prediction, ground_truth)
 
@@ -254,9 +241,7 @@ def extract_structured_data(input_file):
                 }
                 data_points.append(data_point)
             except Exception as e:
-                print(
-                    f"Error processing sample {result.get('sample_idx', 'unknown')}: {e}"
-                )
+                print(f"Error processing sample {result.get('sample_idx', 'unknown')}: {e}")
                 continue
 
     return data_points

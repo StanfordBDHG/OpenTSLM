@@ -4,36 +4,27 @@
 # SPDX-License-Identifier: MIT
 
 import json
-import os
-from typing import List, Optional
-from opentslm.time_series_datasets.TSQADataset import TSQADataset
-from opentslm.time_series_datasets.monash.MonashSPO2QADataset import MonashSPO2QADataset
-from opentslm.time_series_datasets.util import (
-    extend_time_series_to_match_patch_size_and_aggregate,
-)
+
 import torch
-from torch.optim import AdamW
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import ConcatDataset, DataLoader, Dataset
 from tqdm.auto import tqdm
 from transformers import get_linear_schedule_with_warmup
 
-from opentslm.model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
-from opentslm.model.projector.MLPProjector import MLPProjector
 from opentslm.model_config import (
     BATCH_SIZE,
     EARLY_STOP_PAT,
     GRAD_CLIP_NORM,
-    LR_ENCODER,
-    LR_PROJECTOR,
     NUM_EPOCHS,
     PATCH_SIZE,
     RESULTS_FILE,
     WARMUP_FRAC,
-    WEIGHT_DECAY,
 )
-
+from opentslm.time_series_datasets.TSQADataset import TSQADataset
+from opentslm.time_series_datasets.util import (
+    extend_time_series_to_match_patch_size_and_aggregate,
+)
 
 # ---------------------------
 # Device setup
@@ -59,8 +50,7 @@ params_to_optimize = model.named_parameters()
 
 params_to_optimize = list(
     filter(
-        lambda x: x[1].requires_grad
-        and not getattr(x[1], "exclude_from_optimizer", False),
+        lambda x: x[1].requires_grad and not getattr(x[1], "exclude_from_optimizer", False),
         params_to_optimize,
     )
 )
@@ -83,17 +73,13 @@ def get_grouped_params(model):
 optimizer = torch.optim.AdamW(get_grouped_params(params_to_optimize), lr=2e-4)
 
 
-def merge_data_loaders(
-    datasets: List[Dataset], shuffle: bool, batch_size: int, patch_size: int
-) -> DataLoader:
+def merge_data_loaders(datasets: list[Dataset], shuffle: bool, batch_size: int, patch_size: int) -> DataLoader:
     merged_ds = ConcatDataset(datasets)
     return DataLoader(
         merged_ds,
         shuffle=shuffle,
         batch_size=batch_size,
-        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(
-            batch, patch_size=patch_size
-        ),
+        collate_fn=lambda batch: extend_time_series_to_match_patch_size_and_aggregate(batch, patch_size=patch_size),
     )
 
 
@@ -165,7 +151,7 @@ def _evaluate_test(during_training_eval=False):
             # batch is a List[Dict], same as in compute_loss/generate
             gens = model.generate(batch)  # returns List[str] of length len(batch)
 
-            # collect each sample’s I/O
+            # collect each sample's I/O
             for sample, gen in zip(batch, gens):
                 result = {
                     "pre_prompt": sample["pre_prompt"],
@@ -208,9 +194,7 @@ def train():
             scheduler.step()
 
             running_loss += loss.item()
-            prog.set_postfix(
-                loss=f"{loss.item():.4f}", lr=f"{scheduler.get_last_lr()[0]:.2e}"
-            )
+            prog.set_postfix(loss=f"{loss.item():.4f}", lr=f"{scheduler.get_last_lr()[0]:.2e}")
 
         avg_train_loss = running_loss / len(train_loader)
         tqdm.write(f"Epoch {epoch} — train loss: {avg_train_loss:.4f}")
@@ -234,9 +218,7 @@ def train():
 
         else:
             epochs_no_improve += 1
-            tqdm.write(
-                f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs."
-            )
+            tqdm.write(f"No improvement for {epochs_no_improve}/{EARLY_STOP_PAT} epochs.")
             if epochs_no_improve >= EARLY_STOP_PAT:
                 tqdm.write("\nEarly stopping triggered.")
                 break

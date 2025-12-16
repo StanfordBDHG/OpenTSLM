@@ -3,22 +3,18 @@
 #
 # SPDX-License-Identifier: MIT
 
-import io
 import base64
-from typing import Type, Callable, Dict, List, Any, Optional
+import io
+from collections.abc import Callable
+from typing import Any
 
-import torch
+import pandas as pd
+from common_evaluator import CommonEvaluator
+from openai_pipeline import OpenAIPipeline
+from PIL import Image
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers.pipelines import pipeline
-import matplotlib.pyplot as plt
-from time import sleep
-from PIL import Image
-import pandas as pd
-
-
-from openai_pipeline import OpenAIPipeline
-from common_evaluator import CommonEvaluator
 
 
 class CommonEvaluatorPlot(CommonEvaluator):
@@ -30,9 +26,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
         """
         Load a model using transformers pipeline or OpenAI API.
         """
-        self.current_model_name = (
-            model_name  # Track the current model name for formatter selection
-        )
+        self.current_model_name = model_name  # Track the current model name for formatter selection
         if model_name.startswith("openai-"):
             # Use OpenAI API
             openai_model = model_name.replace("openai-", "")
@@ -52,10 +46,10 @@ class CommonEvaluatorPlot(CommonEvaluator):
 
     def load_dataset(
         self,
-        dataset_class: Type[Dataset],
+        dataset_class: type[Dataset],
         split: str = "test",
         format_sample_str: bool = True,
-        max_samples: Optional[int] = None,
+        max_samples: int | None = None,
         **dataset_kwargs,
     ) -> Dataset:
         """
@@ -85,11 +79,11 @@ class CommonEvaluatorPlot(CommonEvaluator):
 
     def evaluate_multiple_models(
         self,
-        model_names: List[str],
-        dataset_classes: List[Type[Dataset]],
-        evaluation_functions: Dict[str, Callable[[str, str], Dict[str, Any]]],
-        plot_functions: Optional[Dict[str, Callable[[Any], str]]] = None,
-        max_samples: Optional[int] = None,
+        model_names: list[str],
+        dataset_classes: list[type[Dataset]],
+        evaluation_functions: dict[str, Callable[[str, str], dict[str, Any]]],
+        plot_functions: dict[str, Callable[[Any], str]] | None = None,
+        max_samples: int | None = None,
         **pipeline_kwargs,
     ) -> pd.DataFrame:
         """
@@ -135,13 +129,10 @@ class CommonEvaluatorPlot(CommonEvaluator):
                 # Check if this model-dataset combination already exists in results
                 if existing_df is not None:
                     existing_result = existing_df[
-                        (existing_df["model"] == model_name)
-                        & (existing_df["dataset"] == dataset_name)
+                        (existing_df["model"] == model_name) & (existing_df["dataset"] == dataset_name)
                     ]
                     if not existing_result.empty:
-                        print(
-                            f"⏭️  Skipping {model_name} on {dataset_name} (already evaluated)"
-                        )
+                        print(f"⏭️  Skipping {model_name} on {dataset_name} (already evaluated)")
                         continue
 
                 evaluation_function = evaluation_functions[dataset_name]
@@ -187,9 +178,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
                     current_df = pd.DataFrame(all_results)
                     if existing_df is not None:
                         # Append new results
-                        final_df = pd.concat(
-                            [existing_df, current_df], ignore_index=True
-                        )
+                        final_df = pd.concat([existing_df, current_df], ignore_index=True)
                     else:
                         final_df = current_df
 
@@ -209,9 +198,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
                     # Save DataFrame even after errors
                     current_df = pd.DataFrame(all_results)
                     if existing_df is not None:
-                        final_df = pd.concat(
-                            [existing_df, current_df], ignore_index=True
-                        )
+                        final_df = pd.concat([existing_df, current_df], ignore_index=True)
                     else:
                         final_df = current_df
                     final_df.to_csv(df_filename, index=False)
@@ -222,12 +209,12 @@ class CommonEvaluatorPlot(CommonEvaluator):
     def evaluate_model_on_dataset(
         self,
         model_name: str,
-        dataset_class: Type[Dataset],
-        evaluation_function: Callable[[str, str], Dict[str, Any]],
-        plot_function: Optional[Callable[[Any], str]] = None,
-        max_samples: Optional[int] = None,
+        dataset_class: type[Dataset],
+        evaluation_function: Callable[[str, str], dict[str, Any]],
+        plot_function: Callable[[Any], str] | None = None,
+        max_samples: int | None = None,
         **pipeline_kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Evaluate a model on a dataset using a custom evaluation function.
 
@@ -241,18 +228,14 @@ class CommonEvaluatorPlot(CommonEvaluator):
         Returns:
             Dictionary containing evaluation results
         """
-        print(
-            f"Starting evaluation with model {model_name} on dataset {dataset_class.__name__}"
-        )
+        print(f"Starting evaluation with model {model_name} on dataset {dataset_class.__name__}")
         print("=" * 60)
 
         # Load model
         pipe = self.load_model(model_name, **pipeline_kwargs)
 
         # Load dataset
-        dataset = self.load_dataset(
-            dataset_class, format_sample_str=False, max_samples=max_samples
-        )
+        dataset = self.load_dataset(dataset_class, format_sample_str=False, max_samples=max_samples)
 
         # Limit samples if specified
         if max_samples is not None:
@@ -282,9 +265,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
                 if isinstance(sample, dict) and "time_series" in sample:
                     plot_data = plot_function(sample["time_series"])
                 else:
-                    raise ValueError(
-                        f"Sample {sample} does not contain 'time_series' key"
-                    )
+                    raise ValueError(f"Sample {sample} does not contain 'time_series' key")
 
                 target_answer = sample["answer"]
                 input_text = sample["pre_prompt"] + sample["post_prompt"]
@@ -315,9 +296,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
                                     return_full_text=False,
                                 )
                             except Exception as e:
-                                raise RuntimeError(
-                                    f"Failed to call pretrained pipeline: {e}"
-                                )
+                                raise RuntimeError(f"Failed to call pretrained pipeline: {e}") from e
                         else:
                             # For instruction-tuned models, use chat template format
                             messages = [
@@ -335,7 +314,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
                                 return_full_text=False,
                             )
                     except Exception as e:
-                        raise RuntimeError(f"Failed to decode plot image: {e}")
+                        raise RuntimeError(f"Failed to decode plot image: {e}") from e
 
                 # Extract generated text
                 if outputs and len(outputs) > 0:
@@ -348,9 +327,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
 
                         sig = inspect.signature(evaluation_function)
                         if len(sig.parameters) >= 3:
-                            metrics = evaluation_function(
-                                target_answer, generated_text, sample
-                            )
+                            metrics = evaluation_function(target_answer, generated_text, sample)
                         else:
                             metrics = evaluation_function(target_answer, generated_text)
                     except Exception:
@@ -383,21 +360,15 @@ class CommonEvaluatorPlot(CommonEvaluator):
                         print("=" * 80)
                         first_error_printed = True
                 else:
-                    raise ValueError(f"Unexpectedly found empty outputs")
+                    raise ValueError("Unexpectedly found empty outputs")
 
                 total_samples += 1
 
                 # Save results every 100 samples
                 if total_samples % 50 == 0:
                     # Calculate current aggregate metrics
-                    current_aggregate_metrics = (
-                        self._aggregate_metrics(all_metrics) if all_metrics else {}
-                    )
-                    current_success_rate = (
-                        successful_inferences / total_samples
-                        if total_samples > 0
-                        else 0.0
-                    )
+                    current_aggregate_metrics = self._aggregate_metrics(all_metrics) if all_metrics else {}
+                    current_success_rate = successful_inferences / total_samples if total_samples > 0 else 0.0
 
                     # Prepare intermediate results
                     intermediate_results = {
@@ -412,9 +383,7 @@ class CommonEvaluatorPlot(CommonEvaluator):
 
                     # Save intermediate results
                     self._save_results(intermediate_results)
-                    print(
-                        f"💾 Intermediate results saved after {total_samples} samples"
-                    )
+                    print(f"💾 Intermediate results saved after {total_samples} samples")
 
             except Exception as e:
                 print(f"Error processing sample {idx}: {e}")

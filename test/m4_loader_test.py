@@ -10,12 +10,15 @@ Test script for the M4QADataset with caption generation.
 """
 
 import unittest
+
 from opentslm.time_series_datasets.m4.M4QADataset import M4QADataset as _M4QADataset
+
 
 class TestM4QADataset(unittest.TestCase):
     """
     Unit tests for the M4QADataset class and loader.
     """
+
     def setUp(self):
         self.M4QADataset = _M4QADataset
         self.train_dataset = self.M4QADataset("train", "")
@@ -51,21 +54,22 @@ class TestM4QADataset(unittest.TestCase):
     def test_example_data(self):
         """Print example data to show what the dataset looks like."""
         sample = self.train_dataset[0]
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("EXAMPLE M4 DATASET SAMPLE")
-        print("="*80)
+        print("=" * 80)
         print(f"Pre-prompt: '{sample['pre_prompt']}'")
         print(f"Post-prompt: '{sample['post_prompt']}'")
         print(f"Answer (caption): '{sample['answer'][:200]}...'")
         print(f"Number of time series: {len(sample['time_series'])}")
-        if sample['time_series']:
-            ts = sample['time_series'][0]
-            ts_text = sample['time_series_text'][0]
+        if sample["time_series"]:
+            ts = sample["time_series"][0]
+            ts_text = sample["time_series_text"][0]
             print(f"Time series text: '{ts_text}'")
             print(f"Time series length: {len(ts)}")
             print(f"First 10 time series values: {ts[:10]}")
             print(f"Last 10 time series values: {ts[-10:]}")
-        print("="*80)
+        print("=" * 80)
+
 
 if __name__ == "__main__":
     unittest.main()

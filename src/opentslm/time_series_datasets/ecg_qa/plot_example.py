@@ -10,8 +10,9 @@ ECG-QA Example Plot Generator
 Creates a proper ECG visualization on millimeter paper grid and shows the corresponding prompt.
 """
 
-import os
 import json
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 import wfdb
@@ -99,11 +100,11 @@ def draw_ecg(ecg, lead=1, ax=None):
     return ylims
 
 
-def draw_ecgs_multi_lead(ecgs, leads_to_show=[0, 1, 2], title="ECG Recording"):
+def draw_ecgs_multi_lead(ecgs, leads_to_show=None, title="ECG Recording"):
     """Draw multiple ECG leads in a multi-panel plot."""
-    fig, axes = plt.subplots(
-        len(leads_to_show), 1, figsize=(15, 2.5 * len(leads_to_show))
-    )
+    if leads_to_show is None:
+        leads_to_show = [0, 1, 2]
+    fig, axes = plt.subplots(len(leads_to_show), 1, figsize=(15, 2.5 * len(leads_to_show)))
     if len(leads_to_show) == 1:
         axes = [axes]
 
@@ -154,7 +155,7 @@ def load_and_plot_sample():
 
     try:
         # Load ECG data using wfdb
-        ecg_data, meta = wfdb.rdsamp(ecg_path)
+        ecg_data, _meta = wfdb.rdsamp(ecg_path)
         ecgs = [ecg_data.T]  # Transpose to match expected format
 
         # Create the plot with first 3 leads
@@ -200,11 +201,7 @@ def create_example_prompt_text(sample):
             example_sample = raw_data[0]
 
         question = example_sample["question"]
-        answer = (
-            example_sample["answer"][0]
-            if isinstance(example_sample["answer"], list)
-            else example_sample["answer"]
-        )
+        answer = example_sample["answer"][0] if isinstance(example_sample["answer"], list) else example_sample["answer"]
 
     except Exception as e:
         print(f"Error loading question: {e}")

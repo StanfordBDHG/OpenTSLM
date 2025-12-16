@@ -9,10 +9,9 @@
 
 import json
 import re
-import sys
-import os
+from collections import defaultdict
 from pathlib import Path
-from collections import Counter, defaultdict
+
 from tqdm import tqdm
 
 # Import dataset via package namespace
@@ -129,11 +128,7 @@ def calculate_template_f1_stats(data_points):
 
             precision = tp / (tp + fp) if (tp + fp) > 0 else 0
             recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-            f1 = (
-                2 * (precision * recall) / (precision + recall)
-                if (precision + recall) > 0
-                else 0
-            )
+            f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
 
             class_f1_scores[class_name] = {
                 "f1": f1,
@@ -155,11 +150,7 @@ def calculate_template_f1_stats(data_points):
         template_accuracy = template_correct / len(points) if points else 0
 
         # Calculate average F1 for this template
-        template_avg_f1 = (
-            sum(point.get("f1_score", 0) for point in points) / len(points)
-            if points
-            else 0
-        )
+        template_avg_f1 = sum(point.get("f1_score", 0) for point in points) / len(points) if points else 0
 
         template_stats[template_id] = {
             "num_samples": len(points),
@@ -182,20 +173,12 @@ def calculate_template_f1_stats(data_points):
 
     # Calculate macro-F1 across templates
     template_macro_f1s = [stats["macro_f1"] for stats in template_stats.values()]
-    overall_macro_f1 = (
-        sum(template_macro_f1s) / len(template_macro_f1s) if template_macro_f1s else 0
-    )
-    overall_macro_f1_weighted = (
-        total_macro_f1_weighted_sum / total_samples if total_samples > 0 else 0
-    )
+    overall_macro_f1 = sum(template_macro_f1s) / len(template_macro_f1s) if template_macro_f1s else 0
+    overall_macro_f1_weighted = total_macro_f1_weighted_sum / total_samples if total_samples > 0 else 0
 
     # Calculate unweighted average of per-template accuracies
     template_accuracies = [stats["accuracy"] for stats in template_stats.values()]
-    overall_template_accuracy_avg = (
-        sum(template_accuracies) / len(template_accuracies)
-        if template_accuracies
-        else 0
-    )
+    overall_template_accuracy_avg = sum(template_accuracies) / len(template_accuracies) if template_accuracies else 0
 
     return {
         "overall": {
@@ -244,7 +227,7 @@ def parse_ecg_qa_cot_jsonl(input_file, output_file=None):
 
         # Calculate and display overall accuracy statistics
         accuracy_stats = calculate_accuracy_stats(extracted_data)
-        print(f"\nOverall Accuracy Statistics:")
+        print("\nOverall Accuracy Statistics:")
         print(f"Total samples: {accuracy_stats['total_samples']}")
         print(f"Correct predictions: {accuracy_stats['correct_predictions']}")
         print(f"Incorrect predictions: {accuracy_stats['incorrect_predictions']}")
@@ -252,32 +235,24 @@ def parse_ecg_qa_cot_jsonl(input_file, output_file=None):
 
         # Calculate and display per-template F1 statistics
         f1_stats = calculate_template_f1_stats(extracted_data)
-        print(f"\nOverall F1 Statistics:")
+        print("\nOverall F1 Statistics:")
         overall = f1_stats.get("overall", {})
         print(f"Total templates: {overall.get('total_templates', 0)}")
         print(f"Average F1 Score (sample-weighted): {overall.get('average_f1', 0):.4f}")
-        print(
-            f"Macro-F1 Score (unweighted over templates): {overall.get('macro_f1', 0):.4f}"
-        )
-        print(
-            f"Macro-F1 Score (sample-weighted over templates): {overall.get('macro_f1_weighted', 0):.4f}"
-        )
-        print(
-            f"Template Accuracy Avg (unweighted): {overall.get('template_accuracy_avg', 0):.4f}"
-        )
+        print(f"Macro-F1 Score (unweighted over templates): {overall.get('macro_f1', 0):.4f}")
+        print(f"Macro-F1 Score (sample-weighted over templates): {overall.get('macro_f1_weighted', 0):.4f}")
+        print(f"Template Accuracy Avg (unweighted): {overall.get('template_accuracy_avg', 0):.4f}")
 
         # Final single-value summary (aggregated across all templates)
         print("\nFinal Results (aggregated across all templates):")
         print(f"Final Accuracy (micro over samples): {overall.get('accuracy', 0):.4f}")
         print(f"Final F1 (micro over samples): {overall.get('accuracy', 0):.4f}")
-        print(
-            f"Final Macro-F1 (weighted by template size): {overall.get('macro_f1_weighted', 0):.4f}"
-        )
+        print(f"Final Macro-F1 (weighted by template size): {overall.get('macro_f1_weighted', 0):.4f}")
 
         # Display per-template statistics
         per_template = f1_stats.get("per_template", {})
         if per_template:
-            print(f"\nPer-Template Statistics:")
+            print("\nPer-Template Statistics:")
             for template_id, stats in sorted(per_template.items()):
                 print(f"  Template {template_id}:")
                 print(f"    Samples: {stats['num_samples']}")
@@ -287,11 +262,9 @@ def parse_ecg_qa_cot_jsonl(input_file, output_file=None):
 
                 # Show per-class F1 scores for this template
                 if stats["class_f1_scores"]:
-                    print(f"    Per-class F1:")
+                    print("    Per-class F1:")
                     for class_name, scores in stats["class_f1_scores"].items():
-                        if (
-                            scores["tp"] + scores["fp"] + scores["fn"] > 0
-                        ):  # Only show classes with samples
+                        if scores["tp"] + scores["fp"] + scores["fn"] > 0:  # Only show classes with samples
                             print(
                                 f"      {class_name}: F1={scores['f1']:.4f}, P={scores['precision']:.4f}, R={scores['recall']:.4f}"
                             )
@@ -309,9 +282,7 @@ def parse_ecg_qa_cot_jsonl(input_file, output_file=None):
         print(f"F1 (micro): {overall.get('accuracy', 0):.4f}")
         print(f"Macro-F1 (unweighted): {overall.get('macro_f1', 0):.4f}")
         print(f"Macro-F1 (weighted): {overall.get('macro_f1_weighted', 0):.4f}")
-        print(
-            f"Template Accuracy Avg (unweighted): {overall.get('template_accuracy_avg', 0):.4f}"
-        )
+        print(f"Template Accuracy Avg (unweighted): {overall.get('template_accuracy_avg', 0):.4f}")
         return extracted_data
     else:
         print("No data could be extracted from the file.")
@@ -322,7 +293,7 @@ def extract_structured_data(input_file):
     """Extract structured data from JSONL file"""
     data_points = []
 
-    with open(input_file, "r", encoding="utf-8") as f:
+    with open(input_file, encoding="utf-8") as f:
         for line_num, line in tqdm(enumerate(f, 1), desc="Processing JSONL"):
             try:
                 # Parse JSON line
@@ -352,29 +323,20 @@ def extract_structured_data(input_file):
 
                 # Get possible answers for this template - required for evaluation
                 try:
-                    possible_answers = (
-                        ECGQACoTQADataset.get_possible_answers_for_template(template_id)
-                    )
+                    possible_answers = ECGQACoTQADataset.get_possible_answers_for_template(template_id)
                 except Exception as e:
-                    raise ValueError(
-                        f"Could not get possible answers for template {template_id}: {e}"
-                    )
+                    raise ValueError(f"Could not get possible answers for template {template_id}: {e}") from e
 
                 if not possible_answers:
-                    raise ValueError(
-                        f"No possible answers found for template {template_id}"
-                    )
+                    raise ValueError(f"No possible answers found for template {template_id}")
 
                 # Calculate F1 score with template-specific answers
-                f1_result = calculate_f1_score(
-                    model_prediction_raw, ground_truth_raw, possible_answers
-                )
+                f1_result = calculate_f1_score(model_prediction_raw, ground_truth_raw, possible_answers)
 
                 # Calculate accuracy (exact match)
-                accuracy = (
-                    f1_result["prediction_normalized"]
-                    == f1_result["ground_truth_normalized"]
-                ) and f1_result["ground_truth_supported"]
+                accuracy = (f1_result["prediction_normalized"] == f1_result["ground_truth_normalized"]) and f1_result[
+                    "ground_truth_supported"
+                ]
 
                 data_point = {
                     "generated": generated_text,
@@ -419,11 +381,7 @@ def extract_answer(text):
 
 if __name__ == "__main__":
     current_dir = Path(__file__).parent
-    input_file = (
-        current_dir / "evaluation_results_openai-gpt-4o_ecgqacotqadataset.jsonl"
-    )
-    clean_output = (
-        current_dir / "evaluation_results_openai-gpt-4o_ecgqacotqadataset.clean.jsonl"
-    )
+    input_file = current_dir / "evaluation_results_openai-gpt-4o_ecgqacotqadataset.jsonl"
+    clean_output = current_dir / "evaluation_results_openai-gpt-4o_ecgqacotqadataset.clean.jsonl"
 
     parse_ecg_qa_cot_jsonl(input_file, clean_output)

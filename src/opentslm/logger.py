@@ -12,7 +12,6 @@ verbose mode control.
 """
 
 import logging
-from typing import Optional
 
 
 class OpenTSLMLogger:
@@ -23,7 +22,7 @@ class OpenTSLMLogger:
 
     def __new__(cls, verbose: bool = False):
         if cls._instance is None:
-            cls._instance = super(OpenTSLMLogger, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self, verbose: bool = False):
@@ -92,11 +91,11 @@ class OpenTSLMLogger:
 
 
 # Global logger instance
-_global_logger: Optional[OpenTSLMLogger] = None
+_global_logger: OpenTSLMLogger | None = None
 _global_verbose_setting: bool = False
 
 
-def get_logger(verbose: bool = None) -> OpenTSLMLogger:
+def get_logger(verbose: bool | None = None) -> OpenTSLMLogger:
     """
     Get the global OpenTSLM logger instance.
 
