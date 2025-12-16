@@ -3,7 +3,6 @@
 #
 # SPDX-License-Identifier: MIT
 
-import os
 import io
 import base64
 from typing import Type, Callable, Dict, List, Any, Optional
@@ -17,16 +16,18 @@ from time import sleep
 from PIL import Image
 import pandas as pd
 
-# Add src to path
-from opentslm.logger import get_logger
 
-# Import OpenAIPipeline
 from openai_pipeline import OpenAIPipeline
 from common_evaluator import CommonEvaluator
 
 
 class CommonEvaluatorPlot(CommonEvaluator):
-from opentslm.logger import get_logger
+    """
+    A common evaluation framework for testing LLMs on time series datasets with plot generation.
+    """
+
+    def load_model(self, model_name: str, **pipeline_kwargs) -> pipeline:
+        """
         Load a model using transformers pipeline or OpenAI API.
         """
         self.current_model_name = (
