@@ -5,7 +5,7 @@
 
 [project]
 name = "opentslm"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "OpenTSLM: Open Time Series Language Model - Curriculum Learning for Multimodal Time Series Understanding with Large Language Models"
 readme = "README.md"
 requires-python = ">=3.12"
