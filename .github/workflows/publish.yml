@@ -7,8 +7,7 @@ name: "Publish to PyPI"
 
 on:
   workflow_dispatch:
-    target:
-      inputs:
+    inputs:
       target:
         description: 'Target'
         required: true
@@ -16,11 +15,14 @@ on:
         type: choice
         options:
         - PyPI
-        - TestPyPi
+        - TestPyPI
   # push:
   #   tags:
   #     # Publish on any tag starting with a `v`, e.g., v0.1.0
   #     - v*
+
+env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
 
 run-name: Publish to ${{ inputs.target }}
 
@@ -33,6 +35,13 @@ jobs:
       id-token: write
       contents: read
     steps:
+      - name: Verify branch
+        run: |
+          echo "Branch name is $BRANCH_NAME"
+          if [ "${{ inputs.target }}" == "PyPI" ] && [ "$BRANCH_NAME" != "main" ]; then
+            echo "::error title=Invalid branch::Only the main branch can be published to PyPI."
+            exit 1
+          fi
       - name: Checkout
         uses: actions/checkout@v5
       - name: Install uv
@@ -41,13 +50,13 @@ jobs:
         run: uv build
       # Check that basic features work and we didn't miss to include crucial files
       - name: Smoke test (wheel)
-        run: uv run --isolated --no-project --with dist/*.whl tests/smoke_test.py
+        run: uv run --isolated --no-project --with dist/*.whl test/smoke_test.py
       - name: Smoke test (source distribution)
-        run: uv run --isolated --no-project --with dist/*.tar.gz tests/smoke_test.py
+        run: uv run --isolated --no-project --with dist/*.tar.gz test/smoke_test.py
       - name: Publish
-        run: uv publish ${{ inputs.target == 'TestPyPi' && '--index testpypi' || '' }}
+        run: uv publish ${{ inputs.target == 'TestPyPI' && '--index testpypi' || '' }}
       - name: Summary
         run: |
           echo "### Published OpenTSLM to ${{ inputs.target }} :rocket:" >> $GITHUB_STEP_SUMMARY
           echo "Version: `$(uv version --short)`" >> $GITHUB_STEP_SUMMARY
-          echo "URL: https://${{ inputs.target == 'TestPyPi' && 'test.' || '' }}pypi.org/project/opentslm/$(uv version --short)/" >>> $GITHUB_STEP_SUMMARY
+          echo "URL: https://${{ inputs.target == 'TestPyPI' && 'test.' || '' }}pypi.org/project/opentslm/$(uv version --short)/" >> $GITHUB_STEP_SUMMARY
