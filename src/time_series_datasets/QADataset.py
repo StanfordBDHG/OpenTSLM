@@ -37,23 +37,39 @@ class QADataset(Dataset, ABC):
             - The datasets for each split are loaded and formatted only once per class.
             - The formatted datasets are cached as class attributes for subsequent initializations.
         """
-        
+
         self.EOS_TOKEN = EOS_TOKEN
         if not hasattr(self.__class__, "loaded"):
             train, val, test = self._load_splits()
 
-            format_function = partial(self._format_sample_str, time_series_format_function) if format_sample_str else self._format_sample
-           
+            format_function = (
+                partial(self._format_sample_str, time_series_format_function)
+                if format_sample_str
+                else self._format_sample
+            )
+
             from tqdm import tqdm
-            
+
             print("Formatting training samples...")
-            self.__class__._train_dataset = list(tqdm(map(format_function, train), total=len(train), desc="Training samples"))
-            
+            self.__class__._train_dataset = list(
+                tqdm(
+                    map(format_function, train),
+                    total=len(train),
+                    desc="Training samples",
+                )
+            )
+
             print("Formatting validation samples...")
-            self.__class__._validation_dataset = list(tqdm(map(format_function, val), total=len(val), desc="Validation samples"))
-            
+            self.__class__._validation_dataset = list(
+                tqdm(
+                    map(format_function, val), total=len(val), desc="Validation samples"
+                )
+            )
+
             print("Formatting test samples...")
-            self.__class__._test_dataset = list(tqdm(map(format_function, test), total=len(test), desc="Test samples"))
+            self.__class__._test_dataset = list(
+                tqdm(map(format_function, test), total=len(test), desc="Test samples")
+            )
 
             self.__class__.loaded = True
 
@@ -106,16 +122,18 @@ class QADataset(Dataset, ABC):
     ):
         def fallback_timeseries_formatter(time_series: np.ndarray) -> str:
             # Fallback formatter for time series data
-        
-            return np.array2string(
-                time_series,
-                separator=" ",
-                formatter={"all": lambda x: f'"{x:.2f}"'.replace(".", "")},
-                threshold=sys.maxsize,
-                max_line_width=sys.maxsize,
-            ).removeprefix("[").removesuffix("]")
 
-               
+            return (
+                np.array2string(
+                    time_series,
+                    separator=" ",
+                    formatter={"all": lambda x: f'"{x:.2f}"'.replace(".", "")},
+                    threshold=sys.maxsize,
+                    max_line_width=sys.maxsize,
+                )
+                .removeprefix("[")
+                .removesuffix("]")
+            )
 
         if not time_series_format_function:
             time_series_format_function = fallback_timeseries_formatter

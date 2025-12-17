@@ -71,7 +71,11 @@ class PAMAP2AccQADataset(QADataset):
         return row["label"]
 
     def _get_pre_prompt(self, _row) -> str:
-        return "You are given accelerometer data in all three dimensions, sampled at approximately 100Hz. Your task is to predict the person's activity."
+        activities = ", ".join(ACTIVITIY_ID_DICT.values())
+        return (
+            "You are given accelerometer data in all three dimensions, sampled at approximately 100Hz. Your task is to predict the person's activity. The following activities are possible: "
+            + activities
+        )
 
     def _get_post_prompt(self, _row) -> str:
         activities = ", ".join(MAIN_ACTITIVIES)
