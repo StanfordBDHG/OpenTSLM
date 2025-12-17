@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
-# This source file is part of the OpenTSLM open-source project
-#
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
 
@@ -42,17 +41,6 @@ import argparse
 import json
 from pathlib import Path
 from typing import Dict, List
-import sys
-
-# Ensure repository root is on sys.path so 'evaluation' package is importable
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-# Also ensure 'src' is on sys.path if needed in the future
-SRC_ROOT = REPO_ROOT / "src"
-if str(SRC_ROOT) not in sys.path:
-    sys.path.insert(0, str(SRC_ROOT))
 
 # --- Inline minimal utilities (avoid importing modules that require extra packages) ---
 import re

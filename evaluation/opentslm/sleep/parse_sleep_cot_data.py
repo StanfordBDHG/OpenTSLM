@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
-# This source file is part of the OpenTSLM open-source project
-#
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
 
@@ -16,9 +15,8 @@ from pathlib import Path
 from collections import Counter
 from tqdm import tqdm
 
-# Add the src directory to the path to import from the dataset class
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "..", "..", "src"))
-from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+# Import dataset via package namespace
+from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
 
 # We'll determine supported labels dynamically from the actual ground truth data
 # Start with the dataset class labels as a fallback

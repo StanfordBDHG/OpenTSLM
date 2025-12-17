@@ -1,24 +1,21 @@
-# This source file is part of the OpenTSLM open-source project
-#
 # SPDX-FileCopyrightText: 2025 Stanford University, ETH Zurich, and the project authors (see CONTRIBUTORS.md)
+# SPDX-FileCopyrightText: 2025 This source file is part of the OpenTSLM open-source project.
 #
 # SPDX-License-Identifier: MIT
 
-import sys
-import os
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
+import os
 
 import json
 import os as _os
 import argparse
 from typing import List, Optional, Dict, Any, Callable
-from time_series_datasets.TSQADataset import TSQADataset
-from time_series_datasets.m4.M4QADataset import M4QADataset
-from time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
-from time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
-from time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
-from time_series_datasets.util import (
+from opentslm.time_series_datasets.TSQADataset import TSQADataset
+from opentslm.time_series_datasets.m4.M4QADataset import M4QADataset
+from opentslm.time_series_datasets.sleep.SleepEDFCoTQADataset import SleepEDFCoTQADataset
+from opentslm.time_series_datasets.har_cot.HARCoTQADataset import HARCoTQADataset
+from opentslm.time_series_datasets.ecg_qa.ECGQACoTQADataset import ECGQACoTQADataset
+from opentslm.time_series_datasets.util import (
     extend_time_series_to_match_patch_size_and_aggregate,
 )
 import torch
@@ -40,14 +37,14 @@ from torch.distributed.fsdp import (
 from tqdm.auto import tqdm
 from transformers import get_linear_schedule_with_warmup
 
-from model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
-from model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
-from model.llm.OpenTSLMSP import OpenTSLMSP
-from model.projector.MLPProjector import MLPProjector
+from opentslm.model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
+from opentslm.model.llm.OpenTSLMFlamingo import OpenTSLMFlamingo
+from opentslm.model.llm.OpenTSLMSP import OpenTSLMSP
+from opentslm.model.projector.MLPProjector import MLPProjector
 import datetime
-from logger import get_logger, set_global_verbose
+from opentslm.logger import get_logger, set_global_verbose
 
-from model_config import (
+from opentslm.model_config import (
     BATCH_SIZE,
     EARLY_STOP_PAT,
     GRAD_CLIP_NORM,
