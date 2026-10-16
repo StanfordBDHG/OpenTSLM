@@ -926,6 +926,10 @@ class CurriculumTrainer:
                 f"Eval-only mode requires a checkpoint for {stage_name}, but none found at {os.path.join(self.results_dir, stage_name, 'checkpoints', 'best_model.pt')}"
             )
 
+        # Enable LoRA before loading the previous stage checkpoint, so its LoRA
+        # adapters can be restored when this stage starts in a fresh process
+        self._enable_lora_if_needed(stage_name)
+
         # Load previous stage model and display metrics
         try:
             previous_stage_info = self._load_previous_stage_model(stage_name)
@@ -981,9 +985,6 @@ class CurriculumTrainer:
                     print(f"   {metric}: {value}")
 
             return metrics
-
-        # Enable LoRA if needed for this stage
-        self._enable_lora_if_needed(stage_name)
 
         # Initialize optimizer and scheduler
         optimizer = self._get_optimizer(batch_size, lr_encoder, lr_projector, lr_base)
@@ -1543,41 +1544,6 @@ class CurriculumTrainer:
             self.results_dir, stage, "checkpoints", "best_model.pt"
         )
         return os.path.exists(checkpoint_path)
-
-    def _enable_lora_if_needed(self, stage_name: str):
-        """Enable LoRA for OpenTSLMSP models in stages after stage2."""
-        if self.model_type != "OpenTSLMSP":
-            return  # LoRA only for OpenTSLMSP
-
-        # Get the underlying model (handles DDP wrapping)
-        model = self._get_model()
-
-        # Enable LoRA for stages after stage2_captioning
-        stages_with_lora = ["stage3_cot", "stage4_sleep_cot", "stage5_ecg_cot"]
-
-        if stage_name in stages_with_lora:
-            if not getattr(model, "lora_enabled", False):
-                if self.rank == 0:
-                    print(f"🔧 Enabling LoRA for {stage_name}")
-                try:
-                    model.enable_lora(lora_r=16, lora_alpha=32, lora_dropout=0.0)
-                    if self.rank == 0:
-                        print(f"✅ LoRA enabled for {stage_name}")
-                except Exception as e:
-                    if self.rank == 0:
-                        print(f"❌ Failed to enable LoRA for {stage_name}: {e}")
-                        print("   Continuing without LoRA...")
-            else:
-                if self.rank == 0:
-                    print(f"✅ LoRA already enabled for {stage_name}")
-        else:
-            if self.rank == 0:
-                if stage_name in ["stage1_mcq", "stage2_captioning"]:
-                    print(
-                        f"ℹ️  LoRA disabled for {stage_name} (only enabled for stages 3+)"
-                    )
-                else:
-                    print(f"ℹ️  LoRA not configured for {stage_name}")
 
     def _enable_lora_if_needed(self, stage_name: str):
         """Enable LoRA for OpenTSLMSP models in stages after stage2."""
