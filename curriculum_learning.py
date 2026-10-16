@@ -1077,6 +1077,8 @@ class CurriculumTrainer:
             epochs_no_improve = 0
         else:
             # Training loop
+            if self.world_size > 1:
+                self._broadcast_trainable_params()
             epochs_no_improve = 0
             start_epoch = best_epoch + 1 if best_epoch is not None else 1
             for epoch in range(start_epoch, num_epochs + 1):
@@ -1114,6 +1116,9 @@ class CurriculumTrainer:
                     optimizer.zero_grad()
                     loss = self._get_model().compute_loss(batch)
                     loss.backward()
+
+                    if self.world_size > 1:
+                        self._sync_gradients()
 
                     # Handle gradient clipping for distributed training
                     clip_grad_norm_(self._get_model().parameters(), GRAD_CLIP_NORM)
@@ -1536,6 +1541,74 @@ class CurriculumTrainer:
         if hasattr(self.model, "module"):
             return self.model.module
         return self.model
+
+    def _trainable_params(self):
+        return [p for p in self._get_model().parameters() if p.requires_grad]
+
+    def _broadcast_trainable_params(self):
+        """Make trainable params identical on all ranks.
+
+        DDP only broadcasts the params that existed when it wrapped the model, so
+        params added later (e.g. LoRA adapters) must be synchronized explicitly.
+        """
+        with torch.no_grad():
+            for p in self._trainable_params():
+                dist.broadcast(p.data, src=0)
+
+    def _sync_gradients(self):
+        """Average gradients of all trainable params across ranks.
+
+        Training calls compute_loss() on the unwrapped module, which bypasses the
+        DDP forward pass and therefore DDP's gradient all-reduce. Reducing
+        manually also covers params added after wrapping (LoRA adapters).
+        """
+        params = self._trainable_params()
+        if not params:
+            return
+
+        # Params without a grad on every rank stay untouched (as in single-process
+        # training); params with a grad on only some ranks contribute zeros here.
+        has_grad = torch.tensor(
+            [int(p.grad is not None) for p in params],
+            dtype=torch.int32,
+            device=params[0].device,
+        )
+        dist.all_reduce(has_grad, op=dist.ReduceOp.MAX)
+        active = []
+        for p, flag in zip(params, has_grad.tolist()):
+            if not flag:
+                continue
+            if p.grad is None:
+                p.grad = torch.zeros_like(p)
+            active.append(p)
+
+        # Flat all-reduce per (dtype, device) group, in buckets to bound the
+        # temporary memory
+        max_bucket_numel = 64 * 1024 * 1024
+        groups: Dict[Any, list] = {}
+        for p in active:
+            groups.setdefault((p.grad.dtype, p.grad.device), []).append(p)
+
+        for group in groups.values():
+            buckets, bucket, numel = [], [], 0
+            for p in group:
+                if bucket and numel + p.grad.numel() > max_bucket_numel:
+                    buckets.append(bucket)
+                    bucket, numel = [], 0
+                bucket.append(p)
+                numel += p.grad.numel()
+            if bucket:
+                buckets.append(bucket)
+
+            for bucket in buckets:
+                flat = torch.cat([p.grad.reshape(-1) for p in bucket])
+                dist.all_reduce(flat, op=dist.ReduceOp.SUM)
+                flat /= self.world_size
+                offset = 0
+                for p in bucket:
+                    n = p.grad.numel()
+                    p.grad.copy_(flat[offset : offset + n].view_as(p.grad))
+                    offset += n
 
     def _checkpoint_exists(self, stage: str) -> bool:
         """Check if a checkpoint exists for a specific stage."""
