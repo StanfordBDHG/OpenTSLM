@@ -160,7 +160,7 @@ class OpenTSLM:
         elif repo_name.startswith("llama-3.2-1b"):
             return "meta-llama/Llama-3.2-1B"
         elif repo_name.startswith("gemma-3-1b"):
-            return "google/gemma-3-1b"
+            return "google/gemma-3-1b-pt"
         elif repo_name.startswith("gemma-3-270m"):
             return "google/gemma-3-270m"
         else:
