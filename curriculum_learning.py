@@ -1563,24 +1563,52 @@ class CurriculumTrainer:
         manually also covers params added after wrapping (LoRA adapters).
         """
         params = self._trainable_params()
-        for p in params:
+        if not params:
+            return
+
+        # Params without a grad on every rank stay untouched (as in single-process
+        # training); params with a grad on only some ranks contribute zeros here.
+        has_grad = torch.tensor(
+            [int(p.grad is not None) for p in params],
+            dtype=torch.int32,
+            device=params[0].device,
+        )
+        dist.all_reduce(has_grad, op=dist.ReduceOp.MAX)
+        active = []
+        for p, flag in zip(params, has_grad.tolist()):
+            if not flag:
+                continue
             if p.grad is None:
                 p.grad = torch.zeros_like(p)
+            active.append(p)
 
-        # One flat all-reduce per (dtype, device) group
+        # Flat all-reduce per (dtype, device) group, in buckets to bound the
+        # temporary memory
+        max_bucket_numel = 64 * 1024 * 1024
         groups: Dict[Any, list] = {}
-        for p in params:
+        for p in active:
             groups.setdefault((p.grad.dtype, p.grad.device), []).append(p)
 
         for group in groups.values():
-            flat = torch.cat([p.grad.reshape(-1) for p in group])
-            dist.all_reduce(flat, op=dist.ReduceOp.SUM)
-            flat /= self.world_size
-            offset = 0
+            buckets, bucket, numel = [], [], 0
             for p in group:
-                n = p.grad.numel()
-                p.grad.copy_(flat[offset : offset + n].view_as(p.grad))
-                offset += n
+                if bucket and numel + p.grad.numel() > max_bucket_numel:
+                    buckets.append(bucket)
+                    bucket, numel = [], 0
+                bucket.append(p)
+                numel += p.grad.numel()
+            if bucket:
+                buckets.append(bucket)
+
+            for bucket in buckets:
+                flat = torch.cat([p.grad.reshape(-1) for p in bucket])
+                dist.all_reduce(flat, op=dist.ReduceOp.SUM)
+                flat /= self.world_size
+                offset = 0
+                for p in bucket:
+                    n = p.grad.numel()
+                    p.grad.copy_(flat[offset : offset + n].view_as(p.grad))
+                    offset += n
 
     def _checkpoint_exists(self, stage: str) -> bool:
         """Check if a checkpoint exists for a specific stage."""
